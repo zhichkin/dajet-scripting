@@ -1,0 +1,8 @@
+﻿namespace DaJet.Scripting.Model
+{
+    public sealed class HavingClause : SyntaxNode
+    {
+        public HavingClause() { Token = Token.HAVING; }
+        public SyntaxNode Expression { get; set; }
+    }
+}

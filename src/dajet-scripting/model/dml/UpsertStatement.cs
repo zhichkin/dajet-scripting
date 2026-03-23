@@ -1,0 +1,14 @@
+﻿namespace DaJet.Scripting.Model
+{
+    public sealed class UpsertStatement : SyntaxNode
+    {
+        public UpsertStatement() { Token = Token.UPSERT; }
+        public CommonTableExpression CommonTables { get; set; }
+        public bool IgnoreUpdate { get; set; }
+        public List<string> Hints { get; set; }
+        public TableReference Target { get; set; }
+        public SyntaxNode Source { get; set; }
+        public WhereClause Where { get; set; }
+        public SetClause Set { get; set; } = new();
+    }
+}

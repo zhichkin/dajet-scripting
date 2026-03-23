@@ -1,2 +1,1 @@
-# dajet-scripting
-DaJet Script
+# DaJet Script
