@@ -6,7 +6,7 @@ namespace DaJet.Scripting.Model
     {
         public MemberAccessExpression() { Token = Token.Variable; }
         public string Identifier { get; set; } = string.Empty; // @variable.member
-        public object Binding { get; set; }
+        public object Binding { get; set; } // DECLARE @variable !?
         public override string ToString()
         {
             return $"[{Token}: {Identifier}]";
@@ -43,7 +43,7 @@ namespace DaJet.Scripting.Model
 
             return name.ToString();
         }
-        private static List<string> GetAccessMembers(in string expression)
+        public List<string> GetAccessMembers(in string expression)
         {
             List<string> members = new();
 

@@ -1,4 +1,6 @@
-﻿namespace DaJet.Scripting.Model
+﻿using DaJet.TypeSystem;
+
+namespace DaJet.Scripting.Model
 {
     public sealed class TypeDefinition : SyntaxNode
     {

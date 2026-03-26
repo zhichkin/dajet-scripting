@@ -2,12 +2,12 @@
 
 namespace DaJet.Scripting
 {
-    public sealed class BindingScope
+    public sealed class Scope
     {
         ///<summary>Иерархия области видимости (физическая)</summary>
-        private readonly BindingScope _ancestor; //TODO: encapsulate logic in OpenScope method or class
-        public BindingScope() { }
-        public BindingScope(SyntaxNode owner, BindingScope parent)
+        private readonly Scope _ancestor; //TODO: encapsulate logic in OpenScope method or class
+        public Scope() { }
+        public Scope(SyntaxNode owner, Scope parent)
         {
             Owner = owner;
             Parent = parent; //NOTE: can be overriden in OpenScope method !!!
@@ -15,18 +15,18 @@ namespace DaJet.Scripting
         }
         public SyntaxNode Owner { get; set; }
         ///<summary>Иерархия области видимости (логическа)</summary>
-        public BindingScope Parent { get; set; }
+        public Scope Parent { get; set; }
         ///<summary>Дочерние области видимости (логические)</summary>
-        public List<BindingScope> Children { get; } = new();
+        public List<Scope> Children { get; } = new();
         public Dictionary<string, object> Tables { get; } = new(); // CTE (common table expression) or temporary tables
         public Dictionary<string, object> Aliases { get; } = new(); // table expression (subquery) or schema tables
         public Dictionary<string, object> Columns { get; } = new(); //NOTE: used for diagnosic purposes
         public Dictionary<string, object> Variables { get; } = new(); // table variables or UDT (user-defined type)
         public override string ToString() { return $"Owner: {Owner}"; }
 
-        public BindingScope GetRoot()
+        public Scope GetRoot()
         {
-            BindingScope root = this;
+            Scope root = this;
 
             while (root.Parent is not null)
             {
@@ -35,11 +35,11 @@ namespace DaJet.Scripting
 
             return root;
         }
-        public BindingScope Ancestor<TOwner>() where TOwner : SyntaxNode
+        public Scope Ancestor<TOwner>() where TOwner : SyntaxNode
         {
             Type type = typeof(TOwner);
 
-            BindingScope scope = this;
+            Scope scope = this;
             SyntaxNode owner = Owner;
 
             while (scope is not null)
@@ -55,16 +55,16 @@ namespace DaJet.Scripting
 
             return null;
         }
-        public BindingScope OpenScope(in SyntaxNode owner)
+        public Scope OpenScope(in SyntaxNode owner)
         {
-            BindingScope scope = new(owner, this);
+            Scope scope = new(owner, this);
 
             if (owner is not SelectExpression select || select.IsCorrelated)
             {
                 Children.Add(scope); return scope;
             }
 
-            BindingScope parent = this;
+            Scope parent = this;
 
             while (parent is not null)
             {
@@ -88,11 +88,11 @@ namespace DaJet.Scripting
 
             throw new InvalidOperationException($"Failed to open scope [{owner}]");
         }
-        public BindingScope CloseScope() { return _ancestor; }
+        public Scope CloseScope() { return _ancestor; }
 
         public object GetVariableBinding(in string name)
         {
-            BindingScope scope = this;
+            Scope scope = this;
 
             while (scope is not null)
             {
@@ -108,7 +108,7 @@ namespace DaJet.Scripting
         }
         public object GetTableBinding(in string name)
         {
-            BindingScope scope = this;
+            Scope scope = this;
 
             while (scope is not null)
             {
@@ -138,7 +138,7 @@ namespace DaJet.Scripting
 
             // lookup current and upper scopes
 
-            BindingScope scope = this;
+            Scope scope = this;
 
             while (scope is not null)
             {

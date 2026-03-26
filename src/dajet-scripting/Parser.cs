@@ -1,4 +1,6 @@
 ﻿using DaJet.Scripting.Model;
+using DaJet.TypeSystem;
+using System.Drawing;
 
 namespace DaJet.Scripting
 {
@@ -106,7 +108,7 @@ namespace DaJet.Scripting
 		#endregion
 
 		#region "DATA SCHEMA DEFINITION AND VARIABLE DECLARATION STATEMENTS"
-		private SyntaxNode declare()
+		private DeclareStatement declare_statement()
 		{
 			DeclareStatement declare = new();
 
@@ -116,7 +118,7 @@ namespace DaJet.Scripting
 			}
 			else
 			{
-				declare.Name = Previous().Value;
+				declare.Identifier = Previous().Value;
 			}
 
 			if (Match(Token.AS))
@@ -130,7 +132,7 @@ namespace DaJet.Scripting
 			}
 			else
 			{
-				declare.Type = type();
+				declare.Type = datatype();
 			}
 
 			if (Match(Token.Equals))
@@ -156,7 +158,7 @@ namespace DaJet.Scripting
 				}
 				else
 				{
-					declare.TypeOf = new TypeReference() { Identifier = Previous().Value };
+					declare.Schema = Previous().Value;
 				}
 			}
 
@@ -166,6 +168,332 @@ namespace DaJet.Scripting
 
 			return declare;
 		}
+        private DataType datatype()
+        {
+            string identifier = Previous().Value;
+
+            if (identifier == "boolean") { return DataType.Boolean; }
+            else if (identifier == "decimal") { return ParseDecimal(); }
+            else if (identifier == "integer") { return ParseInteger(); }
+            else if (identifier == "datetime") { return DataType.DateTime; }
+            else if (identifier == "date") { return DataType.Date; }
+            else if (identifier == "time") { return DataType.Time; }
+            else if (identifier == "string") { return ParseString(); }
+            else if (identifier == "binary") { return ParseBinary(); }
+            else if (identifier == "uuid") { return DataType.Uuid(); }
+            else if (identifier == "entity") { return DataType.Entity(); }
+            else if (identifier == "object") { return DataType.Object; }
+            else if (identifier == "array") { return DataType.Array; }
+            else if (identifier == "union") { return ParseUnion(); }
+
+            throw new FormatException($"Unexpected data type identifier [{identifier}].");
+        }
+        private DataType ParseDecimal()
+        {
+            if (!Match(Token.OpenRoundBracket))
+            {
+                return DataType.Decimal(16, 4);
+            }
+
+            byte precision = 8, scale = 0;
+
+            if (!Match(Token.Number))
+            {
+                throw new FormatException("Number literal expected.");
+            }
+
+            if (!byte.TryParse(Previous().Value, out precision))
+            {
+                throw new FormatException("Number literal expected.");
+            }
+
+            if (Match(Token.Comma))
+            {
+                if (!Match(Token.Number))
+                {
+                    throw new FormatException("Number literal expected.");
+                }
+
+                if (!byte.TryParse(Previous().Value, out scale))
+                {
+                    throw new FormatException("Number literal expected.");
+                }
+            }
+
+            if (scale > precision)
+            {
+                throw new FormatException($"Scale [{scale}] must be less or equal precision [{precision}].");
+            }
+
+            if (!Match(Token.CloseRoundBracket)) { throw new FormatException("Close round bracket expected."); }
+
+            return DataType.Decimal(precision, scale);
+        }
+        private DataType ParseInteger()
+        {
+            if (!Match(Token.OpenRoundBracket))
+            {
+                return DataType.Integer();
+            }
+
+            if (!Match(Token.Number))
+            {
+                throw new FormatException("Number literal expected.");
+            }
+
+            if (!ushort.TryParse(Previous().Value, out ushort size))
+            {
+                throw new FormatException("Number literal expected.");
+            }
+
+            if (!(size == 1 || size == 2 || size == 4 || size == 8))
+            {
+                throw new FormatException("Number literal of 1, 2, 4, or 8 expected.");
+            }
+
+            if (!Match(Token.CloseRoundBracket)) { throw new FormatException("Close round bracket expected."); }
+
+            return DataType.Integer(size);
+        }
+        private DataType ParseString()
+        {
+            if (!Match(Token.OpenRoundBracket))
+            {
+                return DataType.String();
+            }
+
+            if (!Match(Token.Number))
+            {
+                throw new FormatException("Number literal expected.");
+            }
+
+            if (!ushort.TryParse(Previous().Value, out ushort size))
+            {
+                throw new FormatException("Number literal expected.");
+            }
+
+            if (size > 1024)
+            {
+                throw new FormatException("Number literal of 1024 or less expected.");
+            }
+
+            bool variable = true;
+
+            if (Match(Token.Comma))
+            {
+                if (!Match(Token.Identifier))
+                {
+                    throw new FormatException("Qualifier literal 'fixed' expected.");
+                }
+
+                if (Previous().Value != "fixed")
+                {
+                    throw new FormatException("Qualifier literal 'fixed' expected.");
+                }
+
+                variable = false;
+            }
+
+            if (!Match(Token.CloseRoundBracket)) { throw new FormatException("Close round bracket expected."); }
+
+            return DataType.String(size, variable);
+        }
+        private DataType ParseBinary()
+        {
+            if (!Match(Token.OpenRoundBracket))
+            {
+                return DataType.Binary();
+            }
+
+            if (!Match(Token.Number))
+            {
+                throw new FormatException("Number literal expected.");
+            }
+
+            if (!ushort.TryParse(Previous().Value, out ushort size))
+            {
+                throw new FormatException("Number literal expected.");
+            }
+
+            if (size > 1024)
+            {
+                throw new FormatException("Number literal of 1024 or less expected.");
+            }
+
+            bool variable = true;
+
+            if (Match(Token.Comma))
+            {
+                if (!Match(Token.Identifier))
+                {
+                    throw new FormatException("Qualifier literal 'fixed' expected.");
+                }
+
+                if (Previous().Value != "fixed")
+                {
+                    throw new FormatException("Qualifier literal 'fixed' expected.");
+                }
+
+                variable = false;
+            }
+
+            if (!Match(Token.CloseRoundBracket)) { throw new FormatException("Close round bracket expected."); }
+
+            return DataType.Binary(size, variable);
+        }
+        private DataType ParseUnion()
+        {
+            if (!Match(Token.OpenRoundBracket))
+            {
+                return new DataType(DataTypeFlags.UnionTypes, QualifierFlags.DateTime, 10, 15, 2);
+            }
+
+            DataTypeFlags types = DataTypeFlags.Undefined;
+            QualifierFlags qualifiers = QualifierFlags.None;
+            ushort size = 0; // string
+            byte precision = 0; // decimal
+            byte scale = 0; // decimal
+
+            int count = ParseUnionDataType(ref types, ref qualifiers, ref size, ref precision, ref scale);
+
+            while (Match(Token.Comma))
+            {
+                count += ParseUnionDataType(ref types, ref qualifiers, ref size, ref precision, ref scale);
+            }
+
+            if (count == 1)
+            {
+                throw new FormatException("Union type should have more then 1 data type.");
+            }
+
+            if (!Match(Token.CloseRoundBracket)) { throw new FormatException("Close round bracket expected."); }
+
+            return new DataType(types, qualifiers, size, precision, scale);
+        }
+        private int ParseUnionDataType(ref DataTypeFlags types, ref QualifierFlags qualifiers, ref ushort size, ref byte precision, ref byte scale)
+        {
+            if (!Match(Token.Identifier))
+            {
+                throw new FormatException("Data type identifier expected.");
+            }
+
+            string identifier = Previous().Value;
+
+            if (identifier == "boolean")
+            {
+                types |= DataTypeFlags.Boolean;
+            }
+            else if (identifier == "decimal")
+            {
+                types |= DataTypeFlags.Decimal;
+                
+                ParseDecimal(ref precision, ref scale);
+            }
+            else if (identifier == "datetime" || identifier == "date" || identifier == "time")
+            {
+                types |= DataTypeFlags.DateTime;
+
+                if (identifier == "date")
+                {
+                    qualifiers |= QualifierFlags.Date;
+                }
+                else if (identifier == "time")
+                {
+                    qualifiers |= QualifierFlags.Time;
+                }
+                else
+                {
+                    qualifiers |= QualifierFlags.DateTime;
+                }
+            }
+            else if (identifier == "string")
+            {
+                types |= DataTypeFlags.String;
+                
+                ParseString(ref size, ref qualifiers);
+            }
+            else if (identifier == "entity")
+            {
+                types |= DataTypeFlags.Entity;
+            }
+            else
+            {
+                throw new FormatException("Union data type identifier expected.");
+            }
+
+            return 1;
+        }
+        private void ParseDecimal(ref byte precision, ref byte scale)
+        {
+            if (!Match(Token.OpenRoundBracket))
+            {
+                precision = 15; scale = 2; return;
+            }
+            
+            if (!Match(Token.Number))
+            {
+                throw new FormatException("Number literal expected.");
+            }
+            
+            if (!byte.TryParse(Previous().Value, out precision))
+            {
+                throw new FormatException("Number literal expected.");
+            }
+
+            if (Match(Token.Comma))
+            {
+                if (!Match(Token.Number))
+                {
+                    throw new FormatException("Number literal expected.");
+                }
+
+                if (!byte.TryParse(Previous().Value, out scale))
+                {
+                    throw new FormatException("Number literal expected.");
+                }
+            }
+
+            if (!Match(Token.CloseRoundBracket)) { throw new FormatException("Close round bracket expected."); }
+        }
+        private void ParseString(ref ushort size, ref QualifierFlags qualifiers)
+        {
+            if (!Match(Token.OpenRoundBracket))
+            {
+                size = 10; return;
+            }
+
+            if (!Match(Token.Number))
+            {
+                throw new FormatException("Number literal expected.");
+            }
+
+            if (!ushort.TryParse(Previous().Value, out size))
+            {
+                throw new FormatException("Number literal expected.");
+            }
+
+            if (size > 1024)
+            {
+                throw new FormatException("Number literal of 1024 or less expected.");
+            }
+
+            if (Match(Token.Comma))
+            {
+                if (!Match(Token.Identifier))
+                {
+                    throw new FormatException("Qualifier literal expected.");
+                }
+
+                if (Previous().Value != "fixed")
+                {
+                    throw new FormatException("Qualifier literal expected.");
+                }
+
+                qualifiers |= QualifierFlags.Fixed;
+            }
+
+            if (!Match(Token.CloseRoundBracket)) { throw new FormatException("Close round bracket expected."); }
+        }
 		private SyntaxNode import_statement()
 		{
 			if (!Match(Token.IMPORT))
@@ -242,7 +570,7 @@ namespace DaJet.Scripting
 				throw new FormatException("Data type identifier expected");
 			}
 
-			property.Type = type();
+			property.Type = datatype();
 
 			return property;
 		}
@@ -254,7 +582,7 @@ namespace DaJet.Scripting
 
 			if (!Match(Token.Identifier)) { throw new FormatException("Data type identifier expected."); }
 
-			column.Type = type();
+			column.Type = datatype();
 
 			return column;
 		}
@@ -463,7 +791,7 @@ namespace DaJet.Scripting
         private SyntaxNode statement()
         {
             if (Match(Token.Comment)) { return comment(); }
-            else if (Match(Token.DECLARE)) { return declare(); }
+            else if (Match(Token.DECLARE)) { return declare_statement(); }
             else if (Match(Token.SET)) { return assignment(); }
             else if (Match(Token.USE)) { return use_statement(); }
             else if (Match(Token.FOR)) { return for_statement(); }
