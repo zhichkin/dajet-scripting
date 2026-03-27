@@ -232,26 +232,6 @@ namespace DaJet.Scripting
             return _function.TryGetValue(identifier, out token);
         }
 
-        //internal static void GetColumnIdentifiers(string identifier, out string tableAlias, out string columnName)
-        //{
-        //    string[] names = identifier.Split('.', StringSplitOptions.RemoveEmptyEntries);
-
-        //    tableAlias = string.Empty;
-        //    columnName = string.Empty;
-
-        //    if (names.Length == 0)
-        //    {
-        //        return;
-        //    }
-
-        //    columnName = names[names.Length - 1];
-
-        //    if (names.Length > 1)
-        //    {
-        //        tableAlias = names[0];
-        //    }
-        //}
-        
         //internal static string GetComparisonLiteral(TokenType token)
         //{
         //    if (token == TokenType.IS) { return "IS"; }

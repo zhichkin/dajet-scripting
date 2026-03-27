@@ -1,15 +1,29 @@
-﻿using DaJet.Scripting;
+﻿using DaJet.Json;
+using DaJet.Scripting;
 using DaJet.Scripting.Model;
+using DaJet.TypeSystem;
+using System.Text.Encodings.Web;
+using System.Text.Json;
+using System.Text.Json.Serialization;
+using System.Text.Unicode;
 
 namespace test
 {
     internal class Program
     {
+        private static readonly JsonSerializerOptions JsonOptions = new()
+        {
+            WriteIndented = true,
+            Encoder = JavaScriptEncoder.Create(UnicodeRanges.All)
+        };
         static void Main(string[] args)
         {
-            TestDeclareStatement();
+            JsonOptions.Converters.Add(new DataTypeJsonConverter());
+            JsonOptions.Converters.Add(new JsonStringEnumConverter());
 
+            //TestDeclareStatement();
 
+            TestScriptBinding();
         }
         private static void TestDeclareStatement()
         {
@@ -63,6 +77,31 @@ namespace test
                 Console.WriteLine(declare.Type.ToString());
                 Console.WriteLine("---------------------");
             }
+        }
+
+        private static void TestScriptBinding()
+        {
+            string sourceCode = "";
+
+            Parser parser = new();
+
+            if (!parser.TryParse(in sourceCode, out Script script, out string error))
+            {
+                Console.WriteLine(error); return;
+            }
+
+            ISchemaProvider schema = null; //TODO: init provider
+
+            Binder binder = new();
+
+            if (!binder.TryBind(script, in schema, out Scope scope, out List<string> errors))
+            {
+                Console.WriteLine(string.Join('\n', errors)); return;
+            }
+
+            string json = JsonSerializer.Serialize(script, JsonOptions);
+
+            Console.WriteLine(json);
         }
     }
 }

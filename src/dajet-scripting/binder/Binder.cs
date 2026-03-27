@@ -8,7 +8,7 @@ namespace DaJet.Scripting
         private Scope _scope;
         private List<string> _errors;
         private ISchemaProvider _schema;
-        public bool TryBind(in Script script, in ISchemaProvider schema, out Scope scope, out List<string> errors)
+        public bool TryBind(in SyntaxNode script, in ISchemaProvider schema, out Scope scope, out List<string> errors)
         {
             ArgumentNullException.ThrowIfNull(script, nameof(script));
 
@@ -39,26 +39,13 @@ namespace DaJet.Scripting
         {
             _errors.Add($"Failed to bind [{token}: {identifier}]");
         }
-        private void Bind(in Script node)
-        {
-            _scope ??= new Scope() { Owner = node };
-
-            //TODO: process IMPORT and DEFINE statements
-
-            foreach (SyntaxNode statement in node.Statements)
-            {
-                Bind(in statement);
-            }
-
-            _scope = _scope.CloseScope(); // ? EXECUTE вложенный скрипт
-        }
         private void Bind(in SyntaxNode node)
         {
             if (node is null) { return; }
 
             if (node is Script script) { Bind(in script); } // ? EXECUTE вложенный скрипт
 
-            //else if (node is StatementBlock statement_block) { Bind(in statement_block); }
+            else if (node is StatementBlock statement_block) { Bind(in statement_block); } // ?
 
             else if (node is DeclareStatement declare) { Bind(in declare); }
             else if (node is VariableReference variable) { Bind(in variable); }
@@ -68,40 +55,44 @@ namespace DaJet.Scripting
 
             else if (node is SelectStatement select_statement) { Bind(in select_statement); }
             else if (node is CommonTableExpression cte) { Bind(in cte); }
+            else if (node is SelectExpression select) { Bind(in select); }
             else if (node is TableExpression derived) { Bind(in derived); }
             else if (node is TableJoinOperator join) { Bind(in join); }
             else if (node is TableUnionOperator union) { Bind(in union); }
             else if (node is TableReference table) { Bind(in table); }
+            
             //else if (node is TemporaryTableExpression temporary_table) { Bind(in temporary_table); }
 
-            else if (node is SelectExpression select) { Bind(in select); }
+            else if (node is FromClause from) { Bind(in from); }
+            else if (node is IntoClause into) { Bind(in into); }
 
-            //else if (node is TopClause top) { Bind(in top); }
-            //else if (node is ValuesExpression values) { Bind(in values); }
-            //else if (node is GroupOperator group) { Bind(in group); }
-            //else if (node is UnaryOperator unary) { Bind(in unary); }
-            //else if (node is BinaryOperator binary) { Bind(in binary); }
-            //else if (node is MultiplyOperator multiply) { Bind(in multiply); }
-            //else if (node is AdditionOperator addition) { Bind(in addition); }
-            //else if (node is ComparisonOperator comparison) { Bind(in comparison); }
-            //else if (node is CaseExpression case_when_then_else) { Bind(in case_when_then_else); }
-            //else if (node is WhenClause when) { Bind(in when); }
-            //else if (node is FunctionExpression function) { Bind(in function); }
-            //else if (node is OverClause over) { Bind(in over); }
-            //else if (node is PartitionClause partition) { Bind(in partition); }
-            //else if (node is WindowFrame frame) { Bind(in frame); }
-            //else if (node is FromClause from) { Bind(in from); }
-            //else if (node is GroupClause group_by) { Bind(in group_by); }
-            //else if (node is HavingClause having) { Bind(in having); }
-            //else if (node is IntoClause into) { Bind(in into); }
-            //else if (node is OnClause join_on) { Bind(in join_on); }
-            //else if (node is OrderClause order_by) { Bind(in order_by); }
-            //else if (node is OrderExpression order_expression) { Bind(in order_expression); }
-            //else if (node is WhereClause where) { Bind(in where); }
+            else if (node is TopClause top) { Bind(in top); }
+
+            else if (node is CaseExpression case_when_then_else) { Bind(in case_when_then_else); }
+            else if (node is WhenClause when) { Bind(in when); }
+            else if (node is FunctionExpression function) { Bind(in function); }
+            else if (node is OverClause over) { Bind(in over); }
+            else if (node is PartitionClause partition) { Bind(in partition); }
+            else if (node is WindowFrame frame) { Bind(in frame); }
+
+            else if (node is OnClause join_on) { Bind(in join_on); }
+            else if (node is WhereClause where) { Bind(in where); }
+            else if (node is ValuesExpression values) { Bind(in values); }
+            else if (node is GroupClause group_by) { Bind(in group_by); }
+            else if (node is HavingClause having) { Bind(in having); }
+            else if (node is OrderClause order_by) { Bind(in order_by); }
+            else if (node is OrderExpression order_expression) { Bind(in order_expression); }
 
             //else if (node is StarExpression star) { Bind(in star); }
-            //else if (node is ColumnExpression column) { Bind(in column); }
-            //else if (node is ColumnReference reference) { Bind(in reference); }
+            else if (node is ColumnExpression column) { Bind(in column); }
+            else if (node is ColumnReference reference) { Bind(in reference); }
+
+            else if (node is GroupOperator group) { Bind(in group); }
+            else if (node is UnaryOperator unary) { Bind(in unary); } // NOT | Minus
+            else if (node is BinaryOperator binary) { Bind(in binary); } // AND | OR
+            else if (node is MultiplyOperator multiply) { Bind(in multiply); }
+            else if (node is AdditionOperator addition) { Bind(in addition); }
+            else if (node is ComparisonOperator comparison) { Bind(in comparison); }
 
             //else if (node is InsertStatement insert) { Bind(in insert); }
             //else if (node is UpdateStatement update) { Bind(in update); }
@@ -132,6 +123,29 @@ namespace DaJet.Scripting
             //else if (node is ExecuteStatement execute) { Bind(in execute); } // nothing to bind
             //else if (node is WaitStatement wait) { Bind(in wait); }
             //else if (node is ModifyStatement modify) { Bind(in modify); } // nothing to bind
+        }
+
+        private void Bind(in Script node)
+        {
+            _scope = _scope.OpenScope(node);
+
+            //TODO: process IMPORT and DEFINE statements
+
+            foreach (SyntaxNode statement in node.Statements)
+            {
+                Bind(in statement);
+            }
+
+            _scope = _scope.CloseScope(); // ? EXECUTE вложенный скрипт
+        }
+        private void Bind(in StatementBlock node)
+        {
+            if (node is null) { return; }
+
+            foreach (SyntaxNode statement in node.Statements)
+            {
+                Bind(in statement);
+            }
         }
         private void Bind(in DeclareStatement node)
         {
@@ -188,22 +202,54 @@ namespace DaJet.Scripting
                 RegisterBindingError(node.Token, node.Identifier);
             }
         }
+
         private void Bind(in UseStatement node)
         {
-            _scope ??= new Scope() { Owner = node };
+            _scope = _scope.OpenScope(node);
 
-            foreach (SyntaxNode statement in node.Statements.Statements) // ???
+            foreach (SyntaxNode statement in node.Statements.Statements)
             {
                 Bind(in statement);
             }
 
             _scope = _scope.CloseScope();
         }
+        
+        #region "ARITHMETIC AND LOGICAL OPERATORS"
+        private void Bind(in GroupOperator node)
+        {
+            Bind(node.Expression);
+        }
+        private void Bind(in UnaryOperator node)
+        {
+            Bind(node.Expression);
+        }
+        private void Bind(in BinaryOperator node)
+        {
+            Bind(node.Expression1);
+            Bind(node.Expression2);
+        }
+        private void Bind(in AdditionOperator node)
+        {
+            Bind(node.Expression1);
+            Bind(node.Expression2);
+        }
+        private void Bind(in MultiplyOperator node)
+        {
+            Bind(node.Expression1);
+            Bind(node.Expression2);
+        }
+        private void Bind(in ComparisonOperator node)
+        {
+            Bind(node.Expression1);
+            Bind(node.Expression2);
+        }
+        #endregion
 
-        #region "SELECT AND TABLE BINDING"
+        #region "TABLE BINDING"
         private void Bind(in SelectStatement node)
         {
-            ValidateStatement(in node);
+            //ValidateStatement(in node); APPEND operator
 
             _scope = _scope.OpenScope(node);
 
@@ -307,7 +353,7 @@ namespace DaJet.Scripting
                 {
                     if (order.Expressions[i].Expression is ColumnReference column)
                     {
-                        LexerHelper.GetColumnIdentifiers(column.Identifier, out _, out string columnName);
+                        column.GetColumnIdentifiers(out _, out string columnName);
 
                         BindColumn(in node, in columnName, in column);
 
@@ -368,7 +414,7 @@ namespace DaJet.Scripting
                 }
             }
         }
-        
+
         //private void BindAppend(in TableJoinOperator node)
         //{
         //    if (node.Token == Token.APPEND)
@@ -376,223 +422,360 @@ namespace DaJet.Scripting
         //        Bind(node.Expression2);
         //    }
         //}
-        
+
         #endregion
 
-        //        #region "COLUMN BINDING"
-        //        private void Bind(in StarExpression node) { /* TODO: implement transformer into column expressions */ }
-        //        private void Bind(in ColumnExpression node)
-        //        {
-        //            Bind(node.Expression);
-        //        }
-        //        private void Bind(in ColumnReference node)
-        //        {
-        //            if (!TryBindEnumValue(in node))
-        //            {
-        //                BindColumn(in node);
-        //            }
+        #region "SELECT CLAUSES"
+        private void Bind(in TopClause node)
+        {
+            Bind(node.Expression);
+        }
+        private void Bind(in WhereClause node)
+        {
+            Bind(node.Expression);
+        }
+        private void Bind(in GroupClause node)
+        {
+            for (int i = 0; i < node.Expressions.Count; i++)
+            {
+                Bind(node.Expressions[i]);
+            }
+        }
+        private void Bind(in HavingClause node)
+        {
+            Bind(node.Expression);
+        }
+        private void Bind(in OnClause node)
+        {
+            Bind(node.Expression);
+        }
+        private void Bind(in OrderClause node)
+        {
+            for (int i = 0; i < node.Expressions.Count; i++)
+            {
+                Bind(node.Expressions[i]);
+            }
 
-        //            if (node.Binding is null)
-        //            {
-        //                RegisterBindingError(node.Token, node.Identifier);
-        //            }
-        //            else // successful binding
-        //            {
-        //                //TODO: find all ambiguous names and report error
-        //                _ = _scope.Columns.TryAdd(node.Identifier, node.Binding);
-        //            }
-        //        }
-        //        private bool TryBindEnumValue(in ColumnReference column)
-        //        {
-        //            string[] identifiers = column.Identifier.Split('.', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            if (node.Offset is not null)
+            {
+                Bind(node.Offset);
 
-        //            if (identifiers is null || identifiers.Length != 3) { return false; }
+                if (node.Fetch is not null)
+                {
+                    Bind(node.Fetch);
+                }
+            }
+        }
+        private void Bind(in OrderExpression node)
+        {
+            Bind(node.Expression);
+        }
+        private void Bind(in CaseExpression node)
+        {
+            foreach (WhenClause when in node.CASE)
+            {
+                Bind(in when);
+            }
 
-        //            if (_schema is not null && _schema.TryGetEnumValue(column.Identifier, out EnumValue value) && value is not null)
-        //            {
-        //                column.Binding = value;
-        //                column.Token = Token.Enumeration;
+            if (node.ELSE is not null)
+            {
+                Bind(node.ELSE);
+            }
+        }
+        private void Bind(in WhenClause node)
+        {
+            Bind(node.WHEN);
+            Bind(node.THEN);
+        }
+        private void Bind(in FunctionExpression node)
+        {
+            for (int i = 0; i < node.Parameters.Count; i++)
+            {
+                Bind(node.Parameters[i]);
+            }
 
-        //                return true;
-        //            }
+            if (node.Over is not null)
+            {
+                Bind(node.Over);
+            }
+        }
+        private void Bind(in OverClause node)
+        {
+            if (node.Partition is not null)
+            {
+                Bind(node.Partition);
+            }
+            if (node.Order is not null)
+            {
+                Bind(node.Order);
+            }
+            if (node.Preceding is not null || node.Following is not null)
+            {
+                if (node.Preceding is not null && node.Following is not null)
+                {
+                    Bind(node.Preceding);
+                    Bind(node.Following);
+                }
+                else if (node.Preceding is not null)
+                {
+                    Bind(node.Preceding);
+                }
+            }
+        }
+        private void Bind(in WindowFrame node) { }
+        private void Bind(in PartitionClause node)
+        {
+            for (int i = 0; i < node.Columns.Count; i++)
+            {
+                Bind(node.Columns[i]);
+            }
+        }
+        private void Bind(in IntoClause node)
+        {
+            //NOTE: INTO columns are derived from the host SELECT expression
+            //NOTE: INTO columns are bound already !!!
 
-        //            return false;
-        //        }
-        //        private void BindColumn(in ColumnReference column)
-        //        {
-        //            LexerHelper.GetColumnIdentifiers(column.Identifier, out string tableAlias, out string columnName);
+            if (node.Table is not null)
+            {
+                //CreateTableVariable(in node); ?
+            }
+            else
+            {
+                Bind(node.Value); //NOTE: bind variable data type: Array or object
 
-        //            if (_scope.TryGetTableByAlias(in tableAlias, out object table))
-        //            {
-        //                BindColumn(in table, in columnName, in column);
-        //            }
+                if (node.Value.Binding is TypeIdentifier type) // see DeclareStatement binding
+                {
+                    type.Binding = node.Columns; //NOTE: schema definition
+                }
+            }
+        }
+        private void Bind(in ValuesExpression node)
+        {
+            foreach (SyntaxNode value in node.Values)
+            {
+                Bind(in value);
+            }
+        }
+        #endregion
 
-        //            if (column.Binding is null)
-        //            {
-        //                RegisterBindingError(column.Token, column.Identifier);
-        //            }
-        //        }
-        //        private void BindColumn(in object source, in string identifier, in ColumnReference column)
-        //        {
-        //            if (source is CommonTableExpression common)
-        //            {
-        //                BindColumn(in common, in identifier, in column);
-        //            }
-        //            else if (source is ApplicationObject entity)
-        //            {
-        //                BindColumn(in entity, in identifier, in column);
-        //            }
-        //            else if (source is TableExpression derived)
-        //            {
-        //                BindColumn(in derived, in identifier, in column);
-        //            }
-        //            else if (source is TableVariableExpression variable)
-        //            {
-        //                BindColumn(in variable, in identifier, in column);
-        //            }
-        //            else if (source is TemporaryTableExpression temporary)
-        //            {
-        //                BindColumn(in temporary, in identifier, in column);
-        //            }
-        //            else if (source is TableUnionOperator union) // ORDER clause column of the UNION operator 
-        //            {
-        //                BindColumn(in union, in identifier, in column);
-        //            }
-        //        }
-        //        private void BindColumn(in TableExpression table, in string identifier, in ColumnReference column)
-        //        {
-        //            if (table.Expression is SelectExpression select)
-        //            {
-        //                BindColumn(in select, in identifier, in column);
-        //            }
-        //            else if (table.Expression is TableUnionOperator union)
-        //            {
-        //                BindColumn(in union, in identifier, in column);
-        //            }
-        //        }
-        //        private void BindColumn(in TableUnionOperator union, in string identifier, in ColumnReference column)
-        //        {
-        //            if (union.Expression1 is SelectExpression select1)
-        //            {
-        //                BindColumn(in select1, in identifier, in column);
-        //            }
-        //            else if (union.Expression2 is SelectExpression select2)
-        //            {
-        //                BindColumn(in select2, in identifier, in column);
-        //            }
-        //        }
-        //        private void BindColumn(in CommonTableExpression table, in string identifier, in ColumnReference column)
-        //        {
-        //            if (table.Expression is SelectExpression select)
-        //            {
-        //                BindColumn(in select, in identifier, in column);
-        //            }
-        //            else if (table.Expression is TableUnionOperator union)
-        //            {
-        //                BindColumn(in union, in identifier, in column);
-        //            }
-        //            else if (table.Expression is InsertStatement insert)
-        //            {
-        //                BindColumn(in insert, in identifier, in column);
-        //            }
-        //            else if (table.Expression is UpdateStatement update)
-        //            {
-        //                BindColumn(in update, in identifier, in column);
-        //            }
-        //            else if (table.Expression is DeleteStatement delete)
-        //            {
-        //                BindColumn(in delete, in identifier, in column);
-        //            }
-        //        }
-        //        private void BindColumn(in TableVariableExpression table, in string identifier, in ColumnReference column)
-        //        {
-        //            if (table.Expression is SelectExpression select)
-        //            {
-        //                BindColumn(in select, in identifier, in column);
-        //            }
-        //            else if (table.Expression is TableUnionOperator union)
-        //            {
-        //                BindColumn(in union, in identifier, in column);
-        //            }
-        //        }
-        //        private void BindColumn(in TemporaryTableExpression table, in string identifier, in ColumnReference column)
-        //        {
-        //            if (table.Expression is SelectExpression select)
-        //            {
-        //                BindColumn(in select, in identifier, in column);
-        //            }
-        //            else if (table.Expression is TableUnionOperator union)
-        //            {
-        //                BindColumn(in union, in identifier, in column);
-        //            }
-        //        }
-        //        private void BindColumn(in SelectExpression table, in string identifier, in ColumnReference column)
-        //        {
-        //            string columnName = string.Empty;
+        #region "COLUMN BINDING"
+        private void Bind(in StarExpression node) { /* TODO: implement transformer into column expressions */ }
+        private void Bind(in ColumnExpression node)
+        {
+            Bind(node.Expression);
+        }
+        private void Bind(in ColumnReference node)
+        {
+            //if (!TryBindEnumValue(in node))
+            //{
+            BindColumn(in node);
+            //}
 
-        //            foreach (ColumnExpression expression in table.Columns)
-        //            {
-        //                if (!string.IsNullOrEmpty(expression.Alias))
-        //                {
-        //                    columnName = expression.Alias;
-        //                }
-        //                else if (expression.Expression is ColumnReference reference)
-        //                {
-        //                    LexerHelper.GetColumnIdentifiers(reference.Identifier, out string _, out columnName);
-        //                }
+            if (node.Binding is null)
+            {
+                RegisterBindingError(node.Token, node.Identifier);
+            }
+            else // successful binding
+            {
+                //TODO: find all ambiguous names and report error
+                _ = _scope.Columns.TryAdd(node.Identifier, node.Binding);
+            }
+        }
+        
+        //private bool TryBindEnumValue(in ColumnReference column)
+        //{
+        //    string[] identifiers = column.Identifier.Split('.', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
-        //                if (columnName == identifier)
-        //                {
-        //                    column.Binding = expression; return;
-        //                }
-        //            }
-        //        }
-        //        //private void BindColumn(in ApplicationObject entity, in string identifier, in ColumnReference column)
-        //        //{
-        //        //    foreach (MetadataProperty property in entity.Properties)
-        //        //    {
-        //        //        if (property.Name == identifier)
-        //        //        {
-        //        //            column.Binding = property; return;
-        //        //        }
-        //        //    }
-        //        //}
-        //        private void BindColumn(in OutputClause output, in string identifier, in ColumnReference column)
-        //        {
-        //            if (output is null) { return; }
+        //    if (identifiers is null || identifiers.Length != 3) { return false; }
 
-        //            string columnName = string.Empty;
+        //    if (_schema is not null && _schema.TryGetEnumValue(column.Identifier, out EnumValue value) && value is not null)
+        //    {
+        //        column.Binding = value;
+        //        column.Token = Token.Enumeration;
 
-        //            foreach (ColumnExpression expression in output.Columns)
-        //            {
-        //                if (!string.IsNullOrEmpty(expression.Alias))
-        //                {
-        //                    columnName = expression.Alias;
-        //                }
-        //                else if (expression.Expression is ColumnReference reference)
-        //                {
-        //                    LexerHelper.GetColumnIdentifiers(reference.Identifier, out string _, out columnName);
-        //                }
+        //        return true;
+        //    }
 
-        //                if (columnName == identifier)
-        //                {
-        //                    column.Binding = expression; return; // success
-        //                }
-        //            }
-        //        }
-        //        private void BindColumn(in InsertStatement table, in string identifier, in ColumnReference column)
+        //    return false;
+        //}
+
+        private void BindColumn(in ColumnReference column)
+        {
+            column.GetColumnIdentifiers(out string tableAlias, out string columnName);
+
+            if (_scope.TryGetTableByAlias(in tableAlias, out object table))
+            {
+                BindColumn(in table, in columnName, in column);
+            }
+
+            if (column.Binding is null)
+            {
+                RegisterBindingError(column.Token, column.Identifier);
+            }
+        }
+        private void BindColumn(in object source, in string identifier, in ColumnReference column)
+        {
+            if (source is CommonTableExpression common)
+            {
+                BindColumn(in common, in identifier, in column);
+            }
+            else if (source is EntityDefinition entity)
+            {
+                BindColumn(in entity, in identifier, in column);
+            }
+            else if (source is TableExpression derived)
+            {
+                BindColumn(in derived, in identifier, in column);
+            }
+            else if (source is TableVariableExpression variable)
+            {
+                BindColumn(in variable, in identifier, in column);
+            }
+            else if (source is TemporaryTableExpression temporary)
+            {
+                BindColumn(in temporary, in identifier, in column);
+            }
+            else if (source is TableUnionOperator union) // ORDER clause column of the UNION operator 
+            {
+                BindColumn(in union, in identifier, in column);
+            }
+        }
+        private void BindColumn(in TableExpression table, in string identifier, in ColumnReference column)
+        {
+            if (table.Expression is SelectExpression select)
+            {
+                BindColumn(in select, in identifier, in column);
+            }
+            else if (table.Expression is TableUnionOperator union)
+            {
+                BindColumn(in union, in identifier, in column);
+            }
+        }
+        private void BindColumn(in TableUnionOperator union, in string identifier, in ColumnReference column)
+        {
+            if (union.Expression1 is SelectExpression select1)
+            {
+                BindColumn(in select1, in identifier, in column);
+            }
+            else if (union.Expression2 is SelectExpression select2)
+            {
+                BindColumn(in select2, in identifier, in column);
+            }
+        }
+        private void BindColumn(in CommonTableExpression table, in string identifier, in ColumnReference column)
+        {
+            if (table.Expression is SelectExpression select)
+            {
+                BindColumn(in select, in identifier, in column);
+            }
+            else if (table.Expression is TableUnionOperator union)
+            {
+                BindColumn(in union, in identifier, in column);
+            }
+            //else if (table.Expression is InsertStatement insert)
+            //{
+            //    BindColumn(in insert, in identifier, in column);
+            //}
+            //else if (table.Expression is UpdateStatement update)
+            //{
+            //    BindColumn(in update, in identifier, in column);
+            //}
+            //else if (table.Expression is DeleteStatement delete)
+            //{
+            //    BindColumn(in delete, in identifier, in column);
+            //}
+        }
+        private void BindColumn(in TableVariableExpression table, in string identifier, in ColumnReference column)
+        {
+            if (table.Expression is SelectExpression select)
+            {
+                BindColumn(in select, in identifier, in column);
+            }
+            else if (table.Expression is TableUnionOperator union)
+            {
+                BindColumn(in union, in identifier, in column);
+            }
+        }
+        private void BindColumn(in TemporaryTableExpression table, in string identifier, in ColumnReference column)
+        {
+            if (table.Expression is SelectExpression select)
+            {
+                BindColumn(in select, in identifier, in column);
+            }
+            else if (table.Expression is TableUnionOperator union)
+            {
+                BindColumn(in union, in identifier, in column);
+            }
+        }
+        private void BindColumn(in SelectExpression table, in string identifier, in ColumnReference column)
+        {
+            string columnName = string.Empty;
+
+            foreach (ColumnExpression expression in table.Columns)
+            {
+                if (!string.IsNullOrEmpty(expression.Alias))
+                {
+                    columnName = expression.Alias;
+                }
+                else if (expression.Expression is ColumnReference reference)
+                {
+                    reference.GetColumnIdentifiers(out string _, out columnName);
+                }
+
+                if (columnName == identifier)
+                {
+                    column.Binding = expression; return;
+                }
+            }
+        }
+        private void BindColumn(in EntityDefinition entity, in string identifier, in ColumnReference column)
+        {
+            foreach (PropertyDefinition property in entity.Properties)
+            {
+                if (property.Name == identifier)
+                {
+                    column.Binding = property; return;
+                }
+            }
+        }
+        
+        //private void BindColumn(in OutputClause output, in string identifier, in ColumnReference column)
+        //{
+        //    if (output is null) { return; }
+
+        //    string columnName = string.Empty;
+
+        //    foreach (ColumnExpression expression in output.Columns)
+        //    {
+        //        if (!string.IsNullOrEmpty(expression.Alias))
         //        {
-        //            if (table.Output is not null) { BindColumn(table.Output, in identifier, in column); }
+        //            columnName = expression.Alias;
         //        }
-        //        private void BindColumn(in UpdateStatement table, in string identifier, in ColumnReference column)
+        //        else if (expression.Expression is ColumnReference reference)
         //        {
-        //            if (table.Output is not null) { BindColumn(table.Output, in identifier, in column); }
+        //            reference.GetColumnIdentifiers(out string _, out columnName);
         //        }
-        //        private void BindColumn(in DeleteStatement table, in string identifier, in ColumnReference column)
+
+        //        if (columnName == identifier)
         //        {
-        //            if (table.Output is not null) { BindColumn(table.Output, in identifier, in column); }
+        //            column.Binding = expression; return; // success
         //        }
-        //        #endregion
+        //    }
+        //}
+        //private void BindColumn(in InsertStatement table, in string identifier, in ColumnReference column)
+        //{
+        //    if (table.Output is not null) { BindColumn(table.Output, in identifier, in column); }
+        //}
+        //private void BindColumn(in UpdateStatement table, in string identifier, in ColumnReference column)
+        //{
+        //    if (table.Output is not null) { BindColumn(table.Output, in identifier, in column); }
+        //}
+        //private void BindColumn(in DeleteStatement table, in string identifier, in ColumnReference column)
+        //{
+        //    if (table.Output is not null) { BindColumn(table.Output, in identifier, in column); }
+        //}
+
+        #endregion
     }
 }
 
@@ -811,25 +994,7 @@ namespace DaJet.Scripting
 
 //            if (node.Into is not null) { Bind(node.Into); }
 //        }
-//        private void Bind(in IntoClause node)
-//        {
-//            //NOTE: INTO columns are derived from the host SELECT expression
-//            //NOTE: INTO columns are bound already !!!
 
-//            if (node.Table is not null)
-//            {
-//                CreateTableVariable(in node);
-//            }
-//            else
-//            {
-//                Bind(node.Value); //NOTE: bind variable data type: Array or object
-
-//                if (node.Value.Binding is TypeIdentifier type) // see DeclareStatement binding
-//                {
-//                    type.Binding = node.Columns; //NOTE: schema definition
-//                }
-//            }
-//        }
 //        private void CreateTableVariable(in IntoClause node)
 //        {
 //            SyntaxNode table;
@@ -875,140 +1040,7 @@ namespace DaJet.Scripting
 
 
 
-//        #region "CLAUSE AND OPERATOR BINDING"
-//        private void Bind(in TopClause node)
-//        {
-//            Bind(node.Expression);
-//        }
-//        private void Bind(in WhereClause node)
-//        {
-//            Bind(node.Expression);
-//        }
-//        private void Bind(in GroupClause node)
-//        {
-//            for (int i = 0; i < node.Expressions.Count; i++)
-//            {
-//                Bind(node.Expressions[i]);
-//            }
-//        }
-//        private void Bind(in HavingClause node)
-//        {
-//            Bind(node.Expression);
-//        }
-//        private void Bind(in OnClause node)
-//        {
-//            Bind(node.Expression);
-//        }
-//        private void Bind(in OrderClause node)
-//        {
-//            for (int i = 0; i < node.Expressions.Count; i++)
-//            {
-//                Bind(node.Expressions[i]);
-//            }
 
-//            if (node.Offset is not null)
-//            {
-//                Bind(node.Offset);
-
-//                if (node.Fetch is not null)
-//                {
-//                    Bind(node.Fetch);
-//                }
-//            }
-//        }
-//        private void Bind(in OrderExpression node)
-//        {
-//            Bind(node.Expression);
-//        }
-//        private void Bind(in GroupOperator node)
-//        {
-//            Bind(node.Expression);
-//        }
-//        private void Bind(in UnaryOperator node)
-//        {
-//            Bind(node.Expression);
-//        }
-//        private void Bind(in BinaryOperator node)
-//        {
-//            Bind(node.Expression1);
-//            Bind(node.Expression2);
-//        }
-//        private void Bind(in AdditionOperator node)
-//        {
-//            Bind(node.Expression1);
-//            Bind(node.Expression2);
-//        }
-//        private void Bind(in MultiplyOperator node)
-//        {
-//            Bind(node.Expression1);
-//            Bind(node.Expression2);
-//        }
-//        private void Bind(in ComparisonOperator node)
-//        {
-//            Bind(node.Expression1);
-//            Bind(node.Expression2);
-//        }
-//        private void Bind(in CaseExpression node)
-//        {
-//            foreach (WhenClause when in node.CASE)
-//            {
-//                Bind(in when);
-//            }
-
-//            if (node.ELSE is not null)
-//            {
-//                Bind(node.ELSE);
-//            }
-//        }
-//        private void Bind(in WhenClause node)
-//        {
-//            Bind(node.WHEN);
-//            Bind(node.THEN);
-//        }
-//        private void Bind(in FunctionExpression node)
-//        {
-//            for (int i = 0; i < node.Parameters.Count; i++)
-//            {
-//                Bind(node.Parameters[i]);
-//            }
-
-//            if (node.Over is not null)
-//            {
-//                Bind(node.Over);
-//            }
-//        }
-//        private void Bind(in OverClause node)
-//        {
-//            if (node.Partition is not null)
-//            {
-//                Bind(node.Partition);
-//            }
-//            if (node.Order is not null)
-//            {
-//                Bind(node.Order);
-//            }
-//            if (node.Preceding is not null || node.Following is not null)
-//            {
-//                if (node.Preceding is not null && node.Following is not null)
-//                {
-//                    Bind(node.Preceding);
-//                    Bind(node.Following);
-//                }
-//                else if (node.Preceding is not null)
-//                {
-//                    Bind(node.Preceding);
-//                }
-//            }
-//        }
-//        private void Bind(in WindowFrame node) { }
-//        private void Bind(in PartitionClause node)
-//        {
-//            for (int i = 0; i < node.Columns.Count; i++)
-//            {
-//                Bind(node.Columns[i]);
-//            }
-//        }
-//        #endregion
 
 //        #region "DML STATEMENT BINDING"
 //        private void Bind(in ConsumeStatement node)
@@ -1197,13 +1229,7 @@ namespace DaJet.Scripting
 //            if (node.Column is not null) { Bind(node.Column); }
 //            if (node.Initializer is not null) { Bind(node.Initializer); }
 //        }
-//        private void Bind(in ValuesExpression node)
-//        {
-//            foreach (SyntaxNode value in node.Values)
-//            {
-//                Bind(in value);
-//            }
-//        }
+
 //        #endregion
 
 //        #region "DDL STATEMENT BINDING"

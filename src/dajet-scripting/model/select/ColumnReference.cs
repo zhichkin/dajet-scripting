@@ -17,5 +17,24 @@
         {
             return $"[{Token}: {Identifier}]";
         }
+        public void GetColumnIdentifiers(out string tableAlias, out string columnName)
+        {
+            string[] names = Identifier.Split('.', StringSplitOptions.RemoveEmptyEntries);
+
+            tableAlias = string.Empty;
+            columnName = string.Empty;
+
+            if (names.Length == 0)
+            {
+                return;
+            }
+
+            columnName = names[names.Length - 1];
+
+            if (names.Length > 1)
+            {
+                tableAlias = names[0];
+            }
+        }
     }
 }
