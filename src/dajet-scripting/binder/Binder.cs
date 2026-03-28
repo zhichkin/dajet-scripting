@@ -8,15 +8,13 @@ namespace DaJet.Scripting
         private Scope _scope;
         private List<string> _errors;
         private ISchemaProvider _schema;
-        public bool TryBind(in SyntaxNode script, in ISchemaProvider schema, out Scope scope, out List<string> errors)
+        public bool TryBind(in Script script, in ISchemaProvider schema, out List<string> errors)
         {
             ArgumentNullException.ThrowIfNull(script, nameof(script));
 
             _schema = schema; //NOTE: non-database types and objects do not need it
 
             _errors = new List<string>();
-
-            _scope = new Scope() { Owner = script };
 
             try
             {
@@ -27,10 +25,7 @@ namespace DaJet.Scripting
                 _errors.Add(ExceptionHelper.GetErrorMessage(exception));
             }
 
-            scope = _scope; //NOTE: test purposes
             errors = _errors;
-
-            _scope = null;
             _errors = null;
 
             return (errors.Count == 0);
@@ -127,7 +122,14 @@ namespace DaJet.Scripting
 
         private void Bind(in Script node)
         {
-            _scope = _scope.OpenScope(node);
+            if (_scope is null) // root Script
+            {
+                _scope = new Scope() { Owner = node };
+            }
+            else // nested Script - EXECUTE statement
+            {
+                _scope = _scope.OpenScope(node); 
+            }
 
             //TODO: process IMPORT and DEFINE statements
 
@@ -136,7 +138,18 @@ namespace DaJet.Scripting
                 Bind(in statement);
             }
 
-            _scope = _scope.CloseScope(); // ? EXECUTE вложенный скрипт
+            _scope = _scope.CloseScope();
+        }
+        private void Bind(in UseStatement node)
+        {
+            _scope = _scope.OpenScope(node);
+
+            foreach (SyntaxNode statement in node.Statements.Statements)
+            {
+                Bind(in statement);
+            }
+
+            _scope = _scope.CloseScope();
         }
         private void Bind(in StatementBlock node)
         {
@@ -168,7 +181,9 @@ namespace DaJet.Scripting
 
             object binding = _scope.GetVariableBinding(target);
 
-            string member = members[1].StartsWith('[') ? members[2] : members[1];
+            node.Binding = binding;
+
+            //string member = members[1].StartsWith('[') ? members[2] : members[1];
 
             //if (binding is TypeIdentifier type && type.Binding is List<ColumnExpression> columns)
             //{
@@ -203,18 +218,6 @@ namespace DaJet.Scripting
             }
         }
 
-        private void Bind(in UseStatement node)
-        {
-            _scope = _scope.OpenScope(node);
-
-            foreach (SyntaxNode statement in node.Statements.Statements)
-            {
-                Bind(in statement);
-            }
-
-            _scope = _scope.CloseScope();
-        }
-        
         #region "ARITHMETIC AND LOGICAL OPERATORS"
         private void Bind(in GroupOperator node)
         {
@@ -390,11 +393,19 @@ namespace DaJet.Scripting
             // 3. try bind database schema table
             if (node.Binding is null)
             {
-                EntityDefinition entity = _schema.GetSchema("USE domain", node.Identifier);
+                Scope scope = _scope.Ancestor<UseStatement>();
 
-                if (entity is not null)
+                if (scope is not null)
                 {
-                    node.Binding = entity; // successful binding
+                    if (scope.Owner is UseStatement use)
+                    {
+                        EntityDefinition entity = _schema.GetSchema(use.Uri, node.Identifier);
+
+                        if (entity is not null)
+                        {
+                            node.Binding = entity; // successful binding
+                        }
+                    }
                 }
             }
 
@@ -607,11 +618,6 @@ namespace DaJet.Scripting
             {
                 BindColumn(in table, in columnName, in column);
             }
-
-            if (column.Binding is null)
-            {
-                RegisterBindingError(column.Token, column.Identifier);
-            }
         }
         private void BindColumn(in object source, in string identifier, in ColumnReference column)
         {
@@ -659,7 +665,7 @@ namespace DaJet.Scripting
             }
             else if (union.Expression2 is SelectExpression select2)
             {
-                BindColumn(in select2, in identifier, in column);
+                BindColumn(in select2, in identifier, in column); // ?
             }
         }
         private void BindColumn(in CommonTableExpression table, in string identifier, in ColumnReference column)

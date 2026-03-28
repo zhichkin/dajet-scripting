@@ -232,36 +232,36 @@ namespace DaJet.Scripting
             return _function.TryGetValue(identifier, out token);
         }
 
-        //internal static string GetComparisonLiteral(TokenType token)
-        //{
-        //    if (token == TokenType.IS) { return "IS"; }
-        //    else if (token == TokenType.IN) { return "IN"; }
-        //    else if (token == TokenType.LIKE) { return "LIKE"; }
-        //    else if (token == TokenType.BETWEEN) { return "BETWEEN"; }
-        //    else if (token == TokenType.Equals) { return "="; }
-        //    else if (token == TokenType.NotEquals) { return "<>"; }
-        //    else if (token == TokenType.Less) { return "<"; }
-        //    else if (token == TokenType.LessOrEquals) { return "<="; }
-        //    else if (token == TokenType.Greater) { return ">"; }
-        //    else if (token == TokenType.GreaterOrEquals) { return ">="; }
-            
-        //    return token.ToString();
-        //}
+        internal static string GetComparisonLiteral(Token token)
+        {
+            if (token == Token.IS) { return "IS"; }
+            else if (token == Token.IN) { return "IN"; }
+            else if (token == Token.LIKE) { return "LIKE"; }
+            else if (token == Token.BETWEEN) { return "BETWEEN"; }
+            else if (token == Token.Equals) { return "="; }
+            else if (token == Token.NotEquals) { return "<>"; }
+            else if (token == Token.Less) { return "<"; }
+            else if (token == Token.LessOrEquals) { return "<="; }
+            else if (token == Token.Greater) { return ">"; }
+            else if (token == Token.GreaterOrEquals) { return ">="; }
 
-        //internal static string GetUuidHexLiteral(Guid uuid)
-        //{
-        //    string value = uuid.ToString("N");
+            return token.ToString();
+        }
 
-        //    return string.Concat(
-        //        value.AsSpan(16, 16),
-        //        value.AsSpan(12, 4),
-        //        value.AsSpan(8, 4),
-        //        value.AsSpan(0, 8));
+        internal static string GetUuidHexLiteral(Guid uuid)
+        {
+            string value = uuid.ToString("N");
 
-        //    // SqlServer return $"0x{value}";
+            return string.Concat(
+                value.AsSpan(16, 16),
+                value.AsSpan(12, 4),
+                value.AsSpan(8, 4),
+                value.AsSpan(0, 8));
 
-        //    // PostgreSql return $"CAST(E'\\\\x{value}' AS bytea)";
-        //}
+            // SqlServer return $"0x{value}";
+
+            // PostgreSql return $"CAST(E'\\\\x{value}' AS bytea)";
+        }
 
         //public static ScalarExpression CreateDefaultScalar(Type type)
         //{

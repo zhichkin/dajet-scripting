@@ -6,5 +6,7 @@
         public SyntaxNode Expression { get; set; }
         public CommonTableExpression CommonTables { get; set; }
         public bool IsStream { get; set; } // STREAM statement
+
+        public string Sql { get; set; }
     }
 }
