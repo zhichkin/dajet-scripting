@@ -82,7 +82,7 @@ namespace DaJet.Scripting
             return (table.Binding == cte);
         }
 
-        protected override void Visit(in SelectStatement node)
+        protected override void Visit(in SelectStatement node, out SqlStatement statement)
         {
             StringBuilder script = new();
 
@@ -104,7 +104,11 @@ namespace DaJet.Scripting
 
             script.Append(';');
 
-            node.Sql = script.ToString();
+            statement = new SqlStatement()
+            {
+                Node = node,
+                Sql = script.ToString()
+            };
         }
         protected override void Visit(in SelectExpression node, in StringBuilder script)
         {

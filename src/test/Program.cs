@@ -90,7 +90,7 @@ namespace test
             string source = "DECLARE @Ссылка entity"
                 + NewLine + "DECLARE @Запись object"
                 + NewLine + "USE 'MS_TEST'"
-                + NewLine + "SELECT Ссылка, Наименование"
+                + NewLine + "SELECT Ссылка, Наименование = SUM(Наименование)"
                 + NewLine + "INTO @Запись"
                 + NewLine + "FROM Справочник.Справочник1"
                 + NewLine + "WHERE Ссылка = @Ссылка"
@@ -120,22 +120,18 @@ namespace test
 
             MsSqlTranspiler transpiler = new(schema);
 
-            if (!transpiler.TryTranspile(in script, out errors))
+            if (!transpiler.TryTranspile(in script, out List<SqlStatement> statements, out errors))
             {
                 Console.WriteLine(string.Join('\n', errors)); return;
             }
 
-            //List<SelectStatement> statements = new SelectStatementExtractor().Extract(script);
-
-            List<SelectStatement> statements = Visitor.Extract<SelectStatement>(script);
-
-            foreach (SelectStatement select in statements)
+            foreach (SqlStatement statement in statements)
             {
-                Console.WriteLine("--------");
-                Console.WriteLine(select.Sql);
-                Console.WriteLine("--------");
+                Console.WriteLine("-----------");
+                Console.WriteLine(statement.Sql);
+                Console.WriteLine("-----------");
 
-                List<IntoClause> into = Visitor.Extract<IntoClause>(select);
+                List<IntoClause> into = Visitor.Extract<IntoClause>(statement.Node);
 
                 if (into.Count > 0)
                 {
@@ -143,6 +139,25 @@ namespace test
                     Console.WriteLine("--------");
                 }
             }
+
+            //List<SelectStatement> statements = new SelectStatementExtractor().Extract(script);
+
+            //List<SelectStatement> statements = Visitor.Extract<SelectStatement>(script);
+
+            //foreach (SelectStatement select in statements)
+            //{
+            //    Console.WriteLine("--------");
+            //    Console.WriteLine(select.Sql);
+            //    Console.WriteLine("--------");
+
+            //    List<IntoClause> into = Visitor.Extract<IntoClause>(select);
+
+            //    if (into.Count > 0)
+            //    {
+            //        Console.WriteLine(into[0].Value.ToString());
+            //        Console.WriteLine("--------");
+            //    }
+            //}
 
             string json = JsonSerializer.Serialize(script, JsonOptions);
 

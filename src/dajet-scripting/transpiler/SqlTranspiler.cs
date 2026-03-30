@@ -1,5 +1,6 @@
 ﻿using DaJet.Scripting.Model;
 using DaJet.TypeSystem;
+using System.Collections.Frozen;
 using System.Data;
 using System.Text;
 
@@ -7,12 +8,55 @@ namespace DaJet.Scripting
 {
     public abstract class SqlTranspiler
     {
+        private readonly FrozenDictionary<string, Action<FunctionExpression, StringBuilder>> Functions;
+        private FrozenDictionary<string, Action<FunctionExpression, StringBuilder>> CreateFunctionLookup()
+        {
+            List<KeyValuePair<string, Action<FunctionExpression, StringBuilder>>> list =
+            [
+                new KeyValuePair<string, Action<FunctionExpression, StringBuilder>>("SUM", SUM)
+            ];
+            return FrozenDictionary.ToFrozenDictionary(list, StringComparer.Ordinal);
+        }
         public SqlTranspiler(ISchemaProvider schema)
         {
             Schema = schema;
+            Functions = CreateFunctionLookup();
         }
         protected ISchemaProvider Schema { get; private set; }
         protected int YearOffset { get; set; }
+        public bool TryTranspile(in Script script, out List<SqlStatement> statements, out List<string> errors)
+        {
+            errors = new List<string>();
+
+            statements = new List<SqlStatement>();
+
+            try
+            {
+                foreach (SyntaxNode node in script.Statements)
+                {
+                    if (node is UseStatement use)
+                    {
+                        StatementBlock block = use.Statements;
+
+                        foreach (SyntaxNode statement in block.Statements)
+                        {
+                            if (statement is SelectStatement select)
+                            {
+                                Visit(in select, out SqlStatement result);
+                                
+                                statements.Add(result);
+                            }
+                        }
+                    }
+                }
+            }
+            catch (Exception exception)
+            {
+                errors.Add(ExceptionHelper.GetErrorMessage(exception));
+            }
+
+            return (errors.Count == 0);
+        }
         protected void Visit(in SyntaxNode expression, in StringBuilder script)
         {
             if (expression is GroupOperator group) { Visit(in group, in script); }
@@ -35,7 +79,7 @@ namespace DaJet.Scripting
             else if (expression is TableVariableExpression table_variable) { Visit(in table_variable, in script); }
             else if (expression is TemporaryTableExpression temporary_table) { Visit(in temporary_table, in script); }
             else if (expression is StarExpression star) { Visit(in star, in script); }
-            
+
             //else if (expression is InsertStatement insert) { Visit(in insert, in script); }
             //else if (expression is UpdateStatement update) { Visit(in update, in script); }
             //else if (expression is DeleteStatement delete) { Visit(in delete, in script); }
@@ -46,41 +90,12 @@ namespace DaJet.Scripting
             else if (expression is ApplySequenceStatement apply_sequence) { Visit(in apply_sequence, in script); }
             else if (expression is RevokeSequenceStatement revoke_sequence) { Visit(in revoke_sequence, in script); }
         }
-        public bool TryTranspile(in Script script, out List<string> errors)
-        {
-            errors = new List<string>();
-
-            try
-            {
-                foreach (SyntaxNode node in script.Statements)
-                {
-                    if (node is UseStatement use)
-                    {
-                        StatementBlock block = use.Statements;
-
-                        foreach (SyntaxNode statement in block.Statements)
-                        {
-                            if (statement is SelectStatement select)
-                            {
-                                Visit(in select);
-                            }
-                        }
-                    }
-                }
-            }
-            catch (Exception exception)
-            {
-                errors.Add(ExceptionHelper.GetErrorMessage(exception));
-            }
-
-            return (errors.Count == 0);
-        }
 
         #region "SELECT STATEMENT"
-        protected virtual void Visit(in SelectStatement node)
+        protected virtual void Visit(in SelectStatement node, out SqlStatement statement)
         {
             StringBuilder script = new();
-
+            
             if (node.CommonTables is not null)
             {
                 script.Append("WITH ");
@@ -92,7 +107,13 @@ namespace DaJet.Scripting
 
             Visit(node.Expression, in script);
 
-            node.Sql = script.ToString();
+            //TODO: new SqlStatement(in node);
+
+            statement = new SqlStatement()
+            {
+                Node = node,
+                Sql = script.ToString()
+            };
         }
         protected virtual void Visit(in SelectExpression node, in StringBuilder script)
         {
@@ -643,7 +664,7 @@ namespace DaJet.Scripting
         {
             script.Append(node.GetDbParameterName());
         }
-        
+
         //protected virtual void Visit(in EnumValue node, in StringBuilder script)
         //{
         //    script.Append($"0x{ParserHelper.GetUuidHexLiteral(node.Uuid)}");
@@ -651,48 +672,108 @@ namespace DaJet.Scripting
 
         protected virtual void Visit(in FunctionExpression node, in StringBuilder script)
         {
-            if (node.Token == Token.UDF)
+            if (Functions.TryGetValue(node.Name, out Action<FunctionExpression, StringBuilder> transpiler))
             {
-                throw new InvalidOperationException($"Invalid function name: {node.Name}");
+                transpiler(node, script);
+            }
+            else
+            {
+                throw new InvalidOperationException($"Unknown function name: {node.Name}");
             }
 
-            string name = node.Name.ToUpperInvariant();
-
-            script.Append(node.Name);
-
-            if (node.Token != Token.EXISTS)
-            {
-                script.Append('('); //NOTE: EXISTS function has one parameter - TableExpression
-            }
-
-            if (node.Token == Token.COUNT && node.Modifier == Token.DISTINCT)
-            {
-                script.Append("DISTINCT ");
-            }
-
-            SyntaxNode expression;
-
-            for (int i = 0; i < node.Parameters.Count; i++)
-            {
-                expression = node.Parameters[i];
-
-                if (i > 0) { script.Append(", "); }
-                
-                Visit(in expression, in script);
-            }
-
-            if (node.Token != Token.EXISTS)
-            {
-                script.Append(')'); //NOTE: EXISTS function has one parameter - TableExpression
-            }
-
-            if (node.Over is not null)
-            {
-                script.Append(' ');
-
-                Visit(node.Over, in script);
-            }
+            //else if (name == "NOW")
+            //{
+            //    if (YearOffset == 0)
+            //    {
+            //        script.Append("GETDATE()");
+            //    }
+            //    else
+            //    {
+            //        script.Append("DATEADD(year, " + YearOffset.ToString() + ", GETDATE())");
+            //    }
+            //}
+            //else if (name == "UTC")
+            //{
+            //    if (YearOffset == 0)
+            //    {
+            //        script.Append("GETUTCDATE()");
+            //    }
+            //    else
+            //    {
+            //        script.Append("DATEADD(year, " + YearOffset.ToString() + ", GETUTCDATE())");
+            //    }
+            //}
+            //else if (name == "VECTOR")
+            //{
+            //    if (node.Parameters is not null && node.Parameters.Count > 0 && node.Parameters[0] is ScalarExpression scalar)
+            //    {
+            //        script.Append("NEXT VALUE FOR ").Append(scalar.Literal);
+            //    }
+            //}
+            //else if (name == "CHARLENGTH")
+            //{
+            //    script.Append("LEN").Append('(');
+            //    Visit(node.Parameters[0], in script);
+            //    script.Append(')');
+            //}
+            //else if (name == "NEWUUID")
+            //{
+            //    script.Append("NEWID()");
+            //}
+            //else if (node.Token != TokenType.UDF)
+            //{
+            //    base.Visit(in node, in script);
+            //}
+            //else
+            //{
+            //    throw new InvalidOperationException($"Invalid function name: {node.Name}");
+            //}
         }
+
+        //protected virtual void Visit(in FunctionExpression node, in StringBuilder script)
+        //{
+        //    if (node.Token == Token.UDF)
+        //    {
+        //        throw new InvalidOperationException($"Invalid function name: {node.Name}");
+        //    }
+
+        //    string name = node.Name.ToUpperInvariant();
+
+        //    script.Append(node.Name);
+
+        //    if (node.Token != Token.EXISTS)
+        //    {
+        //        script.Append('('); //NOTE: EXISTS function has one parameter - TableExpression
+        //    }
+
+        //    if (node.Token == Token.COUNT && node.Modifier == Token.DISTINCT)
+        //    {
+        //        script.Append("DISTINCT ");
+        //    }
+
+        //    SyntaxNode expression;
+
+        //    for (int i = 0; i < node.Parameters.Count; i++)
+        //    {
+        //        expression = node.Parameters[i];
+
+        //        if (i > 0) { script.Append(", "); }
+
+        //        Visit(in expression, in script);
+        //    }
+
+        //    if (node.Token != Token.EXISTS)
+        //    {
+        //        script.Append(')'); //NOTE: EXISTS function has one parameter - TableExpression
+        //    }
+
+        //    if (node.Over is not null)
+        //    {
+        //        script.Append(' ');
+
+        //        Visit(node.Over, in script);
+        //    }
+        //}
         protected virtual void Visit(in OverClause node, in StringBuilder script)
         {
             script.Append("OVER").Append('(');
@@ -769,6 +850,35 @@ namespace DaJet.Scripting
         protected virtual void Visit(in TemporaryTableExpression node, in StringBuilder script)
         {
             Visit(node.Expression, in script);
+        }
+        #endregion
+
+        #region "FUNCTIONS"
+        protected virtual void SUM(FunctionExpression node, StringBuilder script)
+        {
+            script.Append(node.Name);
+
+            script.Append('(');
+
+            SyntaxNode parameter;
+
+            for (int i = 0; i < node.Parameters.Count; i++)
+            {
+                parameter = node.Parameters[i];
+
+                if (i > 0) { script.Append(", "); }
+
+                Visit(in parameter, in script);
+            }
+
+            script.Append(')');
+
+            if (node.Over is not null)
+            {
+                script.Append(' ');
+
+                Visit(node.Over, in script);
+            }
         }
         #endregion
 
