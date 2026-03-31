@@ -118,9 +118,9 @@ namespace test
                 Console.WriteLine(string.Join('\n', errors)); return;
             }
 
-            MsSqlTranspiler transpiler = new(schema);
+            SqlTranspiler transpiler = new();
 
-            if (!transpiler.TryTranspile(in script, out List<SqlStatement> statements, out errors))
+            if (!transpiler.TryTranspile(script, out List<SqlStatement> statements, out errors))
             {
                 Console.WriteLine(string.Join('\n', errors)); return;
             }

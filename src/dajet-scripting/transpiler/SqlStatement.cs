@@ -1,18 +1,20 @@
 ﻿using DaJet.Scripting.Model;
-using DaJet.TypeSystem;
-using System.Text;
 
 namespace DaJet.Scripting
 {
     public sealed class SqlStatement
     {
-        public SyntaxNode Node { get; set; }
-        public StringBuilder Script { get; } = new();
+        public SqlStatement(in SyntaxNode node)
+        {
+            Node = node;
+        }
+        public SyntaxNode Node { get; private set; }
         public string Sql { get; set; }
+        public string Dialect { get; set; } // SqlServer | PostgreSQL
         public int YearOffset { get; set; }
-        public List<SyntaxNode> Input { get; } = new(); // VariableReference, MemberAccessExpression
-        public EntityDefinition Output { get; set; } // {SELECT,STREAM,CONSUME} INTO | {INSERT,UPDATE,DELETE} OUTPUT
-
+        public Dictionary<string, SyntaxNode> Input { get; } = new(); // VariableReference, MemberAccessExpression
+        public SyntaxNode Output { get; set; } // INTO clause : VariableReference, MemberAccessExpression
+        public List<ColumnExpression> Schema { get; set; } // {SELECT,STREAM,CONSUME} SELECT | {INSERT,UPDATE,DELETE} OUTPUT
 
         //public List<SyntaxNode> PostProcessing { get; } = new(); // FunctionExpression
     }

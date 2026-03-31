@@ -4,9 +4,9 @@ using System.Text;
 
 namespace DaJet.Scripting
 {
-    public sealed class MsSqlTranspiler : SqlTranspiler
+    public sealed class MsSequenceTranspiler : SequenceTranspiler
     {
-        public MsSqlTranspiler(ISchemaProvider schema) : base(schema) { }
+        public MsSequenceTranspiler(ISchemaProvider schema) : base(schema) { }
 
         //private string GetCreateTableColumnList(in SelectExpression select)
         //{
