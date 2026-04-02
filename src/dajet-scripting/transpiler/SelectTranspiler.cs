@@ -7,7 +7,7 @@ namespace DaJet.Scripting
     public class SelectTranspiler : IStatementTranspiler
     {
         private SqlStatement _statement;
-        protected int YearOffset { get; set; }
+        public int YearOffset { get; set; }
         
         void IStatementTranspiler.Visit(in SyntaxNode expression, in StringBuilder script)
         {
@@ -36,6 +36,18 @@ namespace DaJet.Scripting
                 Visit(in node, in script);
 
                 _statement.Sql = script.ToString();
+                
+                if (node.GetIntoClause() is IntoClause into)
+                {
+                    if (into.Value is VariableReference variable)
+                    {
+                        _statement.Output = variable;
+                    }
+                    else if (into.Table is not null)
+                    {
+                        _statement.Output = into.Table;
+                    }
+                }
             }
             catch (Exception exception)
             {
@@ -48,27 +60,27 @@ namespace DaJet.Scripting
 
             return string.IsNullOrEmpty(error);
         }
-        private void Visit(in SyntaxNode expression, in StringBuilder script)
+        private void Visit(in SyntaxNode node, in StringBuilder script)
         {
-            if (expression is GroupOperator group) { Visit(in group, in script); }
-            else if (expression is UnaryOperator unary) { Visit(in unary, in script); }
-            else if (expression is BinaryOperator binary) { Visit(in binary, in script); }
-            else if (expression is AdditionOperator addition) { Visit(in addition, in script); }
-            else if (expression is MultiplyOperator multiply) { Visit(in multiply, in script); }
-            else if (expression is ComparisonOperator comparison) { Visit(in comparison, in script); }
-            else if (expression is CaseExpression case_when) { Visit(in case_when, in script); }
-            else if (expression is ScalarExpression scalar) { Visit(in scalar, in script); }
-            else if (expression is VariableReference variable) { Visit(in variable, in script); }
-            else if (expression is MemberAccessExpression member) { Visit(in member, in script); }
-            else if (expression is SelectExpression select) { Visit(in select, in script); }
-            else if (expression is TableJoinOperator join) { Visit(in join, in script); }
-            else if (expression is TableUnionOperator union) { Visit(in union, in script); }
-            else if (expression is TableExpression derived) { Visit(in derived, in script); }
-            else if (expression is TableReference table) { Visit(in table, in script); }
-            else if (expression is StarExpression star) { Visit(in star, in script); }
-            else if (expression is ColumnReference column) { Visit(in column, in script); }
-            else if (expression is FunctionExpression function) { Visit(in function, in script); }
-            else if (expression is TemporaryTableExpression temporary_table) { Visit(in temporary_table, in script); }
+            if (node is GroupOperator group) { Visit(in group, in script); }
+            else if (node is UnaryOperator unary) { Visit(in unary, in script); }
+            else if (node is BinaryOperator binary) { Visit(in binary, in script); }
+            else if (node is AdditionOperator addition) { Visit(in addition, in script); }
+            else if (node is MultiplyOperator multiply) { Visit(in multiply, in script); }
+            else if (node is ComparisonOperator comparison) { Visit(in comparison, in script); }
+            else if (node is CaseExpression case_when) { Visit(in case_when, in script); }
+            else if (node is ScalarExpression scalar) { Visit(in scalar, in script); }
+            else if (node is VariableReference variable) { Visit(in variable, in script); }
+            else if (node is MemberAccessExpression member) { Visit(in member, in script); }
+            else if (node is SelectExpression select) { Visit(in select, in script); }
+            else if (node is TableJoinOperator join) { Visit(in join, in script); }
+            else if (node is TableUnionOperator union) { Visit(in union, in script); }
+            else if (node is TableExpression derived) { Visit(in derived, in script); }
+            else if (node is TableReference table) { Visit(in table, in script); }
+            else if (node is ColumnReference column) { Visit(in column, in script); }
+            else if (node is FunctionExpression function) { Visit(in function, in script); }
+            else if (node is OverClause over) { Visit(in over, in script); }
+            else if (node is TemporaryTableExpression temporary_table) { Visit(in temporary_table, in script); }
         }
 
         protected virtual void Visit(in SelectStatement node, in StringBuilder script)
@@ -157,15 +169,15 @@ namespace DaJet.Scripting
                 }
             }
         }
-        protected virtual void Visit(in StarExpression node, in StringBuilder script)
-        {
-            script.Append('*');
-        }
         protected virtual void Visit(in ColumnReference node, in StringBuilder script)
         {
             if (node.Binding is PropertyDefinition property)
             {
                 Visit(property.Columns, in script);
+            }
+            else if (node.Binding is ColumnExpression column)
+            {
+                //TODO: table alias + column alias or name
             }
 
             //if (node.Mapping is not null) // we are here from anywhere, but not ColumnExpression itself
@@ -195,6 +207,7 @@ namespace DaJet.Scripting
                 //}
             }
         }
+        
         protected virtual void Visit(in ColumnDefinition column, in StringBuilder script, in string tableAlias)
         {
             if (!string.IsNullOrEmpty(tableAlias))
@@ -224,6 +237,7 @@ namespace DaJet.Scripting
                 Visit(in column, in script, in tableAlias);
             }
         }
+
         protected virtual void Visit(in TableExpression node, in StringBuilder script)
         {
             script.Append('(');
@@ -627,11 +641,25 @@ namespace DaJet.Scripting
         }
         protected virtual void Visit(in VariableReference node, in StringBuilder script)
         {
-            script.Append(node.Identifier);
+            int count = _statement.Input.Count;
+
+            string parameter = string.Format("@p{0}", count);
+
+            script.Append(parameter); // node.Identifier
+
+            _statement.Input.Add(node);
         }
         protected virtual void Visit(in MemberAccessExpression node, in StringBuilder script)
         {
-            script.Append(node.GetDbParameterName());
+            int count = _statement.Input.Count;
+
+            string parameter = string.Format("@p{0}", count);
+
+            script.Append(parameter);
+
+            _statement.Input.Add(node);
+
+            //script.Append(node.GetDbParameterName());
         }
 
         //protected virtual void Visit(in EnumValue node, in StringBuilder script)

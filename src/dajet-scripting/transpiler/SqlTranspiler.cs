@@ -11,6 +11,19 @@ namespace DaJet.Scripting
 
         private List<string> _errors;
         private List<SqlStatement> _statements;
+        public SqlTranspiler(in string dialect, int yearOffset)
+        {
+            Dialect = dialect;
+            YearOffset = yearOffset;
+
+            //TODO:
+            //Dictionary<Token, IStatementTranspiler> transpilers = new()
+            //{
+            //    { Token.SELECT, new SelectTranspiler(){ YearOffset = yearOffset } }
+            //};
+        }
+        public string Dialect { get; private set; }
+        public int YearOffset { get; private set; }
         public bool TryTranspile(in SyntaxNode node, out List<SqlStatement> statements, out List<string> errors)
         {
             _errors = new List<string>();

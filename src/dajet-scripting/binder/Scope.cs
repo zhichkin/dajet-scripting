@@ -1,4 +1,6 @@
 ﻿using DaJet.Scripting.Model;
+using DaJet.TypeSystem;
+using System.Xml.Linq;
 
 namespace DaJet.Scripting
 {
@@ -18,10 +20,11 @@ namespace DaJet.Scripting
         public Scope Parent { get; set; }
         ///<summary>Дочерние области видимости (логические)</summary>
         public List<Scope> Children { get; } = new();
+        public Dictionary<string, EntityDefinition> Types { get; } = new(); // DEFINE statement : object schema definitions 
+        public Dictionary<string, DeclareStatement> Variables { get; } = new(); // DECLARE statement
         public Dictionary<string, object> Tables { get; } = new(); // CTE (common table expression) or temporary tables
         public Dictionary<string, object> Aliases { get; } = new(); // table expression (subquery) or schema tables
         public Dictionary<string, object> Columns { get; } = new(); //NOTE: used for diagnosic purposes
-        public Dictionary<string, object> Variables { get; } = new(); // table variables or UDT (user-defined type)
         public override string ToString() { return $"Owner: {Owner}"; }
 
         public Scope GetRoot()
@@ -90,15 +93,15 @@ namespace DaJet.Scripting
         }
         public Scope CloseScope() { return _ancestor; }
 
-        public object GetVariableBinding(in string name)
+        public EntityDefinition GetSchema(in string identifier)
         {
             Scope scope = this;
 
             while (scope is not null)
             {
-                if (scope.Variables.TryGetValue(name, out object binding))
+                if (scope.Types.TryGetValue(identifier, out EntityDefinition schema))
                 {
-                    return binding;
+                    return schema;
                 }
 
                 scope = scope.Parent;
@@ -106,6 +109,23 @@ namespace DaJet.Scripting
 
             return null;
         }
+        public DeclareStatement GetVariable(in string identifier)
+        {
+            Scope scope = this;
+
+            while (scope is not null)
+            {
+                if (scope.Variables.TryGetValue(identifier, out DeclareStatement variable))
+                {
+                    return variable;
+                }
+
+                scope = scope.Parent;
+            }
+
+            return null;
+        }
+
         public object GetTableBinding(in string name)
         {
             Scope scope = this;

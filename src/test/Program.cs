@@ -3,10 +3,12 @@ using DaJet.Json;
 using DaJet.Metadata;
 using DaJet.Scripting;
 using DaJet.Scripting.Model;
+using DaJet.TypeSystem;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.Unicode;
+using static Npgsql.Replication.PgOutput.Messages.RelationMessage;
 
 namespace test
 {
@@ -88,12 +90,18 @@ namespace test
         {
             string NewLine = Environment.NewLine;
             string source = "DECLARE @Ссылка entity"
+                + NewLine + "DECLARE @Код    string = '0001'"
                 + NewLine + "DECLARE @Запись object"
                 + NewLine + "USE 'MS_TEST'"
-                + NewLine + "SELECT Ссылка, Наименование = SUM(Наименование)"
+                + NewLine + "SELECT Ссылка"
+                + NewLine + "     , Код"
+                + NewLine + "     , ВерсияДанных"
+                + NewLine + "     , ПометкаУдаления"
+                + NewLine + "     , Наименование"
+                + NewLine + "     , Сумма = SUM(Наименование) OVER ()"
                 + NewLine + "INTO @Запись"
                 + NewLine + "FROM Справочник.Справочник1"
-                + NewLine + "WHERE Ссылка = @Ссылка"
+                + NewLine + "WHERE Ссылка = @Ссылка AND Код = @Код"
                 + NewLine + "END";
 
             Parser parser = new();
@@ -118,7 +126,7 @@ namespace test
                 Console.WriteLine(string.Join('\n', errors)); return;
             }
 
-            SqlTranspiler transpiler = new();
+            SqlTranspiler transpiler = new("SqlServer", 2000);
 
             if (!transpiler.TryTranspile(script, out List<SqlStatement> statements, out errors))
             {
@@ -131,33 +139,37 @@ namespace test
                 Console.WriteLine(statement.Sql);
                 Console.WriteLine("-----------");
 
-                List<IntoClause> into = Visitor.Extract<IntoClause>(statement.Node);
+                SyntaxNode parameter;
 
-                if (into.Count > 0)
+                for (int p = 0; p < statement.Input.Count; p++)
                 {
-                    Console.WriteLine(into[0].Value.ToString());
-                    Console.WriteLine("--------");
+                    parameter = statement.Input[p];
+
+                    Console.WriteLine($"@p{p} : {parameter}");
+                }
+
+                if (statement.Node is SelectStatement select)
+                {
+                    if (statement.Output is VariableReference variable)
+                    {
+                        if (variable.Binding is DeclareStatement declare)
+                        {
+                            if (declare.Binding is EntityDefinition entity)
+                            {
+                                Console.WriteLine("-----------------------------------------");
+                                Console.WriteLine($"Schema [{declare.Type}] OF {entity.Name}");
+
+                                foreach (PropertyDefinition property in entity.Properties)
+                                {
+                                    Console.WriteLine($"- {property.Name} {property.Type}");
+                                }
+
+                                Console.WriteLine("-----------------------------------------");
+                            }
+                        }
+                    }
                 }
             }
-
-            //List<SelectStatement> statements = new SelectStatementExtractor().Extract(script);
-
-            //List<SelectStatement> statements = Visitor.Extract<SelectStatement>(script);
-
-            //foreach (SelectStatement select in statements)
-            //{
-            //    Console.WriteLine("--------");
-            //    Console.WriteLine(select.Sql);
-            //    Console.WriteLine("--------");
-
-            //    List<IntoClause> into = Visitor.Extract<IntoClause>(select);
-
-            //    if (into.Count > 0)
-            //    {
-            //        Console.WriteLine(into[0].Value.ToString());
-            //        Console.WriteLine("--------");
-            //    }
-            //}
 
             string json = JsonSerializer.Serialize(script, JsonOptions);
 

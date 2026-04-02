@@ -4,7 +4,7 @@
     {
         public VariableReference() { Token = Token.Variable; }
         public string Identifier { get; set; } = string.Empty;
-        public object Binding { get; set; }
+        public DeclareStatement Binding { get; set; }
         public override string ToString()
         {
             return $"[{Token}: {Identifier}]";

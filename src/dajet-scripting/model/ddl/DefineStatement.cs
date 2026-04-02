@@ -1,12 +1,10 @@
-﻿using DaJet.TypeSystem;
-
-namespace DaJet.Scripting.Model
+﻿namespace DaJet.Scripting.Model
 {
-    public sealed class TypeDefinition : SyntaxNode
+    public sealed class DefineStatement : SyntaxNode
     {
-        public TypeDefinition() { Token = Token.TYPE; }
+        public DefineStatement() { Token = Token.TYPE; }
         public string Identifier { get; set; } = string.Empty;
-        public List<PropertyDefinition> Properties { get; } = new();
+        public List<DefineProperty> Properties { get; } = new();
         public override string ToString()
         {
             return $"[{Token}: {Identifier}]";

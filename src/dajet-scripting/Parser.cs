@@ -1,6 +1,5 @@
 ﻿using DaJet.Scripting.Model;
 using DaJet.TypeSystem;
-using System.Drawing;
 
 namespace DaJet.Scripting
 {
@@ -531,7 +530,7 @@ namespace DaJet.Scripting
 		}
         private SyntaxNode define_type()
 		{
-			TypeDefinition statement = new();
+			DefineStatement statement = new();
 
 			if (!Match(Token.Identifier))
 			{
@@ -559,11 +558,11 @@ namespace DaJet.Scripting
 
 			return statement;
 		}
-		private PropertyDefinition property_definition()
+		private DefineProperty property_definition()
 		{
 			if (!Match(Token.Identifier)) { throw new FormatException("Property identifier expected"); }
 
-			PropertyDefinition property = new() { Name = Previous().Value };
+			DefineProperty property = new() { Name = Previous().Value };
 
 			if (!Match(Token.Identifier, Token.UNION)) //NOTE: exceptional keyword
 			{
@@ -571,6 +570,18 @@ namespace DaJet.Scripting
 			}
 
 			property.Type = datatype();
+
+            if (Match(Token.OF))
+            {
+                if (Match(Token.Identifier))
+                {
+                    property.Schema = Previous().Value;
+                }
+                else
+                {
+                    throw new FormatException("[DEFINE][OF] Property schema identifier expected");
+                }
+            }
 
 			return property;
 		}
@@ -1538,7 +1549,7 @@ namespace DaJet.Scripting
             Skip(Token.Comment);
             select_clause(in select);
             Skip(Token.Comment);
-            if (Match(Token.INTO)) { select.Into = into_clause(select.Columns); }
+            if (Match(Token.INTO)) { select.Into = into_clause(); }
             Skip(Token.Comment);
             if (Match(Token.FROM)) { select.From = from_clause(); }
             Skip(Token.Comment);
@@ -1715,9 +1726,9 @@ namespace DaJet.Scripting
             disable_correlation_flag(union.Expression2);
         }
         private FromClause from_clause() { return new FromClause() { Expression = join() }; }
-        private IntoClause into_clause(in List<ColumnExpression> columns)
+        private IntoClause into_clause()
         {
-            IntoClause clause = new() { Columns = columns };
+            IntoClause clause = new();
 
             if (Match(Token.Identifier))
             {
@@ -2956,7 +2967,7 @@ namespace DaJet.Scripting
             }
 
             Skip(Token.Comment);
-            if (Match(Token.INTO)) { output.Into = into_clause(output.Columns); }
+            if (Match(Token.INTO)) { output.Into = into_clause(); }
             Skip(Token.Comment);
 
             return output;
@@ -3212,7 +3223,7 @@ namespace DaJet.Scripting
             Skip(Token.Comment);
             select_columns(in consume);
             Skip(Token.Comment);
-            if (Match(Token.INTO)) { consume.Into = into_clause(consume.Columns); }
+            if (Match(Token.INTO)) { consume.Into = into_clause(); }
             Skip(Token.Comment);
             if (Match(Token.FROM)) { consume.From = from_clause(); }
             Skip(Token.Comment);
@@ -3248,7 +3259,7 @@ namespace DaJet.Scripting
 
             Skip(Token.Comment);
 
-            consume.Into = into_clause(consume.Columns);
+            consume.Into = into_clause();
 
             if (consume.Into is null || consume.Into.Value is null)
             {

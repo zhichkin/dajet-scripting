@@ -5,8 +5,8 @@ namespace DaJet.Scripting.Model
     public sealed class MemberAccessExpression : SyntaxNode
     {
         public MemberAccessExpression() { Token = Token.Variable; }
-        public string Identifier { get; set; } = string.Empty; // @variable.member
-        public object Binding { get; set; } // DECLARE @variable !?
+        public string Identifier { get; set; } = string.Empty; // @variable.Member
+        public DeclareStatement Binding { get; set; } // DECLARE @variable object
         public override string ToString()
         {
             return $"[{Token}: {Identifier}]";

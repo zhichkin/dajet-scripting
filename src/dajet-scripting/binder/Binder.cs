@@ -12,7 +12,7 @@ namespace DaJet.Scripting
         {
             ArgumentNullException.ThrowIfNull(script, nameof(script));
 
-            _schema = schema; //NOTE: non-database types and objects do not need it
+            _schema = schema;
 
             _errors = new List<string>();
 
@@ -42,6 +42,7 @@ namespace DaJet.Scripting
 
             else if (node is StatementBlock statement_block) { Bind(in statement_block); } // ?
 
+            else if (node is DefineStatement define) { Bind(in define); }
             else if (node is DeclareStatement declare) { Bind(in declare); }
             else if (node is VariableReference variable) { Bind(in variable); }
             else if (node is MemberAccessExpression member) { Bind(in member); }
@@ -131,20 +132,9 @@ namespace DaJet.Scripting
                 _scope = _scope.OpenScope(node); 
             }
 
-            //TODO: process IMPORT and DEFINE statements
+            //TODO: process IMPORT statements
 
             foreach (SyntaxNode statement in node.Statements)
-            {
-                Bind(in statement);
-            }
-
-            _scope = _scope.CloseScope();
-        }
-        private void Bind(in UseStatement node)
-        {
-            _scope = _scope.OpenScope(node);
-
-            foreach (SyntaxNode statement in node.Statements.Statements)
             {
                 Bind(in statement);
             }
@@ -160,13 +150,63 @@ namespace DaJet.Scripting
                 Bind(in statement);
             }
         }
+        
+        ///<summary>DEFINE statement</summary>
+        private void Bind(in DefineStatement node)
+        {
+            EntityDefinition schema = new()
+            {
+                Name = node.Identifier
+            };
+
+            DefineProperty property;
+            EntityDefinition entity;
+
+            for (int i = 0; i < node.Properties.Count; i++)
+            {
+                property = node.Properties[i];
+
+                if (property.Type.IsArray)
+                {
+                    entity = _scope.GetSchema(property.Schema);
+
+                    if (entity is null)
+                    {
+                        RegisterBindingError(node.Token, node.Identifier);
+                    }
+
+                    schema.Entities.Add(entity);
+                }
+                else
+                {
+                    schema.Properties.Add(new PropertyDefinition()
+                    {
+                        Name = property.Name,
+                        Type = property.Type,
+                        Purpose = PropertyPurpose.Property
+                    });
+                }
+            }
+
+            _scope.Types.Add(schema.Name, schema);
+        }
         private void Bind(in DeclareStatement node)
         {
             _scope.Variables.Add(node.Identifier, node);
+
+            if (!string.IsNullOrEmpty(node.Schema))
+            {
+                node.Binding = _scope.GetSchema(node.Schema);
+
+                if (node.Binding is null)
+                {
+                    RegisterBindingError(node.Token, node.Schema);
+                }
+            }
         }
         private void Bind(in VariableReference node)
         {
-            node.Binding = _scope.GetVariableBinding(node.Identifier);
+            node.Binding = _scope.GetVariable(node.Identifier);
 
             if (node.Binding is null)
             {
@@ -179,38 +219,7 @@ namespace DaJet.Scripting
 
             string target = members[0];
 
-            object binding = _scope.GetVariableBinding(target);
-
-            node.Binding = binding;
-
-            //string member = members[1].StartsWith('[') ? members[2] : members[1];
-
-            //if (binding is TypeIdentifier type && type.Binding is List<ColumnExpression> columns)
-            //{
-            //    for (int i = 0; i < columns.Count; i++)
-            //    {
-            //        if (DataMapper.TryMap(columns[i], out string name, out UnionType union))
-            //        {
-            //            if (name == member)
-            //            {
-            //                node.Binding = UnionType.MapToType(in union);
-
-            //                if (union.IsUndefined && columns[i].Expression is VariableReference variable)
-            //                {
-            //                    if (variable.Binding is TypeIdentifier schema)
-            //                    {
-            //                        if (schema.Token == Token.Object || schema.Token == Token.Array)
-            //                        {
-            //                            node.Binding = variable; // искомое свойство имеет объектный тип данных
-            //                        }
-            //                    }
-            //                }
-
-            //                break;
-            //            }
-            //        }
-            //    }
-            //}
+            node.Binding = _scope.GetVariable(target);
 
             if (node.Binding is null)
             {
@@ -249,7 +258,17 @@ namespace DaJet.Scripting
         }
         #endregion
 
-        #region "TABLE BINDING"
+        private void Bind(in UseStatement node)
+        {
+            _scope = _scope.OpenScope(node);
+
+            foreach (SyntaxNode statement in node.Statements.Statements)
+            {
+                Bind(in statement);
+            }
+
+            _scope = _scope.CloseScope();
+        }
         private void Bind(in SelectStatement node)
         {
             //ValidateStatement(in node); APPEND operator
@@ -263,8 +282,24 @@ namespace DaJet.Scripting
 
             Bind(node.Expression); //NOTE: SelectExpression | TableUnionOperator
 
+            IntoClause into = node.GetIntoClause();
+
+            if (into.Value is VariableReference variable &&
+                variable.Binding is DeclareStatement declare)
+            {
+                if (declare.Binding is null)
+                {
+                    EntityDefinition schema = DataMapper.InferSchema(in node);
+                    schema.Name = declare.Identifier;
+                    declare.Binding = schema;
+                    declare.Schema = schema.Name;
+                }
+            }
+
             _scope = _scope.CloseScope();
         }
+
+        #region "TABLE BINDING"
         private void Bind(in CommonTableExpression node)
         {
             //NOTE: common table expression can be recursive and reference itself
@@ -552,12 +587,7 @@ namespace DaJet.Scripting
             }
             else
             {
-                Bind(node.Value); //NOTE: bind variable data type: Array or object
-
-                if (node.Value.Binding is TypeIdentifier type) // see DeclareStatement binding
-                {
-                    type.Binding = node.Columns; //NOTE: schema definition
-                }
+                Bind(node.Value);
             }
         }
         private void Bind(in ValuesExpression node)
@@ -784,681 +814,3 @@ namespace DaJet.Scripting
         #endregion
     }
 }
-
-//        #region "GLOBAL SCOPE BINDING"
-
-//        private void Bind(in TypeIdentifier node)
-//        {
-//            //TODO: bind "union" type identifier
-
-//            if (ParserHelper.IsDataType(node.Identifier, out Type type))
-//            {
-//                //NOTE: bool, decimal, int, DateTime, string, byte[], Guid, Entity, Union, Array, object
-
-//                if (type == typeof(Array))
-//                {
-//                    node.Token = Token.Array;
-//                }
-//                else if (type == typeof(object))
-//                {
-//                    node.Token = Token.Object;
-//                }
-
-//                node.Binding = type;
-//            }
-//            else if (_schema is not null) // UserDefinedType (database UDT) or ApplicationObject (Справочник.Номенклатура)
-//            {
-//                MetadataObject table = _schema.GetMetadataObject(node.Identifier);
-
-//                if (table is UserDefinedType definition)
-//                {
-//                    node.Binding = definition; // UDT (user-defined type)
-//                }
-//                else if (table is ApplicationObject entity)
-//                {
-//                    node.Binding = new Entity(entity.TypeCode, Guid.Empty);
-//                }
-//            }
-
-//            if (node.Binding is null)
-//            {
-//                RegisterBindingError(node.Token, node.Identifier);
-//            }
-//        }
-//        private void Bind(in DeclareStatement node)
-//        {
-//            if (node.Type.Token == Token.Array || node.Type.Token == Token.Object)
-//            {
-//                if (node.Type.Binding is List<ColumnExpression>) // bind schema only once !?
-//                {
-//                    if (!_scope.Variables.ContainsKey(node.Name))
-//                    {
-//                        _scope.Variables.Add(node.Name, node.Type); return;
-//                    }
-//                }
-//            }
-
-//            Bind(node.Type);
-
-//            if (node.Type.Binding is UserDefinedType definition)
-//            {
-//                definition.TableName = node.Name; // user-defined type (table-valued parameter)
-//            }
-//            else if (node.Type.Binding is Type type)
-//            {
-//                if (type == typeof(Entity)) // DECLARE @Ссылка entity
-//                {
-//                    if (node.Initializer is null)
-//                    {
-//                        node.Type.Binding = Entity.Undefined; // {0:00000000-0000-0000-0000-000000000000}
-//                    }
-//                    else if (node.Initializer is ScalarExpression scalar) // DECLARE @Ссылка entity = {code:uuid}
-//                    {
-//                        if (Entity.TryParse(scalar.Literal, out Entity entity))
-//                        {
-//                            node.Type.Binding = entity;
-//                        }
-//                        else
-//                        {
-//                            RegisterBindingError(node.Token, node.Name);
-//                        }
-//                    }
-//                    else if (node.Initializer is SelectExpression select) // DECLARE @Ссылка entity = SELECT Ссылка FROM ... WHERE ...
-//                    {
-//                        Bind(in select);
-
-//                        if (select.Columns.Count > 0 &&
-//                            select.Columns[0].Expression is ColumnReference column &&
-//                            column.Binding is MetadataProperty property &&
-//                            !property.PropertyType.IsMultipleType &&
-//                            property.PropertyType.CanBeReference &&
-//                            property.PropertyType.TypeCode > 0)
-//                        {
-//                            node.Type.Binding = new Entity(property.PropertyType.TypeCode, Guid.Empty);
-//                        }
-//                        else
-//                        {
-//                            RegisterBindingError(node.Token, node.Name);
-//                        }
-//                    }
-//                    else
-//                    {
-//                        throw new FormatException($"[DECLARE {node.Name} entity] unsupported initializer");
-//                    }
-//                }
-//                else if (node.Initializer is SelectExpression select)
-//                {
-//                    Bind(in select);
-
-//                    if (type == typeof(Guid))
-//                    {
-//                        //TODO: validate SELECT expression for different simple data types
-//                        //EXAMPLE: DECLARE @uuid uuid = SELECT NEWUUID()
-//                    }
-//                    else
-//                    {
-//                        node.Type.Binding = select.Columns; // object schema
-//                    }
-//                }
-//                else if (node.Initializer is TableUnionOperator union)
-//                {
-//                    Bind(in union);
-
-//                    node.Type.Binding = (union.Expression1 as SelectExpression).Columns; // object schema
-//                }
-//            }
-//            else if (node.Type.Binding is Entity) // DECLARE @Ссылка Справочник.Номенклатура
-//            {
-//                if (node.Initializer is SelectExpression select)
-//                {
-//                    Bind(in select);
-//                }
-//            }
-
-//            // join current scope
-
-//            if (node.Type.Token == Token.Array || node.Type.Token == Token.Object)
-//            {
-//                _scope.Variables.Add(node.Name, node.Type); //NOTE: Binding is used to define data schema
-//            }
-//            else
-//            {
-//                _scope.Variables.Add(node.Name, node.Type.Binding);
-//            }
-//        }
-//        private void Bind(in VariableReference node)
-//        {
-//            node.Binding = _scope.GetVariableBinding(node.Identifier);
-
-//            if (node.Binding is null)
-//            {
-//                RegisterBindingError(node.Token, node.Identifier);
-//            }
-//        }
-//        private void Bind(in MemberAccessExpression node)
-//        {
-//            List<string> members = LexerHelper.GetAccessMembers(node.Identifier);
-
-//            string target = members[0];
-
-//            object binding = _scope.GetVariableBinding(target);
-
-//            string member = members[1].StartsWith('[') ? members[2] : members[1];
-
-//            if (binding is TypeIdentifier type && type.Binding is List<ColumnExpression> columns)
-//            {
-//                for (int i = 0; i < columns.Count; i++)
-//                {
-//                    if (DataMapper.TryMap(columns[i], out string name, out UnionType union))
-//                    {
-//                        if (name == member)
-//                        {
-//                            node.Binding = UnionType.MapToType(in union);
-
-//                            if (union.IsUndefined && columns[i].Expression is VariableReference variable)
-//                            {
-//                                if (variable.Binding is TypeIdentifier schema)
-//                                {
-//                                    if (schema.Token == Token.Object || schema.Token == Token.Array)
-//                                    {
-//                                        node.Binding = variable; // искомое свойство имеет объектный тип данных
-//                                    }
-//                                }
-//                            }
-
-//                            break;
-//                        }
-//                    }
-//                }
-//            }
-
-//            if (node.Binding is null)
-//            {
-//                RegisterBindingError(node.Token, node.Identifier);
-//            }
-//        }
-//        private void Bind(in TableVariableExpression node)
-//        {
-//            Bind(node.Expression);
-
-//            _scope.Tables.Add(node.Name, node); // join script global scope
-//        }
-//        private void Bind(in TemporaryTableExpression node)
-//        {
-//            Bind(node.Expression);
-
-//            _scope.Tables.Add(node.Name, node); // join script global scope
-//        }
-//        private void Bind(in OutputClause node)
-//        {
-//            if (node is null) { return; }
-
-//            for (int i = 0; i < node.Columns.Count; i++)
-//            {
-//                Bind(node.Columns[i]); //NOTE: use of special key words inserted and deleted
-//            }
-
-//            if (node.Into is not null) { Bind(node.Into); }
-//        }
-
-//        private void CreateTableVariable(in IntoClause node)
-//        {
-//            SyntaxNode table;
-
-//            if (_scope.Ancestor<ConsumeStatement>() is not null)
-//            {
-//                table = new TableVariableExpression() // MS SQL Server feature
-//                {
-//                    Name = node.Table.Identifier,
-//                    Expression = new SelectExpression()
-//                    {
-//                        Columns = node.Columns,
-//                        From = new FromClause()
-//                        {
-//                            Expression = node.Table
-//                        }
-//                    }
-//                };
-//            }
-//            else
-//            {
-//                table = new TemporaryTableExpression()
-//                {
-//                    Name = node.Table.Identifier,
-//                    Expression = new SelectExpression()
-//                    {
-//                        Columns = node.Columns,
-//                        From = new FromClause()
-//                        {
-//                            Expression = node.Table
-//                        }
-//                    }
-//                };
-//            }
-
-//            node.Table.Binding = table;
-
-//            BindingScope root = _scope.GetRoot();
-
-//            root.Tables.Add(node.Table.Identifier, table);
-//        }
-//        #endregion
-
-
-
-
-
-//        #region "DML STATEMENT BINDING"
-//        private void Bind(in ConsumeStatement node)
-//        {
-//            if (!string.IsNullOrEmpty(node.Target))
-//            {
-//                BindStreamConsume(in node);
-//            }
-//            else
-//            {
-//                BindDatabaseConsume(in node);
-//            }
-//        }
-//        private void BindDatabaseConsume(in ConsumeStatement node)
-//        {
-//            ValidateStatement(in node);
-
-//            _scope = _scope.OpenScope(node);
-
-//            if (node.From is not null) { Bind(node.From); }
-
-//            for (int i = 0; i < node.Columns.Count; i++)
-//            {
-//                Bind(node.Columns[i]);
-//            }
-
-//            if (node.Top is not null) { Bind(node.Top); }
-//            if (node.Where is not null) { Bind(node.Where); }
-//            if (node.Order is not null) { Bind(node.Order); }
-
-//            if (node.Into is not null) { Bind(node.Into); }
-
-//            if (node.From is not null)
-//            {
-//                var appends = new AppendOperatorExtractor().Extract(node.From);
-
-//                foreach (var append in appends)
-//                {
-//                    BindAppend(append); //FIXME: recursive binding (nested APPEND)
-//                }
-//            }
-
-//            _scope = _scope.CloseScope();
-//        }
-//        private void BindStreamConsume(in ConsumeStatement node)
-//        {
-//            _scope = _scope.OpenScope(node);
-
-//            for (int i = 0; i < node.Options.Count; i++)
-//            {
-//                Bind(node.Options[i]);
-//            }
-
-//            for (int i = 0; i < node.Columns.Count; i++)
-//            {
-//                Bind(node.Columns[i]);
-//            }
-
-//            _scope = _scope.CloseScope();
-//        }
-//        private void Bind(in ProduceStatement node)
-//        {
-//            _scope = _scope.OpenScope(node);
-
-//            for (int i = 0; i < node.Options.Count; i++)
-//            {
-//                Bind(node.Options[i]);
-//            }
-
-//            for (int i = 0; i < node.Columns.Count; i++)
-//            {
-//                Bind(node.Columns[i]);
-//            }
-
-//            _scope = _scope.CloseScope();
-//        }
-//        private void Bind(in RequestStatement node)
-//        {
-//            _scope = _scope.OpenScope(node);
-
-//            if (node.When is not null) { Bind(node.When); }
-
-//            for (int i = 0; i < node.Headers.Count; i++)
-//            {
-//                Bind(node.Headers[i]);
-//            }
-
-//            for (int i = 0; i < node.Options.Count; i++)
-//            {
-//                Bind(node.Options[i]);
-//            }
-
-//            if (node.Response is not null) { Bind(node.Response); }
-
-//            _scope = _scope.CloseScope();
-//        }
-//        private void Bind(in ImportStatement node)
-//        {
-//            _scope = _scope.OpenScope(node);
-
-//            foreach (VariableReference variable in node.Target)
-//            {
-//                Bind(in variable);
-//            }
-
-//            _scope = _scope.CloseScope();
-//        }
-//        private void Bind(in DeleteStatement node)
-//        {
-//            _scope = _scope.OpenScope(node);
-
-//            if (node.CommonTables is not null)
-//            {
-//                Bind(node.CommonTables); //NOTE: populates Tables list of the scope
-//            }
-
-//            if (node.Target is not null) { Bind(node.Target); } //NOTE: populates Aliases list of the scope
-//            if (node.Output is not null) { Bind(node.Output); }
-//            if (node.Where is not null) { Bind(node.Where); }
-
-//            //FIXME: binding columns referencing CTE fails (because of lookup is done on table aliases)
-
-//            _scope = _scope.CloseScope();
-//        }
-//        private void Bind(in InsertStatement node)
-//        {
-//            _scope = _scope.OpenScope(node);
-
-//            if (node.CommonTables is not null)
-//            {
-//                Bind(node.CommonTables); //NOTE: populates Tables list of the scope
-//            }
-
-//            if (node.Target is not null) { Bind(node.Target); } //NOTE: populates Aliases list of the scope
-//            if (node.Source is not null) { Bind(node.Source); } //NOTE: populates Aliases list of the scope (references CTE)
-
-//            _scope = _scope.CloseScope();
-//        }
-//        private void Bind(in UpdateStatement node)
-//        {
-//            _scope = _scope.OpenScope(node);
-
-//            if (node.CommonTables is not null)
-//            {
-//                Bind(node.CommonTables); //NOTE: populates Tables list of the scope
-//            }
-
-//            //NOTE: binding sequence of Target and Source is important !!!
-//            //NOTE: see binding algorithms of
-//            //BindColumn(in ColumnReference column) and
-//            //_scope.TryGetTableByAlias(in tableAlias, out object table)
-//            if (node.Target is not null) { Bind(node.Target); } //NOTE: populates Aliases list of the scope
-//            if (node.Source is not null) { Bind(node.Source); } //NOTE: populates Aliases list of the scope  (references CTE)
-
-//            if (node.Set is not null) { Bind(node.Set); }
-//            if (node.Where is not null) { Bind(node.Where); }
-//            if (node.Output is not null) { Bind(node.Output); } //NOTE: INTO clause is included
-
-//            _scope = _scope.CloseScope();
-//        }
-//        private void Bind(in UpsertStatement node)
-//        {
-//            _scope = _scope.OpenScope(node);
-
-//            if (node.CommonTables is not null)
-//            {
-//                Bind(node.CommonTables);
-//            }
-
-//            if (node.Target is not null) { Bind(node.Target); }
-//            if (node.Source is not null) { Bind(node.Source); }
-//            if (node.Set is not null) { Bind(node.Set); }
-//            if (node.Where is not null) { Bind(node.Where); }
-
-//            _scope = _scope.CloseScope();
-//        }
-//        private void Bind(in SetClause node)
-//        {
-//            foreach (SetExpression expression in node.Expressions)
-//            {
-//                Bind(in expression);
-//            }
-//        }
-//        private void Bind(in SetExpression node)
-//        {
-//            if (node.Column is not null) { Bind(node.Column); }
-//            if (node.Initializer is not null) { Bind(node.Initializer); }
-//        }
-
-//        #endregion
-
-//        #region "DDL STATEMENT BINDING"
-//        private void Bind(in CreateTypeStatement node)
-//        {
-//            ColumnDefinition column;
-
-//            for (int i = 0; i < node.Columns.Count; i++)
-//            {
-//                column = node.Columns[i];
-
-//                if (column.Type is not null)
-//                {
-//                    Bind(column.Type);
-//                }
-//            }
-//        }
-//        #endregion
-
-//        #region "APPLY AND REVOKE SEQUENCE"
-//        private void Bind(in ApplySequenceStatement node)
-//        {
-//            Bind(node.Table);
-
-//            BindColumn(node.Table.Binding, node.Column.Identifier, node.Column);
-//        }
-//        private void Bind(in RevokeSequenceStatement node)
-//        {
-//            Bind(node.Table);
-//        }
-//        #endregion
-
-//        private void ValidateStatement(in SelectStatement node)
-//        {
-//            if (node.Expression is SelectExpression select)
-//            {
-//                ValidateAppendOperator(select.From, select.Into);
-//            }
-//            else if (node.Expression is TableUnionOperator union)
-//            {
-//                var append = new AppendOperatorExtractor().Extract(union);
-
-//                if (append.Count > 0)
-//                {
-//                    throw new FormatException("[APPEND] operator is not allowed with UNION");
-//                }
-//            }
-//        }
-//        private void ValidateStatement(in ConsumeStatement node)
-//        {
-//            ValidateAppendOperator(node.From, node.Into);
-//        }
-//        private void ValidateAppendOperator(in FromClause from, in IntoClause into)
-//        {
-//            if (from is null) { return; }
-
-//            var append = new AppendOperatorExtractor().Extract(from);
-
-//            if (append.Count > 0)
-//            {
-//                if (into is null)
-//                {
-//                    throw new FormatException("[APPEND] INTO keyword expected.");
-//                }
-//                else if (into.Value is null)
-//                {
-//                    throw new FormatException("[APPEND] INTO value expected.");
-//                }
-//                else if (!into.Value.Identifier.StartsWith('@'))
-//                {
-//                    throw new FormatException("[APPEND] INTO variable reference expected.");
-//                }
-//            }
-//        }
-
-//        #region "DAJET SCRIPT STATEMENTS"
-//        private void Bind(in UseStatement node)
-//        {
-//            Bind(node.Statements);
-//        }
-//        private void Bind(in AssignmentStatement node)
-//        {
-//            // Оператор присваивания SET обрабатывается аналогично предложению INTO команды SELECT
-//            // Для переменных типов object и array необходимо привязать схему данных (структуру) 
-
-//            Bind(node.Initializer); // оператор присваивания выполняется справа налево
-
-//            Bind(node.Target); // получаем привязку типа данных для переменной
-
-//            if (node.Target is VariableReference variable)
-//            {
-//                if (variable.Binding is TypeIdentifier type) // object | array
-//                {
-//                    if (type.Token == Token.Object || type.Token == Token.Array)
-//                    {
-//                        if (node.Initializer is SelectExpression select)
-//                        {
-//                            type.Binding = select.Columns; // object schema definition
-//                        }
-//                        else if (node.Initializer is TableUnionOperator union)
-//                        {
-//                            type.Binding = (union.Expression1 as SelectExpression).Columns; // object schema definition
-//                        }
-//                    }
-//                }
-//            }
-//        }
-//        private void Bind(in StatementBlock node)
-//        {
-//            if (node is null) { return; }
-
-//            foreach (SyntaxNode statement in node.Statements)
-//            {
-//                Bind(in statement);
-//            }
-//        }
-//        private void Bind(in IfStatement node)
-//        {
-//            Bind(node.IF);
-
-//            Bind(node.THEN);
-
-//            if (node.ELSE is not null)
-//            {
-//                Bind(node.ELSE);
-//            }
-//        }
-//        private void Bind(in ForStatement node)
-//        {
-//            Bind(node.Iterator); // bind to array variable
-//            Bind(node.Variable); // bind to object variable
-
-//            if (node.Iterator.Binding is not TypeIdentifier itype || itype.Token != Token.Array)
-//            {
-//                RegisterBindingError(node.Token, node.Iterator.Identifier); return;
-//            }
-
-//            if (node.Variable.Binding is not TypeIdentifier vtype || vtype.Token != Token.Object)
-//            {
-//                RegisterBindingError(node.Token, node.Variable.Identifier); return;
-//            }
-
-//            vtype.Binding = itype.Binding; // columns schema
-//        }
-//        private void Bind(in TryStatement node)
-//        {
-//            Bind(node.TRY);
-
-//            if (node.CATCH is not null) { Bind(node.CATCH); }
-
-//            if (node.FINALLY is not null) { Bind(node.FINALLY); }
-//        }
-//        private void Bind(in CaseStatement node)
-//        {
-//            foreach (WhenClause when in node.CASE)
-//            {
-//                Bind(in when);
-//            }
-
-//            if (node.ELSE is not null)
-//            {
-//                Bind(node.ELSE);
-//            }
-//        }
-//        private void Bind(in WhileStatement node)
-//        {
-//            Bind(node.Condition);
-//            Bind(node.Statements);
-//        }
-//        private void Bind(in ReturnStatement node)
-//        {
-//            Bind(node.Expression);
-//        }
-//        private void Bind(in ThrowStatement node)
-//        {
-//            Bind(node.Expression);
-//        }
-//        private void Bind(in SleepStatement node) { /* nothing to bind */ }
-//        private void Bind(in PrintStatement node)
-//        {
-//            Bind(node.Expression);
-//        }
-//        private void Bind(in ExecuteStatement node)
-//        {
-//            for (int i = 0; i < node.Parameters.Count; i++)
-//            {
-//                Bind(node.Parameters[i]);
-//            }
-
-//            if (node.Return is not null) { Bind(node.Return); }
-//        }
-//        private void Bind(in ProcessStatement node)
-//        {
-//            for (int i = 0; i < node.Variables.Count; i++)
-//            {
-//                Bind(node.Variables[i]);
-//            }
-
-//            if (node.Return is not null) { Bind(node.Return); }
-
-//            if (node.Options is not null) // optional
-//            {
-//                for (int i = 0; i < node.Options.Count; i++)
-//                {
-//                    Bind(node.Options[i]);
-//                }
-//            }
-//        }
-//        private void Bind(in WaitStatement node)
-//        {
-//            if (node.Result is not null)
-//            {
-//                Bind(node.Result);
-//            }
-
-//            Bind(node.Tasks);
-
-//            if (node.Tasks.Binding is not TypeIdentifier type || type.Token != Token.Array)
-//            {
-//                RegisterBindingError(node.Token, node.Tasks.Identifier); return;
-//            }
-//        }
-//        private void Bind(in ModifyStatement node) { /* nothing to bind */ }
-//        #endregion
-//    }
-//}
