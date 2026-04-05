@@ -4,11 +4,12 @@ using DaJet.Metadata;
 using DaJet.Scripting;
 using DaJet.Scripting.Model;
 using DaJet.TypeSystem;
+using System.Diagnostics;
+using System.Text;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.Unicode;
-using static Npgsql.Replication.PgOutput.Messages.RelationMessage;
 
 namespace test
 {
@@ -32,6 +33,55 @@ namespace test
 
             TestScriptBinding();
         }
+
+        //private static void ActivateStreams(in string path)
+        //{
+        //    foreach (string file in Directory.EnumerateFiles(path, DAJET_SCRIPT_FILE_EXTENSION))
+        //    {
+        //        ActivateStream(in file);
+        //    }
+
+        //    foreach (string catalog in Directory.EnumerateDirectories(path))
+        //    {
+        //        ActivateStreams(in catalog);
+        //    }
+        //}
+        //private static void ActivateStream(in string file)
+        //{
+        //    if (_streams.ContainsKey(file)) { return; }
+
+        //    if (!File.Exists(file)) { return; }
+
+        //    string script;
+
+        //    using (StreamReader reader = new(file, Encoding.UTF8))
+        //    {
+        //        script = reader.ReadToEnd();
+        //    }
+
+        //    Stopwatch watch = new();
+
+        //    watch.Start();
+
+        //    Dictionary<string, object> parameters = new();
+
+        //    if (StreamFactory.TryCreateStream(in script, in parameters, out IProcessor stream, out string error))
+        //    {
+        //        _ = Task.Factory.StartNew(stream.Process, TaskCreationOptions.LongRunning);
+
+        //        _ = _streams.TryAdd(file, stream);
+
+        //        watch.Stop();
+
+        //        FileLogger.Default.Write($"[STREAM][Assembled in {watch.ElapsedMilliseconds} ms] {file}");
+        //    }
+        //    else
+        //    {
+        //        FileLogger.Default.Write($"[ERROR] {file}");
+        //        FileLogger.Default.Write(error);
+        //    }
+        //}
+
         private static void TestDeclareStatement()
         {
             List<string> scripts = new()
@@ -88,21 +138,13 @@ namespace test
 
         private static void TestScriptBinding()
         {
-            string NewLine = Environment.NewLine;
-            string source = "DECLARE @Ссылка entity"
-                + NewLine + "DECLARE @Код    string = '0001'"
-                + NewLine + "DECLARE @Запись object"
-                + NewLine + "USE 'MS_TEST'"
-                + NewLine + "SELECT Ссылка"
-                + NewLine + "     , Код"
-                + NewLine + "     , ВерсияДанных"
-                + NewLine + "     , ПометкаУдаления"
-                + NewLine + "     , Наименование"
-                + NewLine + "     , Сумма = SUM(Наименование) OVER ()"
-                + NewLine + "INTO @Запись"
-                + NewLine + "FROM Справочник.Справочник1"
-                + NewLine + "WHERE Ссылка = @Ссылка AND Код = @Код"
-                + NewLine + "END";
+            string source;
+            string filePath = $"{AppContext.BaseDirectory}scripts\\select_simple.djs";
+
+            using (StreamReader reader = new(filePath, Encoding.UTF8))
+            {
+                source = reader.ReadToEnd();
+            }
 
             Parser parser = new();
 

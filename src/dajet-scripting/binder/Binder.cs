@@ -282,6 +282,8 @@ namespace DaJet.Scripting
 
             Bind(node.Expression); //NOTE: SelectExpression | TableUnionOperator
 
+            // Define and apply schema to object or array variable
+
             IntoClause into = node.GetIntoClause();
 
             if (into.Value is VariableReference variable &&
@@ -604,6 +606,22 @@ namespace DaJet.Scripting
         private void Bind(in ColumnExpression node)
         {
             Bind(node.Expression);
+
+            if (node.Expression is ColumnReference column)
+            {
+                // При генерации SQL ColumnReference должен использовать Alias
+                column.Alias = node.Alias;
+
+                // Поднимаем наверх источник данных для ColumnExpression
+                if (column.Binding is PropertyDefinition property)
+                {
+                    node.Source = property; // Прямой источник данных
+                }
+                else if (column.Binding is ColumnExpression derived)
+                {
+                    node.Source = derived.Source; // Наследуемый по ссылочной иерархии источник данных
+                }
+            }
         }
         private void Bind(in ColumnReference node)
         {

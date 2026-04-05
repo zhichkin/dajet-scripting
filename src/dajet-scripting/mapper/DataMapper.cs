@@ -355,7 +355,7 @@ namespace DaJet.Scripting
             //    Visit(node.ELSE, in union, ref propertyName);
             //}
         }
-        
+
         private static PropertyDefinition Infer(in TableExpression table)
         {
             return Infer(GetFirstColumnExpression(in table));

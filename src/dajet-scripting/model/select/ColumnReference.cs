@@ -4,7 +4,8 @@
     {
         public ColumnReference() { Token = Token.Column; }
         public string Identifier { get; set; } = string.Empty;
-        public object Binding { get; set; }
+        public string Alias { get; set; } // Parent ColumnExpression's alias
+        public object Binding { get; set; } // PropertyDefinition | ColumnExpression
         public string GetName()
         {
             string[] names = Identifier.Split('.', StringSplitOptions.RemoveEmptyEntries);

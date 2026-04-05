@@ -145,96 +145,115 @@ namespace DaJet.Scripting
                 script.Append(" AS ").Append(node.Alias);
             }
         }
+        
         protected virtual void Visit(in ColumnExpression node, in StringBuilder script)
         {
             if (node.Expression is ColumnReference column)
             {
-                Visit(in column, in script); // terminates tree traversing at column reference
+                Visit(in column, in script);
 
-                if (column.Token == Token.Enumeration)
-                {
-                    if (!string.IsNullOrEmpty(node.Alias))
-                    {
-                        script.Append(" AS ").Append(node.Alias);
-                    }
-                }
+                //if (column.Token == Token.Enumeration)
+                //{
+                //    if (!string.IsNullOrEmpty(node.Alias))
+                //    {
+                //        script.Append(" AS ").Append(node.Alias);
+                //    }
+                //}
             }
             else
             {
                 Visit(node.Expression, in script);
-
-                if (!string.IsNullOrEmpty(node.Alias))
-                {
-                    script.Append(" AS ").Append(node.Alias);
-                }
             }
         }
         protected virtual void Visit(in ColumnReference node, in StringBuilder script)
         {
-            if (node.Binding is PropertyDefinition property)
+            if (node.Binding is PropertyDefinition property) // Прямой источник данных
             {
-                Visit(property.Columns, in script);
+                ColumnDefinition column;
+
+                for (int i = 0; i < property.Columns.Count; i++)
+                {
+                    column = property.Columns[i];
+
+                    if (i > 0) { script.Append(", "); }
+
+                    script.Append(column.Name);
+
+                    if (property.Columns.Count == 1) // single column
+                    {
+                        if (!string.IsNullOrEmpty(node.Alias))
+                        {
+                            script.Append(" AS ").Append(node.Alias);
+                        }
+                    }
+                    else // multiple columns
+                    {
+                        if (!string.IsNullOrEmpty(node.Alias))
+                        {
+                            string suffix = GetColumnPurposeSuffix(column.Purpose);
+                            script.Append(" AS ").Append(node.Alias).Append('_').Append(suffix);
+                        }
+                    }
+                }
             }
-            else if (node.Binding is ColumnExpression column)
+            else if (node.Binding is ColumnExpression derived) // Наследуемый источник данных
             {
-                //TODO: table alias + column alias or name
+                if (derived.Source is null)
+                {
+                    throw new InvalidOperationException();
+                }
+                else
+                {
+                    property = derived.Source;
+                }
+
+                ColumnDefinition column;
+
+                for (int i = 0; i < property.Columns.Count; i++)
+                {
+                    column = property.Columns[i];
+
+                    if (i > 0) { script.Append(", "); }
+
+                    if (property.Columns.Count == 1) // single column
+                    {
+                        script.Append(node.Identifier);
+
+                        if (!string.IsNullOrEmpty(node.Alias))
+                        {
+                            script.Append(" AS ").Append(node.Alias);
+                        }
+                    }
+                    else // multiple columns
+                    {
+                        string suffix = GetColumnPurposeSuffix(column.Purpose);
+                        script.Append(node.Identifier).Append('_').Append(suffix);
+                        
+                        if (!string.IsNullOrEmpty(node.Alias))
+                        {
+                            script.Append(" AS ").Append(node.Alias).Append('_').Append(suffix);
+                        }
+                    }
+                }
             }
 
-            //if (node.Mapping is not null) // we are here from anywhere, but not ColumnExpression itself
-            //{
-            //    Visit(node.Mapping, in script); // terminates tree traversing at column reference
-            //}
             //else if (node.Binding is EnumValue value)
             //{
             //    Visit(in value, in script);
             //}
         }
-        protected virtual void Visit(in List<ColumnDefinition> columns, in StringBuilder script)
+        private static string GetColumnPurposeSuffix(ColumnPurpose purpose)
         {
-            ColumnDefinition column;
-
-            for (int i = 0; i < columns.Count; i++)
+            if (purpose == ColumnPurpose.Tag) { return "TYPE"; }
+            else if (purpose == ColumnPurpose.Boolean) { return "L"; }
+            else if (purpose == ColumnPurpose.Numeric) { return "N"; }
+            else if (purpose == ColumnPurpose.DateTime) { return "T"; }
+            else if (purpose == ColumnPurpose.String) { return "S"; }
+            else if (purpose == ColumnPurpose.TypeCode) { return "TRef"; }
+            else if (purpose == ColumnPurpose.Identity) { return "RRef"; }
+            else
             {
-                column = columns[i];
-
-                if (i > 0) { script.Append(", "); }
-
-                script.Append(column.Name);
-
-                //if (!string.IsNullOrEmpty(column.Alias))
-                //{
-                //    script.Append(" AS ").Append(column.Alias);
-                //}
-            }
-        }
-        
-        protected virtual void Visit(in ColumnDefinition column, in StringBuilder script, in string tableAlias)
-        {
-            if (!string.IsNullOrEmpty(tableAlias))
-            {
-                script.Append(tableAlias).Append('.');
-            }
-
-            script.Append(column.Name);
-        }
-        protected virtual void Visit(in PropertyDefinition property, in StringBuilder script, in string tableAlias)
-        {
-            List<ColumnDefinition> columns = property.Columns
-                .OrderBy((column) => { return column.Purpose; })
-                .ToList();
-
-            ColumnDefinition column;
-
-            for (int i = 0; i < columns.Count; i++)
-            {
-                column = columns[i];
-
-                if (i > 0)
-                {
-                    script.Append(", ");
-                }
-
-                Visit(in column, in script, in tableAlias);
+                return string.Empty;
             }
         }
 
