@@ -23,25 +23,46 @@ namespace DaJet.Scripting
             List<ColumnExpression> columns = GetColumnExpressions(in node);
 
             ColumnExpression column;
-            PropertyDefinition property;
+            PropertyDefinition source;
 
             for (int i = 0; i < columns.Count; i++)
             {
                 column = columns[i];
 
-                property = Infer(in column);
+                source = Infer(in column);
 
-                property.Purpose = PropertyPurpose.Property;
+                PropertyDefinition property = new()
+                {
+                    Type = source.Type,
+                    Purpose = PropertyPurpose.Property
+                };
+
+                if (string.IsNullOrEmpty(source.Name))
+                {
+                    property.Name = column.Alias;
+                    schema.Properties.Add(property);
+                    continue; // Интересует только тип данных выражения
+                }
+
+                // Схема данных
 
                 if (!string.IsNullOrEmpty(column.Alias))
                 {
                     property.Name = column.Alias;
                 }
-                else if (string.IsNullOrEmpty(property.Name))
+                else if (!string.IsNullOrEmpty(source.Name))
+                {
+                    property.Name = source.Name;
+                }
+                else
                 {
                     throw new InvalidCastException("Property name missing");
                 }
 
+                //for (int c = 0; c < source.Columns.Count; c++)
+                //{
+                property.Columns = source.Columns;
+                //}
                 schema.Properties.Add(property);
             }
 

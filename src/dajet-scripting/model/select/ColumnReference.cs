@@ -4,7 +4,7 @@
     {
         public ColumnReference() { Token = Token.Column; }
         public string Identifier { get; set; } = string.Empty;
-        public string Alias { get; set; } // Parent ColumnExpression's alias
+        public ColumnExpression Parent { get; set; } // SELECT clause column expressions
         public object Binding { get; set; } // PropertyDefinition | ColumnExpression
         public string GetName()
         {

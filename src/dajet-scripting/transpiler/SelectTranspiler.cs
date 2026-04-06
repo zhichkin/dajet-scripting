@@ -171,27 +171,34 @@ namespace DaJet.Scripting
             {
                 ColumnDefinition column;
 
+                int dot = node.Identifier.IndexOf('.');
+                string tableAlias = dot > 0 ? node.Identifier[..dot] : string.Empty;
+
                 for (int i = 0; i < property.Columns.Count; i++)
                 {
                     column = property.Columns[i];
 
                     if (i > 0) { script.Append(", "); }
 
+                    if (!string.IsNullOrEmpty(tableAlias))
+                    {
+                        script.Append(tableAlias).Append('.');
+                    }
+
                     script.Append(column.Name);
 
-                    if (property.Columns.Count == 1) // single column
+                    if (node.Parent is ColumnExpression parent)
                     {
-                        if (!string.IsNullOrEmpty(node.Alias))
+                        string alias = string.IsNullOrEmpty(parent.Alias) ? property.Name : parent.Alias;
+
+                        if (property.Columns.Count == 1) // single column
                         {
-                            script.Append(" AS ").Append(node.Alias);
+                            script.Append(" AS ").Append(alias);
                         }
-                    }
-                    else // multiple columns
-                    {
-                        if (!string.IsNullOrEmpty(node.Alias))
+                        else // multiple columns
                         {
                             string suffix = GetColumnPurposeSuffix(column.Purpose);
-                            script.Append(" AS ").Append(node.Alias).Append('_').Append(suffix);
+                            script.Append(" AS ").Append(alias).Append('_').Append(suffix);
                         }
                     }
                 }
@@ -200,7 +207,7 @@ namespace DaJet.Scripting
             {
                 if (derived.Source is null)
                 {
-                    throw new InvalidOperationException();
+                    throw new InvalidOperationException(); // Ошибка привязки данных
                 }
                 else
                 {
@@ -215,13 +222,20 @@ namespace DaJet.Scripting
 
                     if (i > 0) { script.Append(", "); }
 
+                    string alias = null;
+
+                    if (node.Parent is ColumnExpression parent)
+                    {
+                        alias = parent.Alias;
+                    }
+                    
                     if (property.Columns.Count == 1) // single column
                     {
                         script.Append(node.Identifier);
 
-                        if (!string.IsNullOrEmpty(node.Alias))
+                        if (!string.IsNullOrEmpty(alias))
                         {
-                            script.Append(" AS ").Append(node.Alias);
+                            script.Append(" AS ").Append(alias);
                         }
                     }
                     else // multiple columns
@@ -229,9 +243,9 @@ namespace DaJet.Scripting
                         string suffix = GetColumnPurposeSuffix(column.Purpose);
                         script.Append(node.Identifier).Append('_').Append(suffix);
                         
-                        if (!string.IsNullOrEmpty(node.Alias))
+                        if (!string.IsNullOrEmpty(alias))
                         {
-                            script.Append(" AS ").Append(node.Alias).Append('_').Append(suffix);
+                            script.Append(" AS ").Append(alias).Append('_').Append(suffix);
                         }
                     }
                 }

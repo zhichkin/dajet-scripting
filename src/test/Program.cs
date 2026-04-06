@@ -139,7 +139,7 @@ namespace test
         private static void TestScriptBinding()
         {
             string source;
-            string filePath = $"{AppContext.BaseDirectory}scripts\\select_simple.djs";
+            string filePath = $"{AppContext.BaseDirectory}scripts\\select_simple_join.djs"; // select_derived
 
             using (StreamReader reader = new(filePath, Encoding.UTF8))
             {
