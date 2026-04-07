@@ -4,14 +4,14 @@ using DaJet.Metadata;
 using DaJet.Scripting;
 using DaJet.Scripting.Model;
 using DaJet.TypeSystem;
-using System.Diagnostics;
+using System.Reflection;
 using System.Text;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.Unicode;
 
-namespace test
+namespace DaJet.Compiler
 {
     internal class Program
     {
@@ -31,7 +31,9 @@ namespace test
 
             //TestDeclareStatement();
 
-            TestScriptBinding();
+            //TestScriptBinding();
+
+            TestCompiler();
         }
 
         //private static void ActivateStreams(in string path)
@@ -139,7 +141,7 @@ namespace test
         private static void TestScriptBinding()
         {
             string source;
-            string filePath = $"{AppContext.BaseDirectory}scripts\\select_simple_join.djs"; // select_derived
+            string filePath = $"{AppContext.BaseDirectory}scripts\\select_simple.djs";
 
             using (StreamReader reader = new(filePath, Encoding.UTF8))
             {
@@ -161,7 +163,7 @@ namespace test
 
             //Guid value = schema.GetEnumerationValue("MS_UNF", "Перечисление.СпособыДоставки.Самовывоз");
 
-            Binder binder = new();
+            DaJet.Scripting.Binder binder = new();
 
             if (!binder.TryBind(in script, schema, out List<string> errors))
             {
@@ -190,7 +192,7 @@ namespace test
                     Console.WriteLine($"@p{p} : {parameter}");
                 }
 
-                if (statement.Node is SelectStatement select)
+                if (statement.Node is SelectStatement)
                 {
                     if (statement.Output is VariableReference variable)
                     {
@@ -216,6 +218,32 @@ namespace test
             string json = JsonSerializer.Serialize(script, JsonOptions);
 
             Console.WriteLine(json);
+        }
+
+        private static void TestCompiler()
+        {
+            string source;
+            string filePath = $"{AppContext.BaseDirectory}scripts\\select_simple.djs";
+
+            using (StreamReader reader = new(filePath, Encoding.UTF8))
+            {
+                source = reader.ReadToEnd();
+            }
+
+            Console.WriteLine(source);
+            Console.WriteLine("----");
+
+            Parser parser = new();
+
+            if (!parser.TryParse(in source, out Script script, out string error))
+            {
+                Console.WriteLine(error); return;
+            }
+                        
+            Compiler compiler = new();
+            ScriptProcessor processor = compiler.Compile(in script);
+            processor.Execute();
+            Console.WriteLine("----");
         }
     }
 }

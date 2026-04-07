@@ -1780,6 +1780,8 @@ namespace DaJet.Scripting
                 };
             }
 
+            ColumnExpression definition;
+
             SyntaxNode node = expression();
 
             if (node is ComparisonOperator assignment) //NOTE: Summa = SUM(t1.Value)
@@ -1789,22 +1791,31 @@ namespace DaJet.Scripting
                     throw new FormatException("Column definition error: assignment expected");
                 }
 
-                if (assignment.Expression1 is not ColumnReference column) // left operand
+                if (assignment.Expression1 is not ColumnReference alias) // left operand
                 {
                     throw new FormatException("Column definition error: identifier expected");
                 }
 
-                return new ColumnExpression() //THINK: multi-part identifier assignment
+                definition = new ColumnExpression() //THINK: multi-part identifier assignment
                 {
-                    Alias = column.Identifier,          // left  operand (column name)
+                    Alias = alias.Identifier,           // left  operand (column name)
                     Expression = assignment.Expression2 // right operand (initializer)
                 };
             }
-
-            return new ColumnExpression() //NOTE: SUM(t1.Value) AS Summa
+            else
             {
-                Expression = node, Alias = alias()
-            };
+                definition = new ColumnExpression() //NOTE: SUM(t1.Value) AS Summa
+                {
+                    Expression = node, Alias = alias()
+                };
+            }
+
+            if (definition.Expression is ColumnReference column)
+            {
+                column.Parent = definition; // Нужно для доступа к Alias при генерации SQL
+            }
+
+            return definition;
         }
         private ColumnReference column_identifier()
         {

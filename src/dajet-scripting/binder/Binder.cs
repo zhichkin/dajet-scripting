@@ -609,10 +609,8 @@ namespace DaJet.Scripting
 
             if (node.Expression is ColumnReference column)
             {
-                // При генерации SQL ColumnReference должен учитывать Alias ColumnExpression
-                column.Parent = node;
-
                 // Поднимаем наверх источник данных для ColumnExpression
+
                 if (column.Binding is PropertyDefinition property)
                 {
                     node.Source = property; // Прямой источник данных

@@ -150,7 +150,7 @@ namespace DaJet.Scripting
         {
             if (node.Expression is ColumnReference column)
             {
-                Visit(in column, in script);
+                Visit(in column, in script); // ColumnReference - своя логика обработки Alias
 
                 //if (column.Token == Token.Enumeration)
                 //{
@@ -163,16 +163,21 @@ namespace DaJet.Scripting
             else
             {
                 Visit(node.Expression, in script);
+
+                if (!string.IsNullOrEmpty(node.Alias)) // Стандартная логика обработки Alias
+                {
+                    script.Append(" AS ").Append(node.Alias);
+                }
             }
         }
         protected virtual void Visit(in ColumnReference node, in StringBuilder script)
         {
             if (node.Binding is PropertyDefinition property) // Прямой источник данных
             {
-                ColumnDefinition column;
-
                 int dot = node.Identifier.IndexOf('.');
                 string tableAlias = dot > 0 ? node.Identifier[..dot] : string.Empty;
+
+                ColumnDefinition column;
 
                 for (int i = 0; i < property.Columns.Count; i++)
                 {
@@ -187,7 +192,7 @@ namespace DaJet.Scripting
 
                     script.Append(column.Name);
 
-                    if (node.Parent is ColumnExpression parent)
+                    if (node.Parent is ColumnExpression parent) // SELECT clause column
                     {
                         string alias = string.IsNullOrEmpty(parent.Alias) ? property.Name : parent.Alias;
 
@@ -224,7 +229,7 @@ namespace DaJet.Scripting
 
                     string alias = null;
 
-                    if (node.Parent is ColumnExpression parent)
+                    if (node.Parent is ColumnExpression parent) // SELECT clause column
                     {
                         alias = parent.Alias;
                     }
