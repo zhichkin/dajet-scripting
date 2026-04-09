@@ -3,9 +3,9 @@ using System.Data;
 
 namespace DaJet.Compiler
 {
-    public class SelectProcessor
+    public abstract class SelectProcessor
     {
-        private readonly ScriptProcessor _context;
+        protected readonly ScriptProcessor _context;
         public SelectProcessor(in ScriptProcessor context)
         {
             _context = context;
@@ -14,6 +14,8 @@ namespace DaJet.Compiler
         public string ConnectionString { get; set; }
         public void Execute()
         {
+            Setup();
+
             int processed = 0;
 
             using (SqlConnection connection = new(ConnectionString))
@@ -29,7 +31,7 @@ namespace DaJet.Compiler
                     command.CommandType = CommandType.Text;
                     command.CommandText = SqlCommand;
 
-                    Configure(in command);
+                    Configure(command);
 
                     try
                     {
@@ -37,7 +39,7 @@ namespace DaJet.Compiler
                         {
                             while (reader.Read())
                             {
-                                Process(in reader); processed++;
+                                Process(reader); processed++;
                             }
 
                             reader.Close();
@@ -68,19 +70,28 @@ namespace DaJet.Compiler
                 }
             }
         }
-        public virtual void Configure(in SqlCommand command) // input
+        protected virtual void Setup()
         {
-            command.Parameters.Clear();
-
-            command.Parameters.AddWithValue("p0", DBNull.Value);
+            // prepare output buffer
+            _context.Variable = string.Empty;
         }
-        public virtual void Process(in SqlDataReader reader) // output
+        protected virtual void Configure(SqlCommand command) // input
         {
+            // set command parameters
+        }
+        protected virtual void Process(SqlDataReader reader) // output
+        {
+            // map data and set output buffer values
+
             int ordinal = 0;
 
             if (reader.IsDBNull(ordinal))
             {
                 _context.Variable = string.Empty;
+            }
+            else
+            {
+                _context.Variable = reader.GetString(ordinal);
             }
 
             //bool value;
@@ -96,15 +107,15 @@ namespace DaJet.Compiler
 
             // call next IProcessor.Process(); or _context.ProcessNext();
         }
-        public virtual void Synchronize()
+        protected virtual void Synchronize()
         {
             // submit batch transaction or throw
 
             // ISynchronizable.Synchronize();
         }
-        public virtual void Cleanup()
+        protected virtual void Cleanup()
         {
-            _context.Variable = null; // clear streaming buffer
+            _context.Variable = null; // clear output buffer
         }
     }
 }

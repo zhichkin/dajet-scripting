@@ -1,4 +1,5 @@
 ﻿using DaJet.Scripting.Model;
+using Microsoft.Data.SqlClient;
 using System.Reflection;
 using System.Reflection.Emit;
 
@@ -12,11 +13,16 @@ namespace DaJet.Compiler
             string assemblyName = "Assembly1";
             AssemblyName name = new(assemblyName);
             AssemblyBuilderAccess access = AssemblyBuilderAccess.RunAndCollect;
-            AssemblyBuilder ab = AssemblyBuilder.DefineDynamicAssembly(name, access);
+            //AssemblyBuilder ab = AssemblyBuilder.DefineDynamicAssembly(name, access);
+            PersistedAssemblyBuilder ab = new(name, typeof(object).Assembly);
             ModuleBuilder mb = ab.DefineDynamicModule(assemblyName);
             TypeBuilder tb = mb.DefineType("Script1", TypeAttributes.Public, _parent);
 
+            BuildConfigureMethod(in tb);
+
             Type type = tb.CreateType();
+
+            ab.Save("C:\\GitHub\\dajet-scripting\\bld\\test.dll"); return null;
 
             object instance = Activator.CreateInstance(type);
 
@@ -121,6 +127,50 @@ namespace DaJet.Compiler
             methIL.Emit(OpCodes.Ldarg_1);
             methIL.Emit(OpCodes.Mul);
             methIL.Emit(OpCodes.Ret);
+        }
+
+        private void BuildConfigureMethod(in TypeBuilder builder)
+        {
+            MethodBuilder method = builder.DefineMethod("Configure",
+                MethodAttributes.Family | MethodAttributes.Virtual | MethodAttributes.HideBySig,
+                typeof(void), [typeof(SqlCommand)]); // [typeof(SqlCommand).MakeByRefType()]
+
+            MethodInfo get_Parameters = typeof(SqlCommand).GetProperty("Parameters", BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly).GetGetMethod();
+            MethodInfo clear_Parameters = typeof(SqlParameterCollection).GetMethod("Clear", BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly, Type.EmptyTypes);
+            MethodInfo addWithValue = typeof(SqlParameterCollection).GetMethod("AddWithValue", BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly, [typeof(string), typeof(object)]);
+
+            FieldInfo context = typeof(SelectProcessor).GetField("_context",
+                BindingFlags.Instance | BindingFlags.Instance | BindingFlags.NonPublic);
+
+            MethodInfo get_Variable = typeof(ScriptProcessor).GetProperty("Variable",
+                BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly).GetGetMethod();
+
+            ILGenerator IL = method.GetILGenerator();
+
+            // command.Parameters.Clear();
+            IL.Emit(OpCodes.Ldarg_1);
+            IL.Emit(OpCodes.Callvirt, get_Parameters);
+            IL.Emit(OpCodes.Callvirt, clear_Parameters);
+
+            // command.Parameters.AddWithValue("p0", DBNull.Value);
+            IL.Emit(OpCodes.Ldarg_1);
+            IL.Emit(OpCodes.Callvirt, get_Parameters);
+            IL.Emit(OpCodes.Ldstr, "p0");
+            IL.Emit(OpCodes.Ldsfld, typeof(DBNull).GetField("Value"));
+            IL.Emit(OpCodes.Callvirt, addWithValue);
+            IL.Emit(OpCodes.Pop);
+
+            // command.Parameters.AddWithValue("p6", _context.Variable);
+            IL.Emit(OpCodes.Ldarg_1);
+            IL.Emit(OpCodes.Callvirt, get_Parameters);
+            IL.Emit(OpCodes.Ldstr, "p1");
+            IL.Emit(OpCodes.Ldarg_0); // this
+            IL.Emit(OpCodes.Ldfld, context);
+            IL.Emit(OpCodes.Callvirt, get_Variable);
+            IL.Emit(OpCodes.Callvirt, addWithValue);
+            IL.Emit(OpCodes.Pop);
+
+            IL.Emit(OpCodes.Ret);
         }
     }
 }

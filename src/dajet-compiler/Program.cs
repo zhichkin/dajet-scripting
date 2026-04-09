@@ -4,7 +4,6 @@ using DaJet.Metadata;
 using DaJet.Scripting;
 using DaJet.Scripting.Model;
 using DaJet.TypeSystem;
-using System.Reflection;
 using System.Text;
 using System.Text.Encodings.Web;
 using System.Text.Json;
@@ -242,7 +241,7 @@ namespace DaJet.Compiler
                         
             Compiler compiler = new();
             ScriptProcessor processor = compiler.Compile(in script);
-            processor.Execute();
+            processor?.Execute();
             Console.WriteLine("----");
         }
     }
