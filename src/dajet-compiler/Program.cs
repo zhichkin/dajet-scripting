@@ -221,6 +221,10 @@ namespace DaJet.Compiler
 
         private static void TestCompiler()
         {
+            OneDbSchemaProvider schema = new();
+            MetadataProvider.Add("MS_TEST", DataSourceType.SqlServer, in MS_TEST);
+            MetadataProvider.Add("PG_TEST", DataSourceType.PostgreSql, in PG_TEST);
+
             string source;
             string filePath = $"{AppContext.BaseDirectory}scripts\\select_simple.djs";
 
@@ -238,7 +242,21 @@ namespace DaJet.Compiler
             {
                 Console.WriteLine(error); return;
             }
-                        
+
+            Binder binder = new();
+
+            if (!binder.TryBind(in script, schema, out List<string> errors))
+            {
+                Console.WriteLine(string.Join('\n', errors)); return;
+            }
+
+            SqlTranspiler transpiler = new("SqlServer", 2000);
+
+            if (!transpiler.TryTranspile(script, out List<SqlStatement> statements, out errors))
+            {
+                Console.WriteLine(string.Join('\n', errors)); return;
+            }
+
             Compiler compiler = new();
             ScriptProcessor processor = compiler.Compile(in script);
             processor?.Execute();

@@ -2,10 +2,13 @@
 
 namespace DaJet.Compiler
 {
-    public sealed class TestProcessor : SelectProcessor
+    public sealed class SelectIntoArrayProcessor : SelectProcessor
     {
-        public TestProcessor(in ScriptProcessor context) : base(context) { }
-
+        private ScriptProcessor _context;
+        public SelectIntoArrayProcessor(ScriptProcessor context)
+        {
+            _context = context;
+        }
         protected override void Configure(SqlCommand command) // input
         {
             command.Parameters.Clear();
@@ -16,7 +19,7 @@ namespace DaJet.Compiler
             command.Parameters.AddWithValue("p3", DateTime.Now);
             command.Parameters.AddWithValue("p4", "string");
             command.Parameters.AddWithValue("p5", Guid.Empty);
-            _ = command.Parameters.AddWithValue("p6", _context.Variable);
+            //_ = command.Parameters.AddWithValue("p6", _context.Variable);
         }
     }
 }

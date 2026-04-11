@@ -1,11 +1,10 @@
 ﻿namespace DaJet.Compiler
 {
-    public class ScriptProcessor
+    public abstract class ScriptProcessor
     {
-        public string Variable { get; set; }
-        public void Execute()
+        public virtual void Execute()
         {
-            Console.WriteLine($"{typeof(ScriptProcessor)} method {nameof(Execute)} is invoked.");
+            SelectIntoArrayProcessor select = new(this);
         }
     }
 }

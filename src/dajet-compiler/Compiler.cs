@@ -1,4 +1,7 @@
-﻿using DaJet.Scripting.Model;
+﻿using DaJet.Metadata;
+using DaJet.Scripting;
+using DaJet.Scripting.Model;
+using DaJet.TypeSystem;
 using Microsoft.Data.SqlClient;
 using System.Reflection;
 using System.Reflection.Emit;
@@ -7,22 +10,35 @@ namespace DaJet.Compiler
 {
     public sealed class Compiler
     {
-        private readonly Type _parent = typeof(ScriptProcessor);
+        private Type ScriptProcessorBase { get; } = typeof(ScriptProcessor);
+        private Type SelectProcessorBase { get; } = typeof(SelectProcessor);
+
+        private Dictionary<SyntaxNode, SqlStatement> _statements = new();
         public ScriptProcessor Compile(in Script script)
         {
+            SqlTranspiler transpiler = new("SqlServer", 2000);
+
+            if (!transpiler.TryTranspile(script, out List<SqlStatement> statements, out List<string> errors))
+            {
+                Console.WriteLine(string.Join('\n', errors)); return null;
+            }
+
+            foreach (SqlStatement sql in statements)
+            {
+                _statements.Add(sql.Node, sql);
+            }
+
             string assemblyName = "Assembly1";
             AssemblyName name = new(assemblyName);
             AssemblyBuilderAccess access = AssemblyBuilderAccess.RunAndCollect;
-            //AssemblyBuilder ab = AssemblyBuilder.DefineDynamicAssembly(name, access);
-            PersistedAssemblyBuilder ab = new(name, typeof(object).Assembly);
-            ModuleBuilder mb = ab.DefineDynamicModule(assemblyName);
-            TypeBuilder tb = mb.DefineType("Script1", TypeAttributes.Public, _parent);
+            AssemblyBuilder assembly = AssemblyBuilder.DefineDynamicAssembly(name, access);
+            //PersistedAssemblyBuilder assembly = new(name, typeof(object).Assembly);
+            ModuleBuilder module = assembly.DefineDynamicModule(assemblyName);
+            ScriptModule = module;
 
-            BuildConfigureMethod(in tb);
+            Type type = BuildScriptProcessor(in script, in module);
 
-            Type type = tb.CreateType();
-
-            ab.Save("C:\\GitHub\\dajet-scripting\\bld\\test.dll"); return null;
+            //assembly.Save("C:\\GitHub\\dajet-scripting\\bld\\test.dll"); return null;
 
             object instance = Activator.CreateInstance(type);
 
@@ -33,100 +49,361 @@ namespace DaJet.Compiler
 
             return processor;
         }
-        private void BuildConstructor(TypeBuilder builder)
+
+        private PropertyInfo BuildProperty(TypeBuilder builder, string name, Type type)
         {
-            // Define a default constructor that supplies a default value
-            // for the private field. For parameter types, pass the empty
-            // array of types or pass null.
-            ConstructorBuilder ctor0 = builder.DefineConstructor(
+            FieldBuilder field = builder.DefineField($"_{name}", type, FieldAttributes.Private);
+            PropertyBuilder property = builder.DefineProperty(name, PropertyAttributes.None, type, null);
+
+            // The property "set" and property "get" methods require a special set of attributes.
+            MethodAttributes getSetAttr = MethodAttributes.Public | MethodAttributes.SpecialName | MethodAttributes.HideBySig;
+
+            MethodBuilder getAccessor = builder.DefineMethod($"get_{name}", getSetAttr, type, Type.EmptyTypes);
+            ILGenerator getIL = getAccessor.GetILGenerator();
+            getIL.Emit(OpCodes.Ldarg_0); // this
+            getIL.Emit(OpCodes.Ldfld, field);
+            getIL.Emit(OpCodes.Ret);
+            property.SetGetMethod(getAccessor);
+
+            MethodBuilder setAccessor = builder.DefineMethod($"set_{name}", getSetAttr, null, [type]);
+            ILGenerator setIL = setAccessor.GetILGenerator();
+            setIL.Emit(OpCodes.Ldarg_0); // this
+            setIL.Emit(OpCodes.Ldarg_1); // value
+            setIL.Emit(OpCodes.Stfld, field);
+            setIL.Emit(OpCodes.Ret);
+            property.SetSetMethod(setAccessor);
+
+            return property;
+        }
+
+        private ModuleBuilder ScriptModule;
+        private TypeInfo ScriptProcessor = null;
+        private Dictionary<string, PropertyInfo> ScriptContext = new();
+        private Stack<MetadataProvider> ScriptUse = new();
+        private Type BuildScriptProcessor(in Script script, in ModuleBuilder module)
+        {
+            TypeBuilder type = module.DefineType("Script1", TypeAttributes.Public, ScriptProcessorBase);
+
+            ScriptProcessor = type;
+
+            foreach (SyntaxNode node in script.Statements)
+            {
+                if (node is DeclareStatement variable)
+                {
+                    PropertyInfo property = BuildScriptProperty(in variable, in type, in module);
+
+                    ScriptContext.Add(variable.Identifier, property);
+                }
+            }
+
+            BuildScriptConstructor(in script, in type);
+
+            BuildScriptExecuteMethod(in script, in type, in module);
+
+            return type.CreateType();
+        }
+        private void BuildScriptConstructor(in Script script, in TypeBuilder type)
+        {
+            ConstructorInfo ctor = ScriptProcessorBase.GetConstructor(
+                BindingFlags.Instance | BindingFlags.NonPublic, Type.EmptyTypes);
+
+            ConstructorBuilder builder = type.DefineConstructor(
                 MethodAttributes.Public,
                 CallingConventions.Standard,
                 Type.EmptyTypes);
 
-            ILGenerator ctor0IL = ctor0.GetILGenerator();
-            // For a constructor, argument zero is a reference to the new
-            // instance. Push it on the stack before pushing the default
-            // value on the stack, then call constructor ctor1.
-            ctor0IL.Emit(OpCodes.Ldarg_0);
-            //ctor0IL.Emit(OpCodes.Ldc_I4_S, 42);
-            //ctor0IL.Emit(OpCodes.Call, ctor1);
-            ctor0IL.Emit(OpCodes.Ret);
+            ILGenerator IL = builder.GetILGenerator();
+            
+            // call base class constructor
+            IL.Emit(OpCodes.Ldarg_0);
+            IL.Emit(OpCodes.Call, ctor);
+
+            foreach (SyntaxNode node in script.Statements)
+            {
+                if (node is DeclareStatement variable)
+                {
+                    if (variable.Initializer is ScalarExpression scalar)
+                    {
+                        if (ScriptContext.TryGetValue(variable.Identifier, out PropertyInfo property))
+                        {
+                            if (scalar.Token == Token.String)
+                            {
+                                IL.Emit(OpCodes.Ldarg_0);
+                                IL.Emit(OpCodes.Ldstr, scalar.Literal);
+                                IL.Emit(OpCodes.Callvirt, property.GetSetMethod());
+                            }
+                        }
+                    }
+                    else
+                    {
+                        if (variable.Initializer is null)
+                        {
+                            if (variable.Type.IsObject)
+                            {
+
+                            }
+                            else if (variable.Type.IsArray)
+                            {
+
+                            }
+                        }
+                    }
+                }
+            }
+
+            IL.Emit(OpCodes.Ret);
         }
-        private void BuildProperty(TypeBuilder builder, string name, Type type)
+
+        private Type GetPropertyType(DataType dataType)
         {
-            FieldBuilder fbNumber = builder.DefineField(
-                $"_{name.ToLowerInvariant()}",
-                typeof(int),
-                FieldAttributes.Private);
+            Type propertyType = null;
 
-            PropertyBuilder pbNumber = builder.DefineProperty(
-            "Number",
-            PropertyAttributes.HasDefault,
-            typeof(int),
-            null);
+            if (dataType.IsBoolean) { propertyType = typeof(bool); }
+            else if (dataType.IsInteger)
+            {
+                if (dataType.Size == 1) { propertyType = typeof(sbyte); }
+                else if (dataType.Size == 2) { propertyType = typeof(short); }
+                else if (dataType.Size == 4) { propertyType = typeof(int); }
+                else { propertyType = typeof(long); }
+            }
+            else if (dataType.IsDecimal) { propertyType = typeof(decimal); }
+            else if (dataType.IsDateTime) { propertyType = typeof(DateTime); }
+            else if (dataType.IsString) { propertyType = typeof(string); }
+            else if (dataType.IsBinary) { propertyType = typeof(byte[]); }
+            else if (dataType.IsUuid) { propertyType = typeof(Guid); }
+            else if (dataType.IsEntity) { propertyType = typeof(Entity); }
+            else if (dataType.IsReferenceOnlyUnion) { propertyType = typeof(Entity); }
+            else if (dataType.IsObject || dataType.IsArray)
+            {
+                //propertyType = GetOrBuildType(variable.Binding, in module);
+            }
+            else if (dataType.IsUnion) { propertyType = typeof(Union); }
 
-            // The property "set" and property "get" methods require a special
-            // set of attributes.
-            MethodAttributes getSetAttr = MethodAttributes.Public |
-                MethodAttributes.SpecialName | MethodAttributes.HideBySig;
-
-            // Define the "get" accessor method for Number. The method returns
-            // an integer and has no arguments. (Note that null could be
-            // used instead of Types.EmptyTypes)
-            MethodBuilder mbNumberGetAccessor = builder.DefineMethod(
-                "get_Number",
-                getSetAttr,
-                typeof(int),
-                Type.EmptyTypes);
-
-            ILGenerator numberGetIL = mbNumberGetAccessor.GetILGenerator();
-            // For an instance property, argument zero is the instance. Load the
-            // instance, then load the private field and return, leaving the
-            // field value on the stack.
-            numberGetIL.Emit(OpCodes.Ldarg_0);
-            numberGetIL.Emit(OpCodes.Ldfld, fbNumber);
-            numberGetIL.Emit(OpCodes.Ret);
-
-            // Define the "set" accessor method for Number, which has no return
-            // type and takes one argument of type int (Int32).
-            MethodBuilder mbNumberSetAccessor = builder.DefineMethod(
-                "set_Number",
-                getSetAttr,
-                null,
-                new Type[] { typeof(int) });
-
-            ILGenerator numberSetIL = mbNumberSetAccessor.GetILGenerator();
-            // Load the instance and then the numeric argument, then store the
-            // argument in the field.
-            numberSetIL.Emit(OpCodes.Ldarg_0);
-            numberSetIL.Emit(OpCodes.Ldarg_1);
-            numberSetIL.Emit(OpCodes.Stfld, fbNumber);
-            numberSetIL.Emit(OpCodes.Ret);
-
-            // Last, map the "get" and "set" accessor methods to the
-            // PropertyBuilder. The property is now complete.
-            pbNumber.SetGetMethod(mbNumberGetAccessor);
-            pbNumber.SetSetMethod(mbNumberSetAccessor);
+            return propertyType;
         }
-        private void BuildMethod(TypeBuilder builder, string name, Type type)
+        private Type GetOrBuildType(in EntityDefinition entity, in ModuleBuilder module)
         {
-            MethodBuilder method = builder.DefineMethod(
-            "MyMethod",
-            MethodAttributes.Public,
-            typeof(int),
-            new Type[] { typeof(int) });
+            TypeBuilder type = module.DefineType("Type1", TypeAttributes.Public);
 
-            ILGenerator methIL = method.GetILGenerator();
-            // To retrieve the private instance field, load the instance it
-            // belongs to (argument zero). After loading the field, load the
-            // argument one and then multiply. Return from the method with
-            // the return value (the product of the two numbers) on the
-            // execution stack.
-            methIL.Emit(OpCodes.Ldarg_0);
-            //methIL.Emit(OpCodes.Ldfld, fbNumber);
-            methIL.Emit(OpCodes.Ldarg_1);
-            methIL.Emit(OpCodes.Mul);
-            methIL.Emit(OpCodes.Ret);
+            foreach (PropertyDefinition property in entity.Properties)
+            {
+                Type propertyType = GetPropertyType(property.Type);
+
+                _ = BuildProperty(type, property.Name, propertyType);
+            }
+
+            return type.CreateType();
+        }
+        private PropertyInfo BuildScriptProperty(in DeclareStatement variable, in TypeBuilder type, in ModuleBuilder module)
+        {
+            string propertyName = variable.Identifier.TrimStart('@');
+
+            Type propertyType = null;
+
+            if (variable.Type.IsObject || variable.Type.IsArray)
+            {
+                propertyType = GetOrBuildType(variable.Binding, in module);
+            }
+            else
+            {
+                propertyType = GetPropertyType(variable.Type);
+            }
+
+            return BuildProperty(type, propertyName, propertyType);
+        }
+
+        private void BuildScriptExecuteMethod(in Script script, in TypeBuilder type, in ModuleBuilder module)
+        {
+            MethodAttributes attributes = MethodAttributes.Public
+                | MethodAttributes.Virtual
+                | MethodAttributes.HideBySig;
+
+            MethodBuilder method = type.DefineMethod("Execute", attributes, typeof(void), Type.EmptyTypes);
+            
+            ILGenerator IL = method.GetILGenerator();
+
+            foreach (SyntaxNode node in script.Statements)
+            {
+                Compile(in node, in IL);
+            }
+
+            IL.Emit(OpCodes.Ret);
+        }
+        private void Compile(in SyntaxNode node, in ILGenerator IL)
+        {
+            if (node is UseStatement use) { Compile(in use, in IL); }
+            else if (node is SelectStatement select) { Compile(in select, in IL); }
+        }
+
+        private void Compile(in UseStatement statement, in ILGenerator IL)
+        {
+            //IL.Emit(); // begin transaction scope
+
+            MetadataProvider provider = MetadataProvider.Get(statement.Uri);
+
+            ScriptUse.Push(provider);
+
+            foreach (SyntaxNode node in statement.Statements.Statements)
+            {
+                Compile(in node, in IL);
+            }
+
+            _ = ScriptUse.Pop();
+
+            //IL.Emit(); // end transaction scope
+        }
+        private void Compile(in SelectStatement statement, in ILGenerator IL)
+        {
+            if (!_statements.TryGetValue(statement, out SqlStatement sql))
+            {
+                return;
+            }
+
+            TypeBuilder type = ScriptModule.DefineType("Select1", TypeAttributes.Public, SelectProcessorBase);
+
+            MethodAttributes attributes = MethodAttributes.Public
+                | MethodAttributes.Virtual
+                | MethodAttributes.HideBySig;
+
+            // Ссылка на родительский ScriptProcessor
+            FieldBuilder context = type.DefineField("_context", ScriptProcessor, FieldAttributes.Private);
+
+            ConstructorInfo ctor = BuildSelectProcessorConstructor(in type, context);
+
+            MetadataProvider use = ScriptUse.Peek();
+            MethodInfo set_SqlCommand = typeof(SelectProcessor)
+                .GetProperty("SqlCommand", BindingFlags.Public | BindingFlags.Instance)
+                .GetSetMethod();
+            MethodInfo set_ConnectionString = typeof(SelectProcessor)
+                .GetProperty("ConnectionString", BindingFlags.Public | BindingFlags.Instance)
+                .GetSetMethod();
+            MethodBuilder method = type.DefineMethod("Setup", attributes, typeof(void), Type.EmptyTypes);
+            ILGenerator setupIL = method.GetILGenerator();
+            setupIL.Emit(OpCodes.Ldarg_0);
+            setupIL.Emit(OpCodes.Ldstr, sql.Sql);
+            setupIL.Emit(OpCodes.Callvirt, set_SqlCommand);
+            setupIL.Emit(OpCodes.Ldarg_0);
+            setupIL.Emit(OpCodes.Ldstr, use.ConnectionString);
+            setupIL.Emit(OpCodes.Callvirt, set_ConnectionString);
+            setupIL.Emit(OpCodes.Ret);
+
+            if (sql.Input is not null && sql.Input.Count > 0)
+            {
+                BuildSelectInputMethod(in type, sql.Input, context);
+            }
+
+            if (sql.Output is VariableReference variable)
+            {
+                if (ScriptContext.TryGetValue(variable.Identifier, out PropertyInfo output))
+                {
+                    
+                }
+            }
+
+            Type processor = type.CreateType();
+            
+            //ConstructorInfo ctor = processor.GetConstructor(
+            //    BindingFlags.Instance | BindingFlags.Public, [context.FieldType]);
+
+            MethodInfo execute = processor.GetMethod("Execute",
+                BindingFlags.Instance | BindingFlags.Public, Type.EmptyTypes);
+
+            // Select1 select = new Select1(this);
+            LocalBuilder select = IL.DeclareLocal(processor);
+            IL.Emit(OpCodes.Ldarg_0); // this - ScriptProcessor (context)
+            IL.Emit(OpCodes.Newobj, ctor);
+            IL.Emit(OpCodes.Stloc, select);
+
+            // select.Execute();
+            IL.Emit(OpCodes.Ldloc, select);
+            IL.Emit(OpCodes.Callvirt, execute);
+        }
+        private ConstructorInfo BuildSelectProcessorConstructor(in TypeBuilder type, in FieldInfo context)
+        {
+            ConstructorInfo ctor = SelectProcessorBase.GetConstructor(
+                BindingFlags.Instance | BindingFlags.NonPublic, Type.EmptyTypes);
+
+            ConstructorBuilder builder = type.DefineConstructor(
+                MethodAttributes.Public,
+                CallingConventions.Standard,
+                [ScriptProcessor]);
+
+            ILGenerator IL = builder.GetILGenerator();
+
+            // call base class constructor
+            IL.Emit(OpCodes.Ldarg_0);
+            IL.Emit(OpCodes.Call, ctor);
+
+            // _context = context;
+            IL.Emit(OpCodes.Ldarg_0);
+            IL.Emit(OpCodes.Ldarg_1);
+            IL.Emit(OpCodes.Stfld, context);
+
+            IL.Emit(OpCodes.Ret);
+
+            return builder;
+        }
+        private void BuildSelectInputMethod(in TypeBuilder type, in List<SyntaxNode> input, in FieldInfo context)
+        {
+            MethodInfo get_Parameters = typeof(SqlCommand).GetProperty("Parameters", BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly).GetGetMethod();
+            MethodInfo clear_Parameters = typeof(SqlParameterCollection).GetMethod("Clear", BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly, Type.EmptyTypes);
+            MethodInfo add_With_Value = typeof(SqlParameterCollection).GetMethod("AddWithValue", BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly, [typeof(string), typeof(object)]);
+
+            MethodAttributes attributes = MethodAttributes.Public
+                | MethodAttributes.Virtual
+                | MethodAttributes.HideBySig;
+
+            MethodBuilder method = type.DefineMethod("Configure", attributes, typeof(void), [typeof(SqlCommand)]);
+
+            ILGenerator IL = method.GetILGenerator();
+            // SqlCommand _command = command;
+            LocalBuilder command = IL.DeclareLocal(typeof(SqlCommand));
+            IL.Emit(OpCodes.Ldarg_1);
+            IL.Emit(OpCodes.Stloc_0);
+
+            // _command.Parameters.Clear();
+            IL.Emit(OpCodes.Ldloc_0);
+            IL.Emit(OpCodes.Callvirt, get_Parameters);
+            IL.Emit(OpCodes.Callvirt, clear_Parameters);
+
+            for (int p = 0; p < input.Count; p++)
+            {
+                SyntaxNode node = input[p];
+
+                if (node is VariableReference variable)
+                {
+                    if (ScriptContext.TryGetValue(variable.Identifier, out PropertyInfo property))
+                    {
+                        // command.Parameters.AddWithValue("p0", DBNull.Value);
+                        IL.Emit(OpCodes.Ldloc_0);
+                        IL.Emit(OpCodes.Callvirt, get_Parameters);
+                        IL.Emit(OpCodes.Ldstr, $"p{p}");
+                        IL.Emit(OpCodes.Ldarg_0); // this
+                        IL.Emit(OpCodes.Ldfld, context);
+                        IL.Emit(OpCodes.Callvirt, property.GetGetMethod());
+                        IL.Emit(OpCodes.Callvirt, add_With_Value);
+
+                        //if (variable.Binding is DeclareStatement declare)
+                        //{
+                        //    if (declare.Type.IsDecimal)
+                        //    {
+                        //        IL.Emit(OpCodes.Box, typeof(decimal)) box [System.Runtime]System.Decimal
+                        //        IL.Emit(OpCodes.Callvirt, add_With_Value);
+                        //    }
+                        //}
+
+                        IL.Emit(OpCodes.Pop);
+
+                        //if (value is null)
+                        //{
+                        //    IL.Emit(OpCodes.Ldsfld, typeof(DBNull).GetField("Value"));
+                        //    IL.Emit(OpCodes.Callvirt, add_With_Value);
+                        //}
+                    }
+                }
+            }
+
+            IL.Emit(OpCodes.Ret);
         }
 
         private void BuildConfigureMethod(in TypeBuilder builder)

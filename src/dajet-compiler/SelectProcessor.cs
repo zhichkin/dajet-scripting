@@ -5,11 +5,6 @@ namespace DaJet.Compiler
 {
     public abstract class SelectProcessor
     {
-        protected readonly ScriptProcessor _context;
-        public SelectProcessor(in ScriptProcessor context)
-        {
-            _context = context;
-        }
         public string SqlCommand { get; set; }
         public string ConnectionString { get; set; }
         public void Execute()
@@ -73,7 +68,7 @@ namespace DaJet.Compiler
         protected virtual void Setup()
         {
             // prepare output buffer
-            _context.Variable = string.Empty;
+            object local = new object();
         }
         protected virtual void Configure(SqlCommand command) // input
         {
@@ -87,11 +82,11 @@ namespace DaJet.Compiler
 
             if (reader.IsDBNull(ordinal))
             {
-                _context.Variable = string.Empty;
+                //_context.Variable = string.Empty;
             }
             else
             {
-                _context.Variable = reader.GetString(ordinal);
+                //_context.Variable = reader.GetString(ordinal);
             }
 
             //bool value;
@@ -115,7 +110,7 @@ namespace DaJet.Compiler
         }
         protected virtual void Cleanup()
         {
-            _context.Variable = null; // clear output buffer
+            //_context.Variable = null; // clear output buffer
         }
     }
 }
