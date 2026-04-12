@@ -4,7 +4,7 @@
     {
         public virtual void Execute()
         {
-            SelectIntoArrayProcessor select = new(this);
+            
         }
     }
 }

@@ -68,7 +68,6 @@ namespace DaJet.Compiler
         protected virtual void Setup()
         {
             // prepare output buffer
-            object local = new object();
         }
         protected virtual void Configure(SqlCommand command) // input
         {

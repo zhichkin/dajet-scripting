@@ -258,7 +258,7 @@ namespace DaJet.Compiler
             }
 
             Compiler compiler = new();
-            ScriptProcessor processor = compiler.Compile(in script);
+            ScriptProcessor processor = compiler.Compile(in script, in statements);
             processor?.Execute();
             Console.WriteLine("----");
         }

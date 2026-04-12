@@ -16,9 +16,10 @@ namespace DaJet.Compiler
             command.Parameters.AddWithValue("p0", DBNull.Value);
             command.Parameters.AddWithValue("p1", true);
             command.Parameters.AddWithValue("p2", 12.34M);
-            command.Parameters.AddWithValue("p3", DateTime.Now);
-            command.Parameters.AddWithValue("p4", "string");
-            command.Parameters.AddWithValue("p5", Guid.Empty);
+            command.Parameters.AddWithValue("p3", 1234);
+            command.Parameters.AddWithValue("p4", DateTime.Now);
+            command.Parameters.AddWithValue("p5", "string");
+            command.Parameters.AddWithValue("p6", Guid.Empty);
             //_ = command.Parameters.AddWithValue("p6", _context.Variable);
         }
     }

@@ -14,18 +14,11 @@ namespace DaJet.Compiler
         private Type SelectProcessorBase { get; } = typeof(SelectProcessor);
 
         private Dictionary<SyntaxNode, SqlStatement> _statements = new();
-        public ScriptProcessor Compile(in Script script)
+        public ScriptProcessor Compile(in Script script, in List<SqlStatement> statements)
         {
-            SqlTranspiler transpiler = new("SqlServer", 2000);
-
-            if (!transpiler.TryTranspile(script, out List<SqlStatement> statements, out List<string> errors))
+            foreach (SqlStatement statement in statements)
             {
-                Console.WriteLine(string.Join('\n', errors)); return null;
-            }
-
-            foreach (SqlStatement sql in statements)
-            {
-                _statements.Add(sql.Node, sql);
+                _statements.Add(statement.Node, statement);
             }
 
             string assemblyName = "Assembly1";
@@ -50,32 +43,6 @@ namespace DaJet.Compiler
             return processor;
         }
 
-        private PropertyInfo BuildProperty(TypeBuilder builder, string name, Type type)
-        {
-            FieldBuilder field = builder.DefineField($"_{name}", type, FieldAttributes.Private);
-            PropertyBuilder property = builder.DefineProperty(name, PropertyAttributes.None, type, null);
-
-            // The property "set" and property "get" methods require a special set of attributes.
-            MethodAttributes getSetAttr = MethodAttributes.Public | MethodAttributes.SpecialName | MethodAttributes.HideBySig;
-
-            MethodBuilder getAccessor = builder.DefineMethod($"get_{name}", getSetAttr, type, Type.EmptyTypes);
-            ILGenerator getIL = getAccessor.GetILGenerator();
-            getIL.Emit(OpCodes.Ldarg_0); // this
-            getIL.Emit(OpCodes.Ldfld, field);
-            getIL.Emit(OpCodes.Ret);
-            property.SetGetMethod(getAccessor);
-
-            MethodBuilder setAccessor = builder.DefineMethod($"set_{name}", getSetAttr, null, [type]);
-            ILGenerator setIL = setAccessor.GetILGenerator();
-            setIL.Emit(OpCodes.Ldarg_0); // this
-            setIL.Emit(OpCodes.Ldarg_1); // value
-            setIL.Emit(OpCodes.Stfld, field);
-            setIL.Emit(OpCodes.Ret);
-            property.SetSetMethod(setAccessor);
-
-            return property;
-        }
-
         private ModuleBuilder ScriptModule;
         private TypeInfo ScriptProcessor = null;
         private Dictionary<string, PropertyInfo> ScriptContext = new();
@@ -92,7 +59,10 @@ namespace DaJet.Compiler
                 {
                     PropertyInfo property = BuildScriptProperty(in variable, in type, in module);
 
-                    ScriptContext.Add(variable.Identifier, property);
+                    if (property is not null)
+                    {
+                        ScriptContext.Add(variable.Identifier, property);
+                    }
                 }
             }
 
@@ -122,29 +92,47 @@ namespace DaJet.Compiler
             {
                 if (node is DeclareStatement variable)
                 {
-                    if (variable.Initializer is ScalarExpression scalar)
+                    if (ScriptContext.TryGetValue(variable.Identifier, out PropertyInfo property))
                     {
-                        if (ScriptContext.TryGetValue(variable.Identifier, out PropertyInfo property))
+                        if (variable.Initializer is ScalarExpression scalar)
                         {
                             if (scalar.Token == Token.String)
                             {
+                                // this.Свойство = "ЭтоСтрока";
                                 IL.Emit(OpCodes.Ldarg_0);
                                 IL.Emit(OpCodes.Ldstr, scalar.Literal);
                                 IL.Emit(OpCodes.Callvirt, property.GetSetMethod());
                             }
                         }
-                    }
-                    else
-                    {
-                        if (variable.Initializer is null)
+                        else
                         {
-                            if (variable.Type.IsObject)
+                            if (variable.Initializer is null)
                             {
+                                if (variable.Type.IsObject) // Type1
+                                {
+                                    ConstructorInfo _ctor = property.PropertyType.GetConstructor(
+                                        BindingFlags.Instance | BindingFlags.Public, Type.EmptyTypes);
 
-                            }
-                            else if (variable.Type.IsArray)
-                            {
+                                    // this.Свойство = new Type1();
+                                    IL.Emit(OpCodes.Ldarg_0);
+                                    IL.Emit(OpCodes.Newobj, _ctor);
+                                    IL.Emit(OpCodes.Callvirt, property.GetSetMethod());
+                                }
+                                else if (variable.Type.IsArray) // List<Type1>
+                                {
+                                    // Режим записи библиотеки на диск
+                                    //ConstructorInfo _ctor = TypeBuilder.GetConstructor(
+                                    //    property.PropertyType,
+                                    //    typeof(List<>).GetConstructor(Type.EmptyTypes));
 
+                                    ConstructorInfo _ctor = property.PropertyType.GetConstructor(
+                                        BindingFlags.Instance | BindingFlags.Public, Type.EmptyTypes);
+                                    
+                                    // this.Свойство = new List<Type1>();
+                                    IL.Emit(OpCodes.Ldarg_0);
+                                    IL.Emit(OpCodes.Newobj, _ctor);
+                                    IL.Emit(OpCodes.Callvirt, property.GetSetMethod());
+                                }
                             }
                         }
                     }
@@ -154,6 +142,33 @@ namespace DaJet.Compiler
             IL.Emit(OpCodes.Ret);
         }
 
+        private PropertyInfo BuildProperty(TypeBuilder builder, string name, Type type)
+        {
+            MethodAttributes getSetAttr = MethodAttributes.Public
+                | MethodAttributes.SpecialName
+                | MethodAttributes.HideBySig;
+
+            FieldBuilder field = builder.DefineField($"_{name}", type, FieldAttributes.Private);
+
+            PropertyBuilder property = builder.DefineProperty(name, PropertyAttributes.None, type, null);
+
+            MethodBuilder getAccessor = builder.DefineMethod($"get_{name}", getSetAttr, type, Type.EmptyTypes);
+            ILGenerator getIL = getAccessor.GetILGenerator();
+            getIL.Emit(OpCodes.Ldarg_0); // this
+            getIL.Emit(OpCodes.Ldfld, field);
+            getIL.Emit(OpCodes.Ret);
+            property.SetGetMethod(getAccessor);
+
+            MethodBuilder setAccessor = builder.DefineMethod($"set_{name}", getSetAttr, null, [type]);
+            ILGenerator setIL = setAccessor.GetILGenerator();
+            setIL.Emit(OpCodes.Ldarg_0); // this
+            setIL.Emit(OpCodes.Ldarg_1); // value
+            setIL.Emit(OpCodes.Stfld, field);
+            setIL.Emit(OpCodes.Ret);
+            property.SetSetMethod(setAccessor);
+
+            return property;
+        }
         private Type GetPropertyType(DataType dataType)
         {
             Type propertyType = null;
@@ -183,7 +198,9 @@ namespace DaJet.Compiler
         }
         private Type GetOrBuildType(in EntityDefinition entity, in ModuleBuilder module)
         {
-            TypeBuilder type = module.DefineType("Type1", TypeAttributes.Public);
+            string typeName = "__" + entity.Name.TrimStart('@');
+
+            TypeBuilder type = module.DefineType(typeName, TypeAttributes.Public);
 
             foreach (PropertyDefinition property in entity.Properties)
             {
@@ -194,7 +211,7 @@ namespace DaJet.Compiler
 
             return type.CreateType();
         }
-        private PropertyInfo BuildScriptProperty(in DeclareStatement variable, in TypeBuilder type, in ModuleBuilder module)
+        private PropertyInfo BuildScriptProperty(in DeclareStatement variable, in TypeBuilder script, in ModuleBuilder module)
         {
             string propertyName = variable.Identifier.TrimStart('@');
 
@@ -202,14 +219,27 @@ namespace DaJet.Compiler
 
             if (variable.Type.IsObject || variable.Type.IsArray)
             {
-                propertyType = GetOrBuildType(variable.Binding, in module);
+                if (variable.Binding is not null)
+                {
+                    propertyType = GetOrBuildType(variable.Binding, in module);
+
+                    if (variable.Type.IsArray)
+                    {
+                        propertyType = typeof(List<>).MakeGenericType([propertyType]);
+                    }
+                }
             }
             else
             {
                 propertyType = GetPropertyType(variable.Type);
             }
 
-            return BuildProperty(type, propertyName, propertyType);
+            if (propertyType is null)
+            {
+                return null;
+            }
+
+            return BuildProperty(script, propertyName, propertyType);
         }
 
         private void BuildScriptExecuteMethod(in Script script, in TypeBuilder type, in ModuleBuilder module)
@@ -289,14 +319,14 @@ namespace DaJet.Compiler
 
             if (sql.Input is not null && sql.Input.Count > 0)
             {
-                BuildSelectInputMethod(in type, sql.Input, context);
+                SelectProcessor_Configure(in type, sql.Input, context);
             }
 
             if (sql.Output is VariableReference variable)
             {
                 if (ScriptContext.TryGetValue(variable.Identifier, out PropertyInfo output))
                 {
-                    
+                    SelectProcessor_Process(in type, in variable, context);
                 }
             }
 
@@ -343,7 +373,7 @@ namespace DaJet.Compiler
 
             return builder;
         }
-        private void BuildSelectInputMethod(in TypeBuilder type, in List<SyntaxNode> input, in FieldInfo context)
+        private void SelectProcessor_Configure(in TypeBuilder type, in List<SyntaxNode> input, in FieldInfo context)
         {
             MethodInfo get_Parameters = typeof(SqlCommand).GetProperty("Parameters", BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly).GetGetMethod();
             MethodInfo clear_Parameters = typeof(SqlParameterCollection).GetMethod("Clear", BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly, Type.EmptyTypes);
@@ -392,7 +422,7 @@ namespace DaJet.Compiler
                         //    }
                         //}
 
-                        IL.Emit(OpCodes.Pop);
+                        IL.Emit(OpCodes.Pop); // Убираем со стека SqlParameter, который возвращает AddWithValue
 
                         //if (value is null)
                         //{
@@ -402,6 +432,20 @@ namespace DaJet.Compiler
                     }
                 }
             }
+
+            IL.Emit(OpCodes.Ret);
+        }
+        private void SelectProcessor_Process(in TypeBuilder type, in VariableReference output, in FieldInfo context)
+        {
+            MethodAttributes attributes = MethodAttributes.Public
+                | MethodAttributes.Virtual
+                | MethodAttributes.HideBySig;
+
+            MethodBuilder method = type.DefineMethod("Process", attributes, typeof(void), [typeof(SqlDataReader)]);
+
+            ILGenerator IL = method.GetILGenerator();
+
+
 
             IL.Emit(OpCodes.Ret);
         }
