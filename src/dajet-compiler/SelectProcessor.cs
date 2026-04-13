@@ -85,6 +85,12 @@ namespace DaJet.Compiler
             }
             else
             {
+                byte[] binary = (byte[])reader.GetValue(ordinal);
+
+                byte[] buffer = new byte[16];
+                _ = reader.GetBytes(ordinal, 0, buffer, 0, 16);
+                Guid uuid = new(buffer);
+
                 //_context.Variable = reader.GetString(ordinal);
             }
 

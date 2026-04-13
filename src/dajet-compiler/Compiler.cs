@@ -3,6 +3,7 @@ using DaJet.Scripting;
 using DaJet.Scripting.Model;
 using DaJet.TypeSystem;
 using Microsoft.Data.SqlClient;
+using System.Numerics;
 using System.Reflection;
 using System.Reflection.Emit;
 
@@ -14,6 +15,8 @@ namespace DaJet.Compiler
         private Type SelectProcessorBase { get; } = typeof(SelectProcessor);
 
         private Dictionary<SyntaxNode, SqlStatement> _statements = new();
+
+        private bool CompileAndSave = false;
         public ScriptProcessor Compile(in Script script, in List<SqlStatement> statements)
         {
             foreach (SqlStatement statement in statements)
@@ -25,6 +28,7 @@ namespace DaJet.Compiler
             AssemblyName name = new(assemblyName);
             AssemblyBuilderAccess access = AssemblyBuilderAccess.RunAndCollect;
             AssemblyBuilder assembly = AssemblyBuilder.DefineDynamicAssembly(name, access);
+            //CompileAndSave = true;
             //PersistedAssemblyBuilder assembly = new(name, typeof(object).Assembly);
             ModuleBuilder module = assembly.DefineDynamicModule(assemblyName);
             ScriptModule = module;
@@ -120,14 +124,20 @@ namespace DaJet.Compiler
                                 }
                                 else if (variable.Type.IsArray) // List<Type1>
                                 {
-                                    // Режим записи библиотеки на диск
-                                    //ConstructorInfo _ctor = TypeBuilder.GetConstructor(
-                                    //    property.PropertyType,
-                                    //    typeof(List<>).GetConstructor(Type.EmptyTypes));
+                                    ConstructorInfo _ctor;
 
-                                    ConstructorInfo _ctor = property.PropertyType.GetConstructor(
-                                        BindingFlags.Instance | BindingFlags.Public, Type.EmptyTypes);
-                                    
+                                    // Режим записи библиотеки на диск
+                                    if (CompileAndSave)
+                                    {
+                                        _ctor = TypeBuilder.GetConstructor(property.PropertyType,
+                                            typeof(List<>).GetConstructor(Type.EmptyTypes));
+                                    }
+                                    else
+                                    {
+                                        _ctor = property.PropertyType.GetConstructor(
+                                            BindingFlags.Instance | BindingFlags.Public, Type.EmptyTypes);
+                                    }
+
                                     // this.Свойство = new List<Type1>();
                                     IL.Emit(OpCodes.Ldarg_0);
                                     IL.Emit(OpCodes.Newobj, _ctor);
@@ -437,6 +447,24 @@ namespace DaJet.Compiler
         }
         private void SelectProcessor_Process(in TypeBuilder type, in VariableReference output, in FieldInfo context)
         {
+            if (output.Binding is not DeclareStatement declare)
+            {
+                return;
+            }
+
+            if (declare.Binding is not EntityDefinition entity)
+            {
+                return;
+            }
+
+            if (!ScriptContext.TryGetValue(output.Identifier, out PropertyInfo outputProperty))
+            {
+                return;
+            }
+
+            MethodInfo IsDBNull = typeof(SqlDataReader).GetMethod("IsDBNull",
+                BindingFlags.Instance | BindingFlags.Public, [typeof(int)]);
+
             MethodAttributes attributes = MethodAttributes.Public
                 | MethodAttributes.Virtual
                 | MethodAttributes.HideBySig;
@@ -444,52 +472,118 @@ namespace DaJet.Compiler
             MethodBuilder method = type.DefineMethod("Process", attributes, typeof(void), [typeof(SqlDataReader)]);
 
             ILGenerator IL = method.GetILGenerator();
+            
+            LocalBuilder ordinal = IL.DeclareLocal(typeof(int)); // Loc_0
+            LocalBuilder isDbNull = IL.DeclareLocal(typeof(bool)); // Loc_1
+            LocalBuilder target = IL.DeclareLocal(outputProperty.PropertyType); // Loc_2
+            
+            Label IsDBNull_true = IL.DefineLabel();
+            Label IsDBNull_false = IL.DefineLabel();
+            Label IsDBNull_endif = IL.DefineLabel();
 
+            Type recordType;
 
+            if (declare.Type.IsArray &&
+                outputProperty.PropertyType.IsGenericType &&
+                outputProperty.PropertyType.GetGenericTypeDefinition() == typeof(List<>))
+            {
+                recordType = outputProperty.PropertyType.GetGenericArguments()[0];
+            }
+            else // declare.Type.IsObject
+            {
+                recordType = outputProperty.PropertyType;
+            }
+            IL.EmitWriteLine($"Output type: {recordType.FullName}");
 
-            IL.Emit(OpCodes.Ret);
-        }
+            if (declare.Type.IsArray)
+            {
+                ConstructorInfo ctor = recordType.GetConstructor(
+                    BindingFlags.Instance | BindingFlags.Public, Type.EmptyTypes);
+                
+                LocalBuilder record = IL.DeclareLocal(recordType); // Loc_3
+                // Type1 record = new Type1();
+                IL.Emit(OpCodes.Newobj, ctor);
+                IL.Emit(OpCodes.Stloc_3);
 
-        private void BuildConfigureMethod(in TypeBuilder builder)
-        {
-            MethodBuilder method = builder.DefineMethod("Configure",
-                MethodAttributes.Family | MethodAttributes.Virtual | MethodAttributes.HideBySig,
-                typeof(void), [typeof(SqlCommand)]); // [typeof(SqlCommand).MakeByRefType()]
+                IL.Emit(OpCodes.Ldloc_3);
+                IL.Emit(OpCodes.Ldstr, "test тест");
+                IL.Emit(OpCodes.Call, recordType.GetProperty("Наименование",
+                    BindingFlags.Instance | BindingFlags.Public).GetSetMethod());
 
-            MethodInfo get_Parameters = typeof(SqlCommand).GetProperty("Parameters", BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly).GetGetMethod();
-            MethodInfo clear_Parameters = typeof(SqlParameterCollection).GetMethod("Clear", BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly, Type.EmptyTypes);
-            MethodInfo addWithValue = typeof(SqlParameterCollection).GetMethod("AddWithValue", BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly, [typeof(string), typeof(object)]);
+                IL.Emit(OpCodes.Ldloc_3);
+                IL.Emit(OpCodes.Call, recordType.GetProperty("Наименование",
+                    BindingFlags.Instance | BindingFlags.Public).GetGetMethod());
 
-            FieldInfo context = typeof(SelectProcessor).GetField("_context",
-                BindingFlags.Instance | BindingFlags.Instance | BindingFlags.NonPublic);
+                IL.Emit(OpCodes.Call, typeof(Console).GetMethod("WriteLine",
+                    BindingFlags.Static | BindingFlags.Public, [typeof(string)]));
+            }
 
-            MethodInfo get_Variable = typeof(ScriptProcessor).GetProperty("Variable",
-                BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly).GetGetMethod();
+            // List<__Список> список = _context.Список;
+            IL.Emit(OpCodes.Ldarg_0); // this SelectProcessor
+            IL.Emit(OpCodes.Ldfld, context); // Script context
+            IL.Emit(OpCodes.Call, outputProperty.GetGetMethod());
+            IL.Emit(OpCodes.Stloc_2);
 
-            ILGenerator IL = method.GetILGenerator();
+            IL.Emit(OpCodes.Ldloc_2);
+            IL.Emit(OpCodes.Callvirt, outputProperty.PropertyType
+                .GetProperty("Count", BindingFlags.Instance | BindingFlags.Public).GetGetMethod());
+            IL.Emit(OpCodes.Call, typeof(Console).GetMethod("WriteLine",
+                    BindingFlags.Static | BindingFlags.Public, [typeof(int)]));
 
-            // command.Parameters.Clear();
-            IL.Emit(OpCodes.Ldarg_1);
-            IL.Emit(OpCodes.Callvirt, get_Parameters);
-            IL.Emit(OpCodes.Callvirt, clear_Parameters);
+            IL.EmitWriteLine("Add record to array");
+            IL.Emit(OpCodes.Ldloc_2);
+            IL.Emit(OpCodes.Ldloc_3);
+            IL.Emit(OpCodes.Callvirt, outputProperty.PropertyType
+                .GetMethod("Add", BindingFlags.Instance | BindingFlags.Public, [recordType]));
+            
+            IL.Emit(OpCodes.Ldloc_2);
+            IL.Emit(OpCodes.Callvirt, outputProperty.PropertyType
+                .GetProperty("Count", BindingFlags.Instance | BindingFlags.Public).GetGetMethod());
+            IL.Emit(OpCodes.Call, typeof(Console).GetMethod("WriteLine",
+                    BindingFlags.Static | BindingFlags.Public, [typeof(int)]));
 
-            // command.Parameters.AddWithValue("p0", DBNull.Value);
-            IL.Emit(OpCodes.Ldarg_1);
-            IL.Emit(OpCodes.Callvirt, get_Parameters);
-            IL.Emit(OpCodes.Ldstr, "p0");
-            IL.Emit(OpCodes.Ldsfld, typeof(DBNull).GetField("Value"));
-            IL.Emit(OpCodes.Callvirt, addWithValue);
-            IL.Emit(OpCodes.Pop);
+            // int ordinal = 0;
+            IL.Emit(OpCodes.Ldc_I4_0);
+            IL.Emit(OpCodes.Stloc_0);
 
-            // command.Parameters.AddWithValue("p6", _context.Variable);
-            IL.Emit(OpCodes.Ldarg_1);
-            IL.Emit(OpCodes.Callvirt, get_Parameters);
-            IL.Emit(OpCodes.Ldstr, "p1");
-            IL.Emit(OpCodes.Ldarg_0); // this
-            IL.Emit(OpCodes.Ldfld, context);
-            IL.Emit(OpCodes.Callvirt, get_Variable);
-            IL.Emit(OpCodes.Callvirt, addWithValue);
-            IL.Emit(OpCodes.Pop);
+            int _ordinal = 0;
+
+            for (int p = 0; p < entity.Properties.Count; p++)
+            {
+                PropertyDefinition property = entity.Properties[p];
+
+                if (property.Columns.Count == 1)
+                {
+                    ColumnDefinition column = property.Columns[0];
+
+                    if (property.Type.IsEntity)
+                    {
+                        // ((byte[])reader.GetValue(ordinal))
+                        //IL.Emit(OpCodes.Ldarg_1); // reader
+                        //IL.Emit(OpCodes.Ldloc_0); // ordinal
+                        //IL.Emit(OpCodes.Callvirt, GetBytes);
+                    }
+                }
+
+                //for (int c = 0; c < property.Columns.Count; c++)
+                //{
+                //    ColumnDefinition column = property.Columns[c];
+                //}
+            }
+
+            // if (reader.IsDBNull(ordinal))
+            IL.Emit(OpCodes.Ldarg_1); // reader
+            IL.Emit(OpCodes.Ldloc_0); // ordinal
+            IL.Emit(OpCodes.Callvirt, IsDBNull);
+            IL.Emit(OpCodes.Stloc_1); // pop result
+            IL.Emit(OpCodes.Ldloc_1); // push result
+            IL.Emit(OpCodes.Brfalse_S, IsDBNull_false);
+            IL.EmitWriteLine("set default value");
+            IL.Emit(OpCodes.Br_S, IsDBNull_endif);
+            IL.MarkLabel(IsDBNull_false);
+            IL.EmitWriteLine("set database value");
+            IL.MarkLabel(IsDBNull_endif);
+            IL.EmitWriteLine("end if");
 
             IL.Emit(OpCodes.Ret);
         }
