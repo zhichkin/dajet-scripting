@@ -3,7 +3,6 @@ using DaJet.Scripting;
 using DaJet.Scripting.Model;
 using DaJet.TypeSystem;
 using Microsoft.Data.SqlClient;
-using System.Numerics;
 using System.Reflection;
 using System.Reflection.Emit;
 
@@ -452,18 +451,24 @@ namespace DaJet.Compiler
                 return;
             }
 
-            if (declare.Binding is not EntityDefinition entity)
+            if (declare.Binding is not EntityDefinition metadata)
             {
                 return;
             }
 
-            if (!ScriptContext.TryGetValue(output.Identifier, out PropertyInfo outputProperty))
+            if (!ScriptContext.TryGetValue(output.Identifier, out PropertyInfo property))
             {
                 return;
             }
 
-            MethodInfo IsDBNull = typeof(SqlDataReader).GetMethod("IsDBNull",
-                BindingFlags.Instance | BindingFlags.Public, [typeof(int)]);
+            Type outputType = property.PropertyType;
+
+            if (declare.Type.IsArray &&
+                outputType.IsGenericType &&
+                outputType.GetGenericTypeDefinition() == typeof(List<>))
+            {
+                outputType = outputType.GetGenericArguments()[0];
+            }
 
             MethodAttributes attributes = MethodAttributes.Public
                 | MethodAttributes.Virtual
@@ -473,117 +478,27 @@ namespace DaJet.Compiler
 
             ILGenerator IL = method.GetILGenerator();
             
-            LocalBuilder ordinal = IL.DeclareLocal(typeof(int)); // Loc_0
-            LocalBuilder isDbNull = IL.DeclareLocal(typeof(bool)); // Loc_1
-            LocalBuilder target = IL.DeclareLocal(outputProperty.PropertyType); // Loc_2
-            
-            Label IsDBNull_true = IL.DefineLabel();
-            Label IsDBNull_false = IL.DefineLabel();
-            Label IsDBNull_endif = IL.DefineLabel();
-
-            Type recordType;
-
-            if (declare.Type.IsArray &&
-                outputProperty.PropertyType.IsGenericType &&
-                outputProperty.PropertyType.GetGenericTypeDefinition() == typeof(List<>))
-            {
-                recordType = outputProperty.PropertyType.GetGenericArguments()[0];
-            }
-            else // declare.Type.IsObject
-            {
-                recordType = outputProperty.PropertyType;
-            }
-            IL.EmitWriteLine($"Output type: {recordType.FullName}");
+            _ = IL.DeclareLocal(outputType); // Loc_0
 
             if (declare.Type.IsArray)
             {
-                ConstructorInfo ctor = recordType.GetConstructor(
+                ConstructorInfo ctor = outputType.GetConstructor(
                     BindingFlags.Instance | BindingFlags.Public, Type.EmptyTypes);
-                
-                LocalBuilder record = IL.DeclareLocal(recordType); // Loc_3
-                // Type1 record = new Type1();
+
+                // OutputType record = new OutputType();
                 IL.Emit(OpCodes.Newobj, ctor);
-                IL.Emit(OpCodes.Stloc_3);
-
-                IL.Emit(OpCodes.Ldloc_3);
-                IL.Emit(OpCodes.Ldstr, "test тест");
-                IL.Emit(OpCodes.Call, recordType.GetProperty("Наименование",
-                    BindingFlags.Instance | BindingFlags.Public).GetSetMethod());
-
-                IL.Emit(OpCodes.Ldloc_3);
-                IL.Emit(OpCodes.Call, recordType.GetProperty("Наименование",
-                    BindingFlags.Instance | BindingFlags.Public).GetGetMethod());
-
-                IL.Emit(OpCodes.Call, typeof(Console).GetMethod("WriteLine",
-                    BindingFlags.Static | BindingFlags.Public, [typeof(string)]));
+                IL.Emit(OpCodes.Stloc_0);
             }
-
-            // List<__Список> список = _context.Список;
-            IL.Emit(OpCodes.Ldarg_0); // this SelectProcessor
-            IL.Emit(OpCodes.Ldfld, context); // Script context
-            IL.Emit(OpCodes.Call, outputProperty.GetGetMethod());
-            IL.Emit(OpCodes.Stloc_2);
-
-            IL.Emit(OpCodes.Ldloc_2);
-            IL.Emit(OpCodes.Callvirt, outputProperty.PropertyType
-                .GetProperty("Count", BindingFlags.Instance | BindingFlags.Public).GetGetMethod());
-            IL.Emit(OpCodes.Call, typeof(Console).GetMethod("WriteLine",
-                    BindingFlags.Static | BindingFlags.Public, [typeof(int)]));
-
-            IL.EmitWriteLine("Add record to array");
-            IL.Emit(OpCodes.Ldloc_2);
-            IL.Emit(OpCodes.Ldloc_3);
-            IL.Emit(OpCodes.Callvirt, outputProperty.PropertyType
-                .GetMethod("Add", BindingFlags.Instance | BindingFlags.Public, [recordType]));
-            
-            IL.Emit(OpCodes.Ldloc_2);
-            IL.Emit(OpCodes.Callvirt, outputProperty.PropertyType
-                .GetProperty("Count", BindingFlags.Instance | BindingFlags.Public).GetGetMethod());
-            IL.Emit(OpCodes.Call, typeof(Console).GetMethod("WriteLine",
-                    BindingFlags.Static | BindingFlags.Public, [typeof(int)]));
-
-            // int ordinal = 0;
-            IL.Emit(OpCodes.Ldc_I4_0);
-            IL.Emit(OpCodes.Stloc_0);
-
-            int _ordinal = 0;
-
-            for (int p = 0; p < entity.Properties.Count; p++)
+            else // declare.Type.IsObject
             {
-                PropertyDefinition property = entity.Properties[p];
-
-                if (property.Columns.Count == 1)
-                {
-                    ColumnDefinition column = property.Columns[0];
-
-                    if (property.Type.IsEntity)
-                    {
-                        // ((byte[])reader.GetValue(ordinal))
-                        //IL.Emit(OpCodes.Ldarg_1); // reader
-                        //IL.Emit(OpCodes.Ldloc_0); // ordinal
-                        //IL.Emit(OpCodes.Callvirt, GetBytes);
-                    }
-                }
-
-                //for (int c = 0; c < property.Columns.Count; c++)
-                //{
-                //    ColumnDefinition column = property.Columns[c];
-                //}
+                // OutputType record = _context.OutputProperty;
+                IL.Emit(OpCodes.Ldarg_0); // this SelectProcessor
+                IL.Emit(OpCodes.Ldfld, context); // script context field
+                IL.Emit(OpCodes.Call, property.GetGetMethod());
+                IL.Emit(OpCodes.Stloc_0);
             }
 
-            // if (reader.IsDBNull(ordinal))
-            IL.Emit(OpCodes.Ldarg_1); // reader
-            IL.Emit(OpCodes.Ldloc_0); // ordinal
-            IL.Emit(OpCodes.Callvirt, IsDBNull);
-            IL.Emit(OpCodes.Stloc_1); // pop result
-            IL.Emit(OpCodes.Ldloc_1); // push result
-            IL.Emit(OpCodes.Brfalse_S, IsDBNull_false);
-            IL.EmitWriteLine("set default value");
-            IL.Emit(OpCodes.Br_S, IsDBNull_endif);
-            IL.MarkLabel(IsDBNull_false);
-            IL.EmitWriteLine("set database value");
-            IL.MarkLabel(IsDBNull_endif);
-            IL.EmitWriteLine("end if");
+            //MsDataMapper.MapOutput(in outputType, in metadata, in IL);
 
             IL.Emit(OpCodes.Ret);
         }
