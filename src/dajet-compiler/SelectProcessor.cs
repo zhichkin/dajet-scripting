@@ -1,10 +1,12 @@
-﻿using Microsoft.Data.SqlClient;
+﻿using DaJet.TypeSystem;
+using Microsoft.Data.SqlClient;
 using System.Data;
 
 namespace DaJet.Compiler
 {
     public abstract class SelectProcessor
     {
+        private Entity _entity;
         public string SqlCommand { get; set; }
         public string ConnectionString { get; set; }
         public void Execute()
@@ -81,7 +83,7 @@ namespace DaJet.Compiler
 
             if (reader.IsDBNull(ordinal))
             {
-                //_context.Variable = string.Empty;
+                _entity = Entity.Undefined;
             }
             else
             {
@@ -90,6 +92,8 @@ namespace DaJet.Compiler
                 byte[] buffer = new byte[16];
                 _ = reader.GetBytes(ordinal, 0, buffer, 0, 16);
                 Guid uuid = new(buffer);
+
+                _entity = new Entity(123, uuid);
 
                 //_context.Variable = reader.GetString(ordinal);
             }

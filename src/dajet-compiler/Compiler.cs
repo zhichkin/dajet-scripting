@@ -479,6 +479,9 @@ namespace DaJet.Compiler
             ILGenerator IL = method.GetILGenerator();
             
             _ = IL.DeclareLocal(outputType); // Loc_0
+            _ = IL.DeclareLocal(typeof(byte[])); // Loc_1
+            _ = IL.DeclareLocal(typeof(Guid)); // Loc_2
+            _ = IL.DeclareLocal(typeof(Entity)); // Loc_3
 
             if (declare.Type.IsArray)
             {
@@ -498,7 +501,22 @@ namespace DaJet.Compiler
                 IL.Emit(OpCodes.Stloc_0);
             }
 
-            //MsDataMapper.MapOutput(in outputType, in metadata, in IL);
+            // byte[] buffer = new byte[16];
+            IL.Emit(OpCodes.Ldc_I4, 16);
+            IL.Emit(OpCodes.Newarr, typeof(byte));
+            IL.Emit(OpCodes.Stloc_1);
+
+            MsDataMapper.MapOutput(in outputType, in metadata, in IL);
+
+            if (declare.Type.IsArray)
+            {
+                IL.Emit(OpCodes.Ldarg_0); // this SelectProcessor
+                IL.Emit(OpCodes.Ldfld, context); // _context
+                IL.Emit(OpCodes.Call, property.GetGetMethod());
+                IL.Emit(OpCodes.Ldloc_0); // OutputType
+                IL.Emit(OpCodes.Callvirt, property.PropertyType
+                    .GetMethod("Add", BindingFlags.Instance | BindingFlags.Public, [outputType]));
+            }
 
             IL.Emit(OpCodes.Ret);
         }
