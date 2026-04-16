@@ -71,8 +71,6 @@ namespace DaJet.Compiler
             // IL.Emit(OpCodes.Ldarg_1); // SqlDataReader
             // IL.Emit(OpCodes.Ldloc_0); // output variable reference
             // IL.Emit(OpCodes.Ldloc_1); // byte[16] buffer reference
-            // IL.Emit(OpCodes.Ldloc_2); // Guid local variable
-            // IL.Emit(OpCodes.Ldloc_3); // Entity local variable
 
             FlattenColumns(in metadata);
 
@@ -223,46 +221,8 @@ namespace DaJet.Compiler
 
             if (column.Purpose == ColumnPurpose.TypeCode) // binary(4)
             {
-                // byte[] array2 = new byte[16];
-                //IL_0020: ldc.i4.s 16
-                //IL_0022: newarr[System.Runtime]System.Byte
-                //IL_0027: stloc.3
-                // reader.GetBytes(ordinal, 0L, array2, 0, 16);
-                //IL_0028: ldarg.1
-                //IL_0029: ldloc.0
-                //IL_002a: ldc.i4.0
-                //IL_002b: conv.i8
-                //IL_002c: ldloc.3
-                //IL_002d: ldc.i4.0
-                //IL_002e: ldc.i4.s 16
-                //IL_0030: callvirt instance int64[System.Data.Common]System.Data.Common.DbDataReader::GetBytes(int32, int64, uint8[], int32, int32)
-                //IL_0035: pop
+                
             }
-
-            //Label IsDBNull_true = IL.DefineLabel();
-            //Label IsDBNull_false = IL.DefineLabel();
-            //Label IsDBNull_endif = IL.DefineLabel();
-
-            //// if (reader.IsDBNull(ordinal))
-            //IL.Emit(OpCodes.Ldarg_1); // reader
-            //IL.Emit(OpCodes.Ldc_I4, 0); // field ordinal
-            //IL.Emit(OpCodes.Ldloc_0); // ordinal
-            //IL.Emit(OpCodes.Callvirt, IsDBNull);
-            //IL.Emit(OpCodes.Stloc_1); // pop result ?
-            //IL.Emit(OpCodes.Ldloc_1); // push result ?
-            //IL.Emit(OpCodes.Brfalse_S, IsDBNull_false);
-            //IL.EmitWriteLine("set default value");
-            //IL.Emit(OpCodes.Br_S, IsDBNull_endif);
-            //IL.MarkLabel(IsDBNull_false);
-            //IL.EmitWriteLine("set database value");
-            //IL.MarkLabel(IsDBNull_endif);
-            //IL.EmitWriteLine("end if");
-
-            //MethodInfo setAccessor = output.GetProperty("Наименование",
-            //    BindingFlags.Instance | BindingFlags.Public).GetSetMethod();
-            //IL.Emit(OpCodes.Ldloc_0); // output variable reference
-            //IL.Emit(OpCodes.Ldstr, "test тест"); // database value
-            //IL.Emit(OpCodes.Call, setAccessor);
         }
         private static void MapUnion(in Type output, in PropertyDefinition property, in ILGenerator IL)
         {
@@ -284,9 +244,6 @@ namespace DaJet.Compiler
             {
 
             }
-
-
-
             else if (column.Purpose == ColumnPurpose.TypeCode) // binary(4)
             {
 
@@ -296,47 +253,5 @@ namespace DaJet.Compiler
 
             }
         }
-
-        private static void GetBinary16()
-        {
-            //// if (reader.IsDBNull(ordinal))
-            //IL.Emit(OpCodes.Ldarg_1); // reader
-            //IL.Emit(OpCodes.Ldc_I4, 0); // field ordinal
-            //IL.Emit(OpCodes.Ldloc_0); // ordinal
-            //IL.Emit(OpCodes.Callvirt, IsDBNull);
-            //IL.Emit(OpCodes.Stloc_1); // pop result ?
-            //IL.Emit(OpCodes.Ldloc_1); // push result ?
-            //IL.Emit(OpCodes.Brfalse_S, IsDBNull_false);
-            //IL.EmitWriteLine("set default value");
-            //IL.Emit(OpCodes.Br_S, IsDBNull_endif);
-            //IL.MarkLabel(IsDBNull_false);
-            //IL.EmitWriteLine("set database value");
-            //IL.MarkLabel(IsDBNull_endif);
-            //IL.EmitWriteLine("end if");
-        }
     }
 }
-
-// List<__Список> список = _context.Список;
-//IL.Emit(OpCodes.Ldarg_0); // this SelectProcessor
-//IL.Emit(OpCodes.Ldfld, context); // Script context
-//IL.Emit(OpCodes.Call, outputProperty.GetGetMethod());
-//IL.Emit(OpCodes.Stloc_2);
-
-//IL.Emit(OpCodes.Ldloc_2);
-//IL.Emit(OpCodes.Callvirt, outputProperty.PropertyType
-//    .GetProperty("Count", BindingFlags.Instance | BindingFlags.Public).GetGetMethod());
-//IL.Emit(OpCodes.Call, typeof(Console).GetMethod("WriteLine",
-//        BindingFlags.Static | BindingFlags.Public, [typeof(int)]));
-
-//IL.EmitWriteLine("Add record to array");
-//IL.Emit(OpCodes.Ldloc_2);
-//IL.Emit(OpCodes.Ldloc_3);
-//IL.Emit(OpCodes.Callvirt, outputProperty.PropertyType
-//    .GetMethod("Add", BindingFlags.Instance | BindingFlags.Public, [recordType]));
-
-//IL.Emit(OpCodes.Ldloc_2);
-//IL.Emit(OpCodes.Callvirt, outputProperty.PropertyType
-//    .GetProperty("Count", BindingFlags.Instance | BindingFlags.Public).GetGetMethod());
-//IL.Emit(OpCodes.Call, typeof(Console).GetMethod("WriteLine",
-//        BindingFlags.Static | BindingFlags.Public, [typeof(int)]));
