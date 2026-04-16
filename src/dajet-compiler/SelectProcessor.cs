@@ -91,9 +91,19 @@ namespace DaJet.Compiler
 
                 byte[] buffer = new byte[16];
                 _ = reader.GetBytes(ordinal, 0, buffer, 0, 16);
-                Guid uuid = new(buffer);
 
-                _entity = new Entity(123, uuid);
+                _entity = new Entity(123, new Guid(buffer));
+
+                // _entity = new Entity(123, new Guid(array2));
+                //IL_0041: ldarg.0
+                //IL_0042: ldc.i4.s 123
+                //IL_0044: ldloc.3
+                //IL_0045: newobj instance void [System.Runtime]System.Guid::.ctor(uint8[])
+                //IL_004a: newobj instance void [DaJet.TypeSystem]DaJet.TypeSystem.Entity::.ctor(int32, valuetype[System.Runtime]System.Guid)
+                //IL_004f: stfld valuetype[DaJet.TypeSystem]DaJet.TypeSystem.Entity DaJet.Compiler.SelectProcessor::_entity
+                //// (no C# code)
+                //IL_0054: nop
+                //IL_0055: ret
 
                 //_context.Variable = reader.GetString(ordinal);
             }

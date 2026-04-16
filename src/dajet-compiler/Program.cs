@@ -259,8 +259,21 @@ namespace DaJet.Compiler
 
             Compiler compiler = new();
             ScriptProcessor processor = compiler.Compile(in script, in statements);
-            processor?.Execute();
-            Console.WriteLine("----");
+
+            if (processor is not null)
+            {
+                processor.Execute();
+
+                Console.WriteLine(processor.GetType());
+
+                string json = JsonSerializer.Serialize(processor, processor.GetType(), JsonOptions);
+
+                Console.WriteLine(json);
+            }
+            else
+            {
+                Console.WriteLine("Compile and save");
+            }
         }
     }
 }

@@ -3,6 +3,7 @@ using DaJet.Scripting;
 using DaJet.Scripting.Model;
 using DaJet.TypeSystem;
 using Microsoft.Data.SqlClient;
+using System.Numerics;
 using System.Reflection;
 using System.Reflection.Emit;
 
@@ -26,9 +27,11 @@ namespace DaJet.Compiler
             string assemblyName = "Assembly1";
             AssemblyName name = new(assemblyName);
             AssemblyBuilderAccess access = AssemblyBuilderAccess.RunAndCollect;
+            
             AssemblyBuilder assembly = AssemblyBuilder.DefineDynamicAssembly(name, access);
             //CompileAndSave = true;
             //PersistedAssemblyBuilder assembly = new(name, typeof(object).Assembly);
+            
             ModuleBuilder module = assembly.DefineDynamicModule(assemblyName);
             ScriptModule = module;
 
@@ -125,8 +128,7 @@ namespace DaJet.Compiler
                                 {
                                     ConstructorInfo _ctor;
 
-                                    // Режим записи библиотеки на диск
-                                    if (CompileAndSave)
+                                    if (CompileAndSave) // Режим записи библиотеки на диск
                                     {
                                         _ctor = TypeBuilder.GetConstructor(property.PropertyType,
                                             typeof(List<>).GetConstructor(Type.EmptyTypes));
@@ -480,8 +482,6 @@ namespace DaJet.Compiler
             
             _ = IL.DeclareLocal(outputType); // Loc_0
             _ = IL.DeclareLocal(typeof(byte[])); // Loc_1
-            _ = IL.DeclareLocal(typeof(Guid)); // Loc_2
-            _ = IL.DeclareLocal(typeof(Entity)); // Loc_3
 
             if (declare.Type.IsArray)
             {
@@ -489,12 +489,14 @@ namespace DaJet.Compiler
                     BindingFlags.Instance | BindingFlags.Public, Type.EmptyTypes);
 
                 // OutputType record = new OutputType();
+                
                 IL.Emit(OpCodes.Newobj, ctor);
                 IL.Emit(OpCodes.Stloc_0);
             }
             else // declare.Type.IsObject
             {
                 // OutputType record = _context.OutputProperty;
+
                 IL.Emit(OpCodes.Ldarg_0); // this SelectProcessor
                 IL.Emit(OpCodes.Ldfld, context); // script context field
                 IL.Emit(OpCodes.Call, property.GetGetMethod());
@@ -506,16 +508,33 @@ namespace DaJet.Compiler
             IL.Emit(OpCodes.Newarr, typeof(byte));
             IL.Emit(OpCodes.Stloc_1);
 
+            // record.Ссылка = new Entity(123, new Guid(buffer));
+
             MsDataMapper.MapOutput(in outputType, in metadata, in IL);
+
+            // _context.OutputProperty.Add(record);
 
             if (declare.Type.IsArray)
             {
+                MethodInfo ListAdd = CompileAndSave
+                    ? typeof(List<>).GetMethod(nameof(List<>.Add),
+                    BindingFlags.Instance | BindingFlags.Public)
+                    : property.PropertyType.GetMethod(nameof(List<>.Add),
+                    BindingFlags.Instance | BindingFlags.Public, [outputType]);
+
                 IL.Emit(OpCodes.Ldarg_0); // this SelectProcessor
                 IL.Emit(OpCodes.Ldfld, context); // _context
                 IL.Emit(OpCodes.Call, property.GetGetMethod());
-                IL.Emit(OpCodes.Ldloc_0); // OutputType
-                IL.Emit(OpCodes.Callvirt, property.PropertyType
-                    .GetMethod("Add", BindingFlags.Instance | BindingFlags.Public, [outputType]));
+                IL.Emit(OpCodes.Ldloc_0); // OutputType record
+
+                if (CompileAndSave) // Режим записи библиотеки на диск
+                {
+                    IL.Emit(OpCodes.Callvirt, TypeBuilder.GetMethod(property.PropertyType, ListAdd));
+                }
+                else
+                {
+                    IL.Emit(OpCodes.Callvirt, ListAdd);
+                }
             }
 
             IL.Emit(OpCodes.Ret);

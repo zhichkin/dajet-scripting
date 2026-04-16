@@ -167,13 +167,14 @@ namespace DaJet.Compiler
                 IL.Emit(OpCodes.Callvirt, IsDBNull);
                 IL.Emit(OpCodes.Brfalse_S, IsDBNull_false);
                 // IsDBNull == true
-                //IL.Emit(OpCodes.Ldloc_0); // output variable reference
-                //IL.Emit(OpCodes.Ldsfld, EntityUndefined); // property value to assign
+                // _output.Свойство = Entity.Undefined;
+                IL.Emit(OpCodes.Ldloc_0); // output variable reference
+                IL.Emit(OpCodes.Ldsfld, EntityUndefined); // property value to assign
+                IL.Emit(OpCodes.Call, setAccessor);
                 IL.Emit(OpCodes.Br_S, IsDBNull_endif);
                 // IsDBNull == false
                 IL.MarkLabel(IsDBNull_false);
                 IL.Emit(OpCodes.Ldloc_0); // output variable reference
-                IL.Emit(OpCodes.Ldloca_S, 3); // Entity variable reference
                 IL.Emit(OpCodes.Ldc_I4, property.Type.TypeCode);
                 // reader.GetBytes(ordinal, 0L, buffer, 0, 16);
                 IL.Emit(OpCodes.Ldarg_1); // reader
@@ -186,20 +187,11 @@ namespace DaJet.Compiler
                 IL.Emit(OpCodes.Callvirt, GetBytes);
                 IL.Emit(OpCodes.Pop); // remove return value from stack
                 // _output.Свойство = new Entity(column.Type.TypeCode, new Guid(buffer));
-                IL.Emit(OpCodes.Ldloca_S, 2); // Guid variable reference
                 IL.Emit(OpCodes.Ldloc_1); // byte[16] buffer reference
-                IL.Emit(OpCodes.Call, GuidCtor);
-                IL.Emit(OpCodes.Ldloc_S, 2); // Guid variable value
-                IL.Emit(OpCodes.Call, EntityCtor);
-                IL.Emit(OpCodes.Ldloc_S, 3); // Entity variable value
+                IL.Emit(OpCodes.Newobj, GuidCtor);
+                IL.Emit(OpCodes.Newobj, EntityCtor);
                 IL.Emit(OpCodes.Call, setAccessor);
                 IL.MarkLabel(IsDBNull_endif);
-
-                //MethodInfo setAccessor = output.GetProperty(property.Name,
-                //    BindingFlags.Instance | BindingFlags.Public).GetSetMethod();
-                //IL.Emit(OpCodes.Ldloc_0); // output variable reference
-                //IL.Emit(OpCodes.Ldstr, "test тест"); // database value
-                //IL.Emit(OpCodes.Call, setAccessor);
 
                 return;
             }
