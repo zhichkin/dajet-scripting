@@ -3,7 +3,6 @@ using DaJet.Scripting;
 using DaJet.Scripting.Model;
 using DaJet.TypeSystem;
 using Microsoft.Data.SqlClient;
-using System.Numerics;
 using System.Reflection;
 using System.Reflection.Emit;
 
