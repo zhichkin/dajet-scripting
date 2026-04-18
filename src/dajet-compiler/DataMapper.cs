@@ -14,7 +14,17 @@ namespace DaJet.Compiler
 
         private static readonly MethodInfo IsDBNull;
         private static readonly MethodInfo GetBytes;
+        private static readonly MethodInfo GetByte;
+        private static readonly MethodInfo GetInt16;
+        private static readonly MethodInfo GetInt32;
+        private static readonly MethodInfo GetInt64;
+        private static readonly MethodInfo GetDecimal;
+        private static readonly MethodInfo GetDateTime;
+        private static readonly MethodInfo DateTimeAddYears;
         private static readonly MethodInfo GetString;
+        private static readonly FieldInfo Zero;
+        private static readonly FieldInfo StringEmpty;
+        private static readonly FieldInfo DateTimeMinValue;
         private static readonly FieldInfo EntityUndefined;
         private static readonly FieldInfo UnionUndefined;
         private static readonly ConstructorInfo GuidCtor;
@@ -47,8 +57,38 @@ namespace DaJet.Compiler
                 BindingFlags.Instance | BindingFlags.Public,
                 [typeof(int), typeof(long), typeof(byte[]), typeof(int), typeof(int)]);
 
+            GetByte = typeof(SqlDataReader).GetMethod(nameof(SqlDataReader.GetByte),
+                BindingFlags.Instance | BindingFlags.Public, [typeof(int)]);
+
+            GetInt16 = typeof(SqlDataReader).GetMethod(nameof(SqlDataReader.GetInt16),
+                BindingFlags.Instance | BindingFlags.Public, [typeof(int)]);
+
+            GetInt32 = typeof(SqlDataReader).GetMethod(nameof(SqlDataReader.GetInt32),
+                BindingFlags.Instance | BindingFlags.Public, [typeof(int)]);
+
+            GetInt64 = typeof(SqlDataReader).GetMethod(nameof(SqlDataReader.GetInt64),
+                BindingFlags.Instance | BindingFlags.Public, [typeof(int)]);
+
+            GetDecimal = typeof(SqlDataReader).GetMethod(nameof(SqlDataReader.GetDecimal),
+                BindingFlags.Instance | BindingFlags.Public, [typeof(int)]);
+
+            GetDateTime = typeof(SqlDataReader).GetMethod(nameof(SqlDataReader.GetDateTime),
+                BindingFlags.Instance | BindingFlags.Public, [typeof(int)]);
+
+            DateTimeAddYears = typeof(DateTime).GetMethod(nameof(DateTime.AddYears),
+                BindingFlags.Instance | BindingFlags.Public, [typeof(int)]);
+
             GetString = typeof(SqlDataReader).GetMethod(nameof(SqlDataReader.GetString),
                 BindingFlags.Instance | BindingFlags.Public, [typeof(int)]);
+
+            Zero = typeof(decimal).GetField(nameof(decimal.Zero),
+                BindingFlags.Static | BindingFlags.Public);
+
+            StringEmpty = typeof(string).GetField(nameof(string.Empty),
+                BindingFlags.Static | BindingFlags.Public);
+
+            DateTimeMinValue = typeof(DateTime).GetField(nameof(DateTime.MinValue),
+                BindingFlags.Static | BindingFlags.Public);
 
             UnionUndefined = typeof(Union).GetField(nameof(Union.Undefined),
                 BindingFlags.Static | BindingFlags.Public);
@@ -96,6 +136,7 @@ namespace DaJet.Compiler
 
             return null;
         }
+        
         internal static void MapOutput(in Type output, in EntityDefinition metadata, in ILGenerator IL)
         {
             // protected virtual void Process(SqlDataReader reader)
@@ -127,7 +168,6 @@ namespace DaJet.Compiler
 
             Columns = null;
         }
-        
         private static void MapBoolean(in Type output, in PropertyDefinition property, in ILGenerator IL)
         {
             MethodInfo setAccessor = output.GetProperty(property.Name,
@@ -141,7 +181,23 @@ namespace DaJet.Compiler
             {
                 int ordinal = Columns.IndexOf(column);
 
+                Label _ELSE = IL.DefineLabel();
+                Label _ENDIF = IL.DefineLabel();
+
                 IL.Emit(OpCodes.Ldloc_0); // output variable reference
+
+                // if (reader.IsDBNull(ordinal))
+                IL.Emit(OpCodes.Ldarg_1); // reader
+                IL.Emit(OpCodes.Ldc_I4, ordinal);
+                IL.Emit(OpCodes.Callvirt, IsDBNull);
+                IL.Emit(OpCodes.Brfalse_S, _ELSE);
+
+                // TRUE
+                IL.Emit(OpCodes.Ldc_I4_0); // assign default value
+
+                IL.Emit(OpCodes.Br_S, _ENDIF);
+
+                IL.MarkLabel(_ELSE);
 
                 // reader.GetBytes(ordinal, 0L, buffer, 0, 1);
                 IL.Emit(OpCodes.Ldarg_1); // reader
@@ -159,67 +215,159 @@ namespace DaJet.Compiler
                 IL.Emit(OpCodes.Ldc_I4_0); // index of the value
                 IL.Emit(OpCodes.Ldelem_U1); // push buffer[0] value onto the stack
 
+                IL.MarkLabel(_ENDIF);
+
                 IL.Emit(OpCodes.Call, setAccessor);
             }
         }
         private static void MapDecimal(in Type output, in PropertyDefinition property, in ILGenerator IL)
         {
-            //return reader.GetDecimal(ordinal);
+            // _output.Свойство = reader.IsDBNull(0) ? 0M : reader.GetDecimal(0);
 
-            Label IsDBNull_true = IL.DefineLabel();
-            Label IsDBNull_false = IL.DefineLabel();
-            Label IsDBNull_endif = IL.DefineLabel();
+            MethodInfo setAccessor = output.GetProperty(property.Name,
+                BindingFlags.Instance | BindingFlags.Public).GetSetMethod();
 
-            // if (reader.IsDBNull(ordinal))
-            //IL.Emit(OpCodes.Ldarg_1); // reader
-            //IL.Emit(OpCodes.Ldc_I4, ordinal); // field ordinal
-            //IL.Emit(OpCodes.Callvirt, IsDBNull);
-            //IL.Emit(OpCodes.Brfalse_S, IsDBNull_false);
-            // IsDBNull == true
-            // _output.Свойство = Entity.Undefined;
-            //IL.Emit(OpCodes.Ldloc_0); // output variable reference
-            //IL.Emit(OpCodes.Ldsfld, EntityUndefined); // property value to assign
-            //IL.Emit(OpCodes.Call, setAccessor);
-            //IL.Emit(OpCodes.Br_S, IsDBNull_endif);
-            // IsDBNull == false
-            //IL.MarkLabel(IsDBNull_false);
-            //IL.Emit(OpCodes.Ldloc_0); // output variable reference
-            //IL.Emit(OpCodes.Ldc_I4, property.Type.TypeCode);
-            //// reader.GetBytes(ordinal, 0L, buffer, 0, 16);
-            //IL.Emit(OpCodes.Ldarg_1); // reader
-            //IL.Emit(OpCodes.Ldc_I4, ordinal); // ordinal
-            //IL.Emit(OpCodes.Ldc_I4_0);
-            //IL.Emit(OpCodes.Conv_I8); // 0L
-            //IL.Emit(OpCodes.Ldloc_1); // byte[16] buffer reference
-            //IL.Emit(OpCodes.Ldc_I4_0); // buffer start
-            //IL.Emit(OpCodes.Ldc_I4, 16); // bytes to read
-            //IL.Emit(OpCodes.Callvirt, GetBytes);
-            //IL.Emit(OpCodes.Pop); // remove return value from stack
-            //                      // _output.Свойство = new Entity(column.Type.TypeCode, new Guid(buffer));
-            //IL.Emit(OpCodes.Ldloc_1); // byte[16] buffer reference
-            //IL.Emit(OpCodes.Newobj, GuidCtor);
-            //IL.Emit(OpCodes.Newobj, EntityCtor);
-            //IL.Emit(OpCodes.Call, setAccessor);
-            //IL.MarkLabel(IsDBNull_endif);
+            ColumnDefinition column = property.GetColumnByPurpose(ColumnPurpose.Value);
+
+            column ??= property.GetColumnByPurpose(ColumnPurpose.Numeric); // union type column
+
+            if (column is not null)
+            {
+                int ordinal = Columns.IndexOf(column);
+
+                Label _ELSE = IL.DefineLabel();
+                Label _ENDIF = IL.DefineLabel();
+
+                IL.Emit(OpCodes.Ldloc_0); // output variable reference
+
+                // if (reader.IsDBNull(ordinal))
+                IL.Emit(OpCodes.Ldarg_1); // reader
+                IL.Emit(OpCodes.Ldc_I4, ordinal);
+                IL.Emit(OpCodes.Callvirt, IsDBNull);
+                IL.Emit(OpCodes.Brfalse_S, _ELSE);
+
+                // TRUE
+                IL.Emit(OpCodes.Ldsfld, Zero); // assign default value
+
+                IL.Emit(OpCodes.Br_S, _ENDIF);
+
+                IL.MarkLabel(_ELSE);
+
+                IL.Emit(OpCodes.Ldarg_1); // reader
+                IL.Emit(OpCodes.Ldc_I4, ordinal);
+                IL.Emit(OpCodes.Callvirt, GetDecimal); // reader.GetDecimal(ordinal)
+
+                IL.MarkLabel(_ENDIF);
+
+                IL.Emit(OpCodes.Call, setAccessor); // _output.Свойство = value;
+            }
         }
         private static void MapInteger(in Type output, in PropertyDefinition property, in ILGenerator IL)
         {
-            //reader.GetInt32(ordinal)
-            //reader.GetInt64(ordinal)
+            // _output.Свойство = reader.IsDBNull(0) ? 0 : reader.GetInt32(0);
+
+            MethodInfo setAccessor = output.GetProperty(property.Name,
+                BindingFlags.Instance | BindingFlags.Public).GetSetMethod();
+
+            ColumnDefinition column = property.GetColumnByPurpose(ColumnPurpose.Value);
+
+            if (column is not null)
+            {
+                int ordinal = Columns.IndexOf(column);
+
+                Label _ELSE = IL.DefineLabel();
+                Label _ENDIF = IL.DefineLabel();
+
+                IL.Emit(OpCodes.Ldloc_0); // output variable reference
+
+                // if (reader.IsDBNull(ordinal))
+                IL.Emit(OpCodes.Ldarg_1); // reader
+                IL.Emit(OpCodes.Ldc_I4, ordinal);
+                IL.Emit(OpCodes.Callvirt, IsDBNull);
+                IL.Emit(OpCodes.Brfalse_S, _ELSE);
+                
+                // TRUE
+                IL.Emit(OpCodes.Ldc_I4_0); // assign default value
+                
+                IL.Emit(OpCodes.Br_S, _ENDIF);
+                
+                IL.MarkLabel(_ELSE);
+
+                IL.Emit(OpCodes.Ldarg_1); // reader
+                IL.Emit(OpCodes.Ldc_I4, ordinal);
+
+                if (property.Type.Size == 1)
+                {
+                    IL.Emit(OpCodes.Callvirt, GetByte); // reader.GetByte(ordinal)
+                }
+                else if (property.Type.Size == 2)
+                {
+                    IL.Emit(OpCodes.Callvirt, GetInt16); // reader.GetInt64(ordinal)
+                }
+                else if (property.Type.Size == 4)
+                {
+                    IL.Emit(OpCodes.Callvirt, GetInt32); // reader.GetInt32(ordinal)
+                }
+                else if (property.Type.Size == 8)
+                {
+                    IL.Emit(OpCodes.Callvirt, GetInt64); // reader.GetInt64(ordinal)
+                }
+                
+                IL.MarkLabel(_ENDIF);
+
+                IL.Emit(OpCodes.Call, setAccessor); // _output.Свойство = value;
+            }
         }
         private static void MapDateTime(in Type output, in PropertyDefinition property, in ILGenerator IL)
         {
-            //int ordinal = GetOrdinal(in reader, UnionTag.DateTime, out _);
+            // _output.Свойство = reader.IsDBNull(0) ? DateTime.MinValue : reader.GetDateTime(0).AddYears(-YearOffset);
 
-            //if (reader.IsDBNull(ordinal))
-            //{
-            //    return null;
-            //}
+            MethodInfo setAccessor = output.GetProperty(property.Name,
+                BindingFlags.Instance | BindingFlags.Public).GetSetMethod();
 
-            //return reader.GetDateTime(ordinal).AddYears(-YearOffset);
+            ColumnDefinition column = property.GetColumnByPurpose(ColumnPurpose.Value);
+
+            column ??= property.GetColumnByPurpose(ColumnPurpose.DateTime); // union type column
+
+            if (column is not null)
+            {
+                int ordinal = Columns.IndexOf(column);
+
+                Label _ELSE = IL.DefineLabel();
+                Label _ENDIF = IL.DefineLabel();
+
+                IL.Emit(OpCodes.Ldloc_0); // output variable reference
+
+                // if (reader.IsDBNull(ordinal))
+                IL.Emit(OpCodes.Ldarg_1); // reader
+                IL.Emit(OpCodes.Ldc_I4, ordinal);
+                IL.Emit(OpCodes.Callvirt, IsDBNull);
+                IL.Emit(OpCodes.Brfalse_S, _ELSE);
+
+                // TRUE
+                IL.Emit(OpCodes.Ldsfld, DateTimeMinValue); // assign default value
+
+                IL.Emit(OpCodes.Br_S, _ENDIF);
+
+                IL.MarkLabel(_ELSE);
+
+                IL.Emit(OpCodes.Ldarg_1); // reader
+                IL.Emit(OpCodes.Ldc_I4, ordinal);
+                IL.Emit(OpCodes.Callvirt, GetDateTime);
+
+                //IL.Emit(OpCodes.Ldobj, typeof(DateTime));
+                //IL.Emit(OpCodes.Ldc_I4, -2000);
+                //IL.Emit(OpCodes.Call, DateTimeAddYears);
+
+                IL.MarkLabel(_ENDIF);
+
+                IL.Emit(OpCodes.Call, setAccessor);
+            }
         }
         private static void MapString(in Type output, in PropertyDefinition property, in ILGenerator IL)
         {
+            // _output.Свойство = reader.IsDBNull(ordinal) ? string.Empty : reader.GetString(ordinal);
+
             MethodInfo setAccessor = output.GetProperty(property.Name,
                 BindingFlags.Instance | BindingFlags.Public).GetSetMethod();
 
@@ -231,12 +379,30 @@ namespace DaJet.Compiler
             {
                 int ordinal = Columns.IndexOf(column);
 
-                // _output.Свойство = reader.GetString(ordinal);
+                Label _ELSE = IL.DefineLabel();
+                Label _ENDIF = IL.DefineLabel();
 
                 IL.Emit(OpCodes.Ldloc_0); // output variable reference
+
+                // if (reader.IsDBNull(ordinal))
+                IL.Emit(OpCodes.Ldarg_1); // reader
+                IL.Emit(OpCodes.Ldc_I4, ordinal);
+                IL.Emit(OpCodes.Callvirt, IsDBNull);
+                IL.Emit(OpCodes.Brfalse_S, _ELSE);
+
+                // TRUE
+                IL.Emit(OpCodes.Ldsfld, StringEmpty); // assign default value
+
+                IL.Emit(OpCodes.Br_S, _ENDIF);
+
+                IL.MarkLabel(_ELSE);
+
                 IL.Emit(OpCodes.Ldarg_1); // reader
                 IL.Emit(OpCodes.Ldc_I4, ordinal);
                 IL.Emit(OpCodes.Callvirt, GetString);
+
+                IL.MarkLabel(_ENDIF);
+
                 IL.Emit(OpCodes.Call, setAccessor);
             }
         }

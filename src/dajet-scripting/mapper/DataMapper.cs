@@ -37,14 +37,24 @@ namespace DaJet.Scripting
                     Purpose = PropertyPurpose.Property
                 };
 
-                if (string.IsNullOrEmpty(source.Name))
+                if (string.IsNullOrEmpty(source.Name)) // Источник данных - выражение
                 {
                     property.Name = column.Alias;
                     schema.Properties.Add(property);
-                    continue; // Интересует только тип данных выражения
+
+                    if (column.Source is null) // Константа, функция, параметр или выражение
+                    {
+                        property.Columns.Add(new ColumnDefinition()
+                        {
+                            Type = property.Type,
+                            Purpose = ColumnPurpose.Value
+                        });
+                    }
+
+                    continue; //TODO: fix it by refactoring
                 }
 
-                // Схема данных
+                // Схема данных (колонки таблицы СУБД)
 
                 if (!string.IsNullOrEmpty(column.Alias))
                 {

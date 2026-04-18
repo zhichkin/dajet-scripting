@@ -1,13 +1,11 @@
-﻿using DaJet.TypeSystem;
-using Microsoft.Data.SqlClient;
-using System.Buffers.Binary;
-using System.ComponentModel.Design;
+﻿using Microsoft.Data.SqlClient;
 using System.Data;
 
 namespace DaJet.Compiler
 {
     public abstract class SelectProcessor
     {
+        DateTime value;
         public int YearOffset { get; set; }
         public string SqlCommand { get; set; }
         public string ConnectionString { get; set; }
@@ -85,31 +83,12 @@ namespace DaJet.Compiler
 
             if (reader.IsDBNull(ordinal))
             {
-                
+                value = reader.GetDateTime(0);
+                value = value.AddYears(-2000);
             }
             else
             {
-                byte[] buffer = new byte[16];
-                _ = reader.GetBytes(0, 0L, buffer, 0, 1);
-                byte tag = buffer[0];
-
-                if (tag == 1) // Неопределено
-                {
-
-
-                }
-                else if (tag == 2) // Булево
-                {
-                    bool result = true;
-                }
-                else if (tag == 3) // Булево
-                {
-
-                }
-                else
-                {
-
-                }
+                //int value = reader.GetInt32(ordinal);
             }
         }
         protected virtual void Synchronize()
