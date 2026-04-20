@@ -9,9 +9,13 @@ namespace DaJet.Compiler
     internal static class MsDataMapper
     {
         #region "STATIC METADATA FIELDS"
+
+        // Array of bytes (buffer) processing
         private static readonly MethodInfo AsSpanOfBytes;
         private static readonly MethodInfo SpanOfBytesToReadOnly;
         private static readonly MethodInfo ReadInt32BigEndian;
+        
+        // SqlDataReader methods
         private static readonly MethodInfo IsDBNull;
         private static readonly MethodInfo GetValue;
         private static readonly MethodInfo GetBytes;
@@ -23,6 +27,8 @@ namespace DaJet.Compiler
         private static readonly MethodInfo GetDateTime;
         private static readonly MethodInfo DateTimeAddYears;
         private static readonly MethodInfo GetString;
+        
+        // Default values
         private static readonly FieldInfo Zero;
         private static readonly MethodInfo ArrayEmpty;
         private static readonly FieldInfo GuidEmpty;
@@ -30,12 +36,20 @@ namespace DaJet.Compiler
         private static readonly FieldInfo DateTimeMinValue;
         private static readonly FieldInfo EntityUndefined;
         private static readonly FieldInfo UnionUndefined;
+        
+        // Constructors
         private static readonly ConstructorInfo GuidCtor;
         private static readonly ConstructorInfo EntityCtor;
+
         // Union type implicit conversion
+        private static readonly MethodInfo BooleanToUnion;
+        private static readonly MethodInfo DecimalToUnion;
+        private static readonly MethodInfo DateTimeToUnion;
         private static readonly MethodInfo StringToUnion;
         private static readonly MethodInfo EntityToUnion;
+        
         #endregion
+        
         static MsDataMapper()
         {
             AsSpanOfBytes = typeof(MemoryExtensions)
@@ -117,6 +131,15 @@ namespace DaJet.Compiler
 
             EntityCtor = typeof(Entity).GetConstructor(BindingFlags.Instance | BindingFlags.Public,
                 [typeof(int), typeof(Guid)]);
+
+            BooleanToUnion = typeof(Union).GetMethod("op_Implicit",
+                BindingFlags.Static | BindingFlags.Public, [typeof(bool)]);
+
+            DecimalToUnion = typeof(Union).GetMethod("op_Implicit",
+                BindingFlags.Static | BindingFlags.Public, [typeof(decimal)]);
+
+            DateTimeToUnion = typeof(Union).GetMethod("op_Implicit",
+                BindingFlags.Static | BindingFlags.Public, [typeof(DateTime)]);
 
             StringToUnion = typeof(Union).GetMethod("op_Implicit",
                 BindingFlags.Static | BindingFlags.Public, [typeof(string)]);
@@ -205,8 +228,10 @@ namespace DaJet.Compiler
         }
         private static void MapBoolean(in Type output, in PropertyDefinition property, in ILGenerator IL)
         {
-            MethodInfo setAccessor = output.GetProperty(property.Name,
-                BindingFlags.Instance | BindingFlags.Public).GetSetMethod();
+            PropertyInfo target = output.GetProperty(property.Name,
+                BindingFlags.Instance | BindingFlags.Public);
+
+            MethodInfo setAccessor = target.GetSetMethod();
 
             ColumnDefinition column = property.GetColumnByPurpose(ColumnPurpose.Value); // single value column
 
@@ -252,6 +277,11 @@ namespace DaJet.Compiler
 
                 IL.MarkLabel(_ENDIF);
 
+                if (target.PropertyType == typeof(Union))
+                {
+                    IL.Emit(OpCodes.Call, BooleanToUnion);
+                }
+
                 IL.Emit(OpCodes.Call, setAccessor);
             }
         }
@@ -259,8 +289,10 @@ namespace DaJet.Compiler
         {
             // _output.Свойство = reader.IsDBNull(0) ? 0M : reader.GetDecimal(0);
 
-            MethodInfo setAccessor = output.GetProperty(property.Name,
-                BindingFlags.Instance | BindingFlags.Public).GetSetMethod();
+            PropertyInfo target = output.GetProperty(property.Name,
+                BindingFlags.Instance | BindingFlags.Public);
+
+            MethodInfo setAccessor = target.GetSetMethod();
 
             ColumnDefinition column = property.GetColumnByPurpose(ColumnPurpose.Value);
 
@@ -293,6 +325,11 @@ namespace DaJet.Compiler
                 IL.Emit(OpCodes.Callvirt, GetDecimal); // reader.GetDecimal(ordinal)
 
                 IL.MarkLabel(_ENDIF);
+
+                if (target.PropertyType == typeof(Union))
+                {
+                    IL.Emit(OpCodes.Call, DecimalToUnion);
+                }
 
                 IL.Emit(OpCodes.Call, setAccessor); // _output.Свойство = value;
             }
@@ -357,8 +394,10 @@ namespace DaJet.Compiler
         {
             // _output.Свойство = reader.IsDBNull(0) ? DateTime.MinValue : reader.GetDateTime(0).AddYears(-YearOffset);
 
-            MethodInfo setAccessor = output.GetProperty(property.Name,
-                BindingFlags.Instance | BindingFlags.Public).GetSetMethod();
+            PropertyInfo target = output.GetProperty(property.Name,
+                BindingFlags.Instance | BindingFlags.Public);
+
+            MethodInfo setAccessor = target.GetSetMethod();
 
             ColumnDefinition column = property.GetColumnByPurpose(ColumnPurpose.Value);
 
@@ -399,6 +438,11 @@ namespace DaJet.Compiler
                 }
 
                 IL.MarkLabel(_ENDIF);
+
+                if (target.PropertyType == typeof(Union))
+                {
+                    IL.Emit(OpCodes.Call, DateTimeToUnion);
+                }
 
                 IL.Emit(OpCodes.Call, setAccessor);
             }
@@ -710,15 +754,15 @@ namespace DaJet.Compiler
                 IL.Emit(OpCodes.Br, endOfSwitch);
 
                 IL.MarkLabel(cases[1]); // Булево
-                //MapBoolean(in output, in property, in IL);
+                MapBoolean(in output, in property, in IL);
                 IL.Emit(OpCodes.Br, endOfSwitch);
 
                 IL.MarkLabel(cases[2]); // Число
-                //MapDecimal(in output, in property, in IL);
+                MapDecimal(in output, in property, in IL);
                 IL.Emit(OpCodes.Br, endOfSwitch);
 
                 IL.MarkLabel(cases[3]); // Дата
-                //MapDateTime(in output, in property, in IL);
+                MapDateTime(in output, in property, in IL);
                 IL.Emit(OpCodes.Br, endOfSwitch);
 
                 IL.MarkLabel(cases[4]); // Строка

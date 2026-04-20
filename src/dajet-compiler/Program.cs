@@ -25,6 +25,8 @@ namespace DaJet.Compiler
         };
         static void Main(string[] args)
         {
+            //Test(); return;
+
             JsonOptions.Converters.Add(new DataTypeJsonConverter());
             JsonOptions.Converters.Add(new JsonStringEnumConverter());
 
@@ -33,6 +35,13 @@ namespace DaJet.Compiler
             //TestScriptBinding();
 
             TestCompiler();
+        }
+        private static void Test()
+        {
+            string source = "d.zhichkin";
+            Console.WriteLine(source);
+            string encoded = UrlEncoder.Create(UnicodeRanges.All).Encode(source);
+            Console.WriteLine(encoded);
         }
 
         //private static void ActivateStreams(in string path)

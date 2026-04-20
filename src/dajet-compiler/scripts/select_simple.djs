@@ -1,7 +1,7 @@
 
 DECLARE @Идентификатор uuid = '47ed21d5-2d08-4982-b3bd-e55a78404125'
 DECLARE @Ссылка entity
-DECLARE @Код    string = '000000001'
+DECLARE @Код    string = '000000007'
 DECLARE @Запись object
 DECLARE @Список array
 

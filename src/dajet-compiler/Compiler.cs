@@ -510,7 +510,7 @@ namespace DaJet.Compiler
 
             // record.Ссылка = new Entity(123, new Guid(buffer));
 
-            //MsDataMapper.YearOffset = 2000;
+            //TODO: MsDataMapper.YearOffset = 2000;
             MsDataMapper.MapOutput(in outputType, in metadata, in IL);
 
             // _context.OutputProperty.Add(record);
