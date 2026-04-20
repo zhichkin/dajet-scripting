@@ -1,11 +1,11 @@
-﻿using Microsoft.Data.SqlClient;
+﻿using DaJet.TypeSystem;
+using Microsoft.Data.SqlClient;
 using System.Data;
 
 namespace DaJet.Compiler
 {
     public abstract class SelectProcessor
     {
-        DateTime value;
         public int YearOffset { get; set; }
         public string SqlCommand { get; set; }
         public string ConnectionString { get; set; }
@@ -77,18 +77,40 @@ namespace DaJet.Compiler
         }
         protected virtual void Process(SqlDataReader reader) // output
         {
-            // map data and set output buffer values
+            byte[] buffer = new byte[16];
 
-            int ordinal = 0;
+            Union value;
 
-            if (reader.IsDBNull(ordinal))
+            if (reader.IsDBNull(0))
             {
-                value = reader.GetDateTime(0);
-                value = value.AddYears(-2000);
+                value = Union.Undefined;
             }
             else
             {
-                //int value = reader.GetInt32(ordinal);
+                byte tag = ((byte[])reader.GetValue(0))[0];
+
+                switch (tag)
+                {
+                    case 1:
+                        value = Union.Undefined;
+                        break;
+                    case 2:
+                        value = reader.IsDBNull(1) ? false : reader.GetBoolean(1);
+                        break;
+                    case 3:
+                        value = reader.IsDBNull(2) ? 0M : reader.GetDecimal(2);
+                        break;
+                    case 4:
+                        value = reader.IsDBNull(3) ? DateTime.MinValue : reader.GetDateTime(3);
+                        break;
+                    case 5:
+                        value = reader.IsDBNull(4) ? string.Empty : reader.GetString(4);
+                        break;
+                    default:
+                        reader.GetBytes(5, 0L, buffer, 0, 16);
+                        value = new Entity(123, new Guid(buffer));
+                        break;
+                }
             }
         }
         protected virtual void Synchronize()

@@ -183,13 +183,17 @@ namespace DaJet.Compiler
         {
             Type propertyType = null;
 
-            if (dataType.IsBoolean) { propertyType = typeof(bool); }
+            if (dataType.IsUnion)
+            {
+                propertyType = dataType.IsReferenceOnlyUnion ? typeof(Entity) : typeof(Union);
+            }
+            else if (dataType.IsBoolean) { propertyType = typeof(bool); }
             else if (dataType.IsInteger)
             {
-                if (dataType.Size == 1) { propertyType = typeof(sbyte); }
-                else if (dataType.Size == 2) { propertyType = typeof(short); }
-                else if (dataType.Size == 4) { propertyType = typeof(int); }
-                else { propertyType = typeof(long); }
+                if (dataType.Size == 1) { propertyType = dataType.IsSigned ? typeof(sbyte) : typeof(byte); }
+                else if (dataType.Size == 2) { propertyType = dataType.IsSigned ? typeof(short) : typeof(ushort); }
+                else if (dataType.Size == 4) { propertyType = dataType.IsSigned ? typeof(int) : typeof(uint); }
+                else { propertyType = dataType.IsSigned ? typeof(long) : typeof(ulong); }
             }
             else if (dataType.IsDecimal) { propertyType = typeof(decimal); }
             else if (dataType.IsDateTime) { propertyType = typeof(DateTime); }
@@ -197,12 +201,8 @@ namespace DaJet.Compiler
             else if (dataType.IsBinary) { propertyType = typeof(byte[]); }
             else if (dataType.IsUuid) { propertyType = typeof(Guid); }
             else if (dataType.IsEntity) { propertyType = typeof(Entity); }
-            else if (dataType.IsReferenceOnlyUnion) { propertyType = typeof(Entity); }
-            else if (dataType.IsObject || dataType.IsArray)
-            {
-                //propertyType = GetOrBuildType(variable.Binding, in module);
-            }
-            else if (dataType.IsUnion) { propertyType = typeof(Union); }
+            else if (dataType.IsObject) { propertyType = typeof(object); }
+            else if (dataType.IsArray) { propertyType = typeof(Array); }
 
             return propertyType;
         }
@@ -481,6 +481,7 @@ namespace DaJet.Compiler
             
             _ = IL.DeclareLocal(outputType); // Loc_0
             _ = IL.DeclareLocal(typeof(byte[])); // Loc_1
+            _ = IL.DeclareLocal(typeof(DateTime)); // Loc_2
 
             if (declare.Type.IsArray)
             {
@@ -509,6 +510,7 @@ namespace DaJet.Compiler
 
             // record.Ссылка = new Entity(123, new Guid(buffer));
 
+            //MsDataMapper.YearOffset = 2000;
             MsDataMapper.MapOutput(in outputType, in metadata, in IL);
 
             // _context.OutputProperty.Add(record);

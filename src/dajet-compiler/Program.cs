@@ -257,6 +257,12 @@ namespace DaJet.Compiler
                 Console.WriteLine(string.Join('\n', errors)); return;
             }
 
+            if (statements is not null && statements.Count > 0)
+            {
+                Console.WriteLine(statements[0].Sql);
+                Console.WriteLine("----");
+            }
+
             Compiler compiler = new();
             ScriptProcessor processor = compiler.Compile(in script, in statements);
 

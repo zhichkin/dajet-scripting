@@ -8,11 +8,12 @@ namespace DaJet.Compiler
 {
     internal static class MsDataMapper
     {
+        #region "STATIC METADATA FIELDS"
         private static readonly MethodInfo AsSpanOfBytes;
         private static readonly MethodInfo SpanOfBytesToReadOnly;
         private static readonly MethodInfo ReadInt32BigEndian;
-
         private static readonly MethodInfo IsDBNull;
+        private static readonly MethodInfo GetValue;
         private static readonly MethodInfo GetBytes;
         private static readonly MethodInfo GetByte;
         private static readonly MethodInfo GetInt16;
@@ -23,13 +24,18 @@ namespace DaJet.Compiler
         private static readonly MethodInfo DateTimeAddYears;
         private static readonly MethodInfo GetString;
         private static readonly FieldInfo Zero;
+        private static readonly MethodInfo ArrayEmpty;
+        private static readonly FieldInfo GuidEmpty;
         private static readonly FieldInfo StringEmpty;
         private static readonly FieldInfo DateTimeMinValue;
         private static readonly FieldInfo EntityUndefined;
         private static readonly FieldInfo UnionUndefined;
         private static readonly ConstructorInfo GuidCtor;
         private static readonly ConstructorInfo EntityCtor;
-
+        // Union type implicit conversion
+        private static readonly MethodInfo StringToUnion;
+        private static readonly MethodInfo EntityToUnion;
+        #endregion
         static MsDataMapper()
         {
             AsSpanOfBytes = typeof(MemoryExtensions)
@@ -51,6 +57,9 @@ namespace DaJet.Compiler
                 BindingFlags.Public | BindingFlags.Static, [typeof(ReadOnlySpan<byte>)]);
 
             IsDBNull = typeof(SqlDataReader).GetMethod(nameof(SqlDataReader.IsDBNull),
+                BindingFlags.Instance | BindingFlags.Public, [typeof(int)]);
+
+            GetValue = typeof(SqlDataReader).GetMethod(nameof(SqlDataReader.GetValue),
                 BindingFlags.Instance | BindingFlags.Public, [typeof(int)]);
 
             GetBytes = typeof(SqlDataReader).GetMethod(nameof(SqlDataReader.GetBytes),
@@ -84,6 +93,13 @@ namespace DaJet.Compiler
             Zero = typeof(decimal).GetField(nameof(decimal.Zero),
                 BindingFlags.Static | BindingFlags.Public);
 
+            ArrayEmpty = typeof(Array).GetMethod(nameof(Array.Empty),
+                BindingFlags.Static | BindingFlags.Public, Type.EmptyTypes)
+                .MakeGenericMethod([typeof(byte)]);
+
+            GuidEmpty = typeof(Guid).GetField(nameof(Guid.Empty),
+                BindingFlags.Static | BindingFlags.Public);
+
             StringEmpty = typeof(string).GetField(nameof(string.Empty),
                 BindingFlags.Static | BindingFlags.Public);
 
@@ -101,6 +117,19 @@ namespace DaJet.Compiler
 
             EntityCtor = typeof(Entity).GetConstructor(BindingFlags.Instance | BindingFlags.Public,
                 [typeof(int), typeof(Guid)]);
+
+            StringToUnion = typeof(Union).GetMethod("op_Implicit",
+                BindingFlags.Static | BindingFlags.Public, [typeof(string)]);
+
+            EntityToUnion = typeof(Union).GetMethod("op_Implicit",
+                BindingFlags.Static | BindingFlags.Public, [typeof(Entity)]);
+        }
+
+        internal static int YearOffset { get; set; }
+
+        internal static void MapInput()
+        {
+            //TODO
         }
 
         private static List<ColumnDefinition> Columns; // column ordinals in SqlDataReader
@@ -139,17 +168,23 @@ namespace DaJet.Compiler
         
         internal static void MapOutput(in Type output, in EntityDefinition metadata, in ILGenerator IL)
         {
+            // public abstract class SelectProcessor
             // protected virtual void Process(SqlDataReader reader)
-            // IL.Emit(OpCodes.Ldarg_0); // this SelectProcessor
-            // IL.Emit(OpCodes.Ldarg_1); // SqlDataReader
-            // IL.Emit(OpCodes.Ldloc_0); // output variable reference
-            // IL.Emit(OpCodes.Ldloc_1); // byte[16] buffer reference
+            // ARG 0 : this
+            // ARG 1 : reader
+            // LOC 0 : output variable reference
+            // LOC 1 : byte[16] buffer reference
+            // LOC 2 : DateTime to manipulate year offset
 
             FlattenColumns(in metadata);
 
-            for (int p = 0; p < metadata.Properties.Count; p++)
+            PropertyDefinition property;
+
+            List<PropertyDefinition> properties = metadata.Properties;
+
+            for (int i = 0; i < properties.Count; i++)
             {
-                PropertyDefinition property = metadata.Properties[p];
+                property = properties[i];
 
                 DataType target = property.Type;
 
@@ -355,9 +390,13 @@ namespace DaJet.Compiler
                 IL.Emit(OpCodes.Ldc_I4, ordinal);
                 IL.Emit(OpCodes.Callvirt, GetDateTime);
 
-                //IL.Emit(OpCodes.Ldobj, typeof(DateTime));
-                //IL.Emit(OpCodes.Ldc_I4, -2000);
-                //IL.Emit(OpCodes.Call, DateTimeAddYears);
+                if (YearOffset > 0)
+                {
+                    IL.Emit(OpCodes.Stloc_2);
+                    IL.Emit(OpCodes.Ldloca, 2);
+                    IL.Emit(OpCodes.Ldc_I4, -YearOffset);
+                    IL.Emit(OpCodes.Call, DateTimeAddYears);
+                }
 
                 IL.MarkLabel(_ENDIF);
 
@@ -368,8 +407,10 @@ namespace DaJet.Compiler
         {
             // _output.Свойство = reader.IsDBNull(ordinal) ? string.Empty : reader.GetString(ordinal);
 
-            MethodInfo setAccessor = output.GetProperty(property.Name,
-                BindingFlags.Instance | BindingFlags.Public).GetSetMethod();
+            PropertyInfo target = output.GetProperty(property.Name,
+                BindingFlags.Instance | BindingFlags.Public);
+
+            MethodInfo setAccessor = target.GetSetMethod();
 
             ColumnDefinition column = property.GetColumnByPurpose(ColumnPurpose.Value); // single value column
 
@@ -403,21 +444,118 @@ namespace DaJet.Compiler
 
                 IL.MarkLabel(_ENDIF);
 
+                if (target.PropertyType == typeof(Union))
+                {
+                    IL.Emit(OpCodes.Call, StringToUnion);
+                }
+
                 IL.Emit(OpCodes.Call, setAccessor);
             }
         }
-        private static void MapBinary(in Type output, in PropertyDefinition property, in ILGenerator IL) { }
-        private static void MapUuid(in Type output, in PropertyDefinition property, in ILGenerator IL) { }
-        private static void MapEntity(in Type output, in PropertyDefinition property, in ILGenerator IL)
+        private static void MapBinary(in Type output, in PropertyDefinition property, in ILGenerator IL)
+        {
+            // _output.Свойство = reader.IsDBNull(ordinal) ? Array.Empty<byte>() : (byte[])reader.GetValue(ordinal);
+
+            MethodInfo setAccessor = output.GetProperty(property.Name,
+                BindingFlags.Instance | BindingFlags.Public).GetSetMethod();
+
+            ColumnDefinition column = property.GetColumnByPurpose(ColumnPurpose.Value);
+
+            if (column is not null)
+            {
+                int ordinal = Columns.IndexOf(column);
+
+                Label _ELSE = IL.DefineLabel();
+                Label _ENDIF = IL.DefineLabel();
+
+                IL.Emit(OpCodes.Ldloc_0); // output variable reference
+
+                // if (reader.IsDBNull(ordinal))
+                IL.Emit(OpCodes.Ldarg_1); // reader
+                IL.Emit(OpCodes.Ldc_I4, ordinal);
+                IL.Emit(OpCodes.Callvirt, IsDBNull);
+                IL.Emit(OpCodes.Brfalse_S, _ELSE);
+
+                // TRUE
+                IL.Emit(OpCodes.Call, ArrayEmpty); // assign default value
+
+                IL.Emit(OpCodes.Br_S, _ENDIF);
+
+                IL.MarkLabel(_ELSE);
+
+                IL.Emit(OpCodes.Ldarg_1); // reader
+                IL.Emit(OpCodes.Ldc_I4, ordinal);
+                IL.Emit(OpCodes.Callvirt, GetValue);
+                IL.Emit(OpCodes.Castclass, typeof(byte[]));
+
+                IL.MarkLabel(_ENDIF);
+
+                IL.Emit(OpCodes.Call, setAccessor);
+            }
+        }
+        private static void MapUuid(in Type output, in PropertyDefinition property, in ILGenerator IL)
         {
             MethodInfo setAccessor = output.GetProperty(property.Name,
                 BindingFlags.Instance | BindingFlags.Public).GetSetMethod();
 
+            ColumnDefinition column = property.GetColumnByPurpose(ColumnPurpose.Value);
+
+            if (column is not null)
+            {
+                int ordinal = Columns.IndexOf(column);
+
+                Label _ELSE = IL.DefineLabel();
+                Label _ENDIF = IL.DefineLabel();
+
+                IL.Emit(OpCodes.Ldloc_0); // output variable reference
+
+                // if (reader.IsDBNull(ordinal))
+                IL.Emit(OpCodes.Ldarg_1); // reader
+                IL.Emit(OpCodes.Ldc_I4, ordinal);
+                IL.Emit(OpCodes.Callvirt, IsDBNull);
+                IL.Emit(OpCodes.Brfalse_S, _ELSE);
+
+                // TRUE
+                IL.Emit(OpCodes.Ldsfld, GuidEmpty); // assign default value
+
+                IL.Emit(OpCodes.Br_S, _ENDIF);
+
+                IL.MarkLabel(_ELSE);
+
+                // reader.GetBytes(ordinal, 0L, buffer, 0, 16);
+                IL.Emit(OpCodes.Ldarg_1); // reader
+                IL.Emit(OpCodes.Ldc_I4, ordinal); // ordinal
+                IL.Emit(OpCodes.Ldc_I4_0); // 0
+                IL.Emit(OpCodes.Conv_I8); // 0 -> 0L
+                IL.Emit(OpCodes.Ldloc_1); // byte[16] buffer reference
+                IL.Emit(OpCodes.Ldc_I4_0); // buffer start
+                IL.Emit(OpCodes.Ldc_I4, 16); // bytes to read
+                IL.Emit(OpCodes.Callvirt, GetBytes);
+                IL.Emit(OpCodes.Pop); // remove return value from stack
+
+                // _output.Свойство = buffer[0] != 0;
+                IL.Emit(OpCodes.Ldloc_1); // byte[16] buffer reference
+                IL.Emit(OpCodes.Newobj, GuidCtor);
+
+                IL.MarkLabel(_ENDIF);
+
+                IL.Emit(OpCodes.Call, setAccessor);
+            }
+        }
+        private static void MapEntity(in Type output, in PropertyDefinition property, in ILGenerator IL)
+        {
+            PropertyInfo target = output.GetProperty(property.Name,
+                BindingFlags.Instance | BindingFlags.Public);
+            
+            MethodInfo setAccessor = target.GetSetMethod();
+
             int ordinal;
+
+            ColumnDefinition column;
 
             // single value column
 
-            ColumnDefinition column = property.GetColumnByPurpose(ColumnPurpose.Value); // binary(16)
+            column = property.GetColumnByPurpose(ColumnPurpose.Value); // binary(16)
 
             if (column is not null) // binary(16)
             {
@@ -519,6 +657,12 @@ namespace DaJet.Compiler
             IL.Emit(OpCodes.Ldloc_1); // byte[16] buffer reference
             IL.Emit(OpCodes.Newobj, GuidCtor);
             IL.Emit(OpCodes.Newobj, EntityCtor);
+
+            if (target.PropertyType == typeof(Union))
+            {
+                IL.Emit(OpCodes.Call, EntityToUnion);
+            }
+
             IL.Emit(OpCodes.Call, setAccessor);
         }
         private static void MapUnion(in Type output, in PropertyDefinition property, in ILGenerator IL)
@@ -559,30 +703,32 @@ namespace DaJet.Compiler
                     IL.DefineLabel()  // 5 = Строка
                     ];
                 IL.Emit(OpCodes.Switch, cases); // default - Ссылка
-                IL.Emit(OpCodes.Br_S, defaultCase);
+                IL.Emit(OpCodes.Br, defaultCase);
                 
                 IL.MarkLabel(cases[0]); // Неопределено
                 MapUndefined(in output, in property, in IL);
-                IL.Emit(OpCodes.Br_S, endOfSwitch);
+                IL.Emit(OpCodes.Br, endOfSwitch);
 
                 IL.MarkLabel(cases[1]); // Булево
-                MapBoolean(in output, in property, in IL);
-                IL.Emit(OpCodes.Br_S, endOfSwitch);
+                //MapBoolean(in output, in property, in IL);
+                IL.Emit(OpCodes.Br, endOfSwitch);
 
                 IL.MarkLabel(cases[2]); // Число
-                MapDecimal(in output, in property, in IL);
-                IL.Emit(OpCodes.Br_S, endOfSwitch);
+                //MapDecimal(in output, in property, in IL);
+                IL.Emit(OpCodes.Br, endOfSwitch);
 
                 IL.MarkLabel(cases[3]); // Дата
-                MapDateTime(in output, in property, in IL);
-                IL.Emit(OpCodes.Br_S, endOfSwitch);
+                //MapDateTime(in output, in property, in IL);
+                IL.Emit(OpCodes.Br, endOfSwitch);
 
                 IL.MarkLabel(cases[4]); // Строка
                 MapString(in output, in property, in IL);
-                IL.Emit(OpCodes.Br_S, endOfSwitch);
+                IL.Emit(OpCodes.Br, endOfSwitch);
 
                 IL.MarkLabel(defaultCase); // 0x08 Ссылка
                 MapEntity(in output, in property, in IL);
+                //IL.Emit(OpCodes.Br, endOfSwitch);
+
                 IL.MarkLabel(endOfSwitch);
             }
             else // _TRef + _RRef
