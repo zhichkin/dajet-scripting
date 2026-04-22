@@ -179,33 +179,6 @@ namespace DaJet.Compiler
 
             return property;
         }
-        private Type GetPropertyType(DataType dataType)
-        {
-            Type propertyType = null;
-
-            if (dataType.IsUnion)
-            {
-                propertyType = dataType.IsReferenceOnlyUnion ? typeof(Entity) : typeof(Union);
-            }
-            else if (dataType.IsBoolean) { propertyType = typeof(bool); }
-            else if (dataType.IsInteger)
-            {
-                if (dataType.Size == 1) { propertyType = dataType.IsSigned ? typeof(sbyte) : typeof(byte); }
-                else if (dataType.Size == 2) { propertyType = dataType.IsSigned ? typeof(short) : typeof(ushort); }
-                else if (dataType.Size == 4) { propertyType = dataType.IsSigned ? typeof(int) : typeof(uint); }
-                else { propertyType = dataType.IsSigned ? typeof(long) : typeof(ulong); }
-            }
-            else if (dataType.IsDecimal) { propertyType = typeof(decimal); }
-            else if (dataType.IsDateTime) { propertyType = typeof(DateTime); }
-            else if (dataType.IsString) { propertyType = typeof(string); }
-            else if (dataType.IsBinary) { propertyType = typeof(byte[]); }
-            else if (dataType.IsUuid) { propertyType = typeof(Guid); }
-            else if (dataType.IsEntity) { propertyType = typeof(Entity); }
-            else if (dataType.IsObject) { propertyType = typeof(object); }
-            else if (dataType.IsArray) { propertyType = typeof(Array); }
-
-            return propertyType;
-        }
         private Type GetOrBuildType(in EntityDefinition entity, in ModuleBuilder module)
         {
             string typeName = "__" + entity.Name.TrimStart('@');
@@ -214,7 +187,7 @@ namespace DaJet.Compiler
 
             foreach (PropertyDefinition property in entity.Properties)
             {
-                Type propertyType = GetPropertyType(property.Type);
+                Type propertyType = property.Type.MapToType();
 
                 _ = BuildProperty(type, property.Name, propertyType);
             }
@@ -241,7 +214,7 @@ namespace DaJet.Compiler
             }
             else
             {
-                propertyType = GetPropertyType(variable.Type);
+                propertyType = variable.Type.MapToType();
             }
 
             if (propertyType is null)
@@ -406,9 +379,13 @@ namespace DaJet.Compiler
             IL.Emit(OpCodes.Callvirt, get_Parameters);
             IL.Emit(OpCodes.Callvirt, clear_Parameters);
 
+            ExpressionCompiler expression = new(in context, ScriptContext);
+
             for (int p = 0; p < input.Count; p++)
             {
                 SyntaxNode node = input[p];
+
+                Type source = expression.Evaluate(in node, in IL); // compare source type to target ?
 
                 if (node is VariableReference variable)
                 {
@@ -440,6 +417,10 @@ namespace DaJet.Compiler
                         //    IL.Emit(OpCodes.Callvirt, add_With_Value);
                         //}
                     }
+                }
+                else if (node is MemberAccessExpression memberAccess)
+                {
+
                 }
             }
 

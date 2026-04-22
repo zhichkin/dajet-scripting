@@ -1,6 +1,8 @@
-﻿using DaJet.TypeSystem;
+﻿using DaJet.Scripting.Model;
+using DaJet.TypeSystem;
 using Microsoft.Data.SqlClient;
 using System.Buffers.Binary;
+using System.Linq.Expressions;
 using System.Reflection;
 using System.Reflection.Emit;
 
@@ -14,7 +16,12 @@ namespace DaJet.Compiler
         private static readonly MethodInfo AsSpanOfBytes;
         private static readonly MethodInfo SpanOfBytesToReadOnly;
         private static readonly MethodInfo ReadInt32BigEndian;
-        
+
+        // SqlCommand methods
+        private static readonly MethodInfo GetParameters;
+        private static readonly MethodInfo ParametersClear;
+        private static readonly MethodInfo AddWithValue;
+
         // SqlDataReader methods
         private static readonly MethodInfo IsDBNull;
         private static readonly MethodInfo GetValue;
@@ -52,6 +59,21 @@ namespace DaJet.Compiler
         
         static MsDataMapper()
         {
+            GetParameters = typeof(SqlCommand)
+                .GetProperty(nameof(SqlCommand.Parameters),
+                BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly)
+                .GetGetMethod();
+
+            ParametersClear = typeof(SqlParameterCollection)
+                .GetMethod(nameof(SqlParameterCollection.Clear),
+                BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly,
+                Type.EmptyTypes);
+
+            AddWithValue = typeof(SqlParameterCollection)
+                .GetMethod(nameof(SqlParameterCollection.AddWithValue),
+                BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly,
+                [typeof(string), typeof(object)]);
+
             AsSpanOfBytes = typeof(MemoryExtensions)
                 .GetMethods(BindingFlags.Public | BindingFlags.Static)
                 .Where(m => m.Name == nameof(MemoryExtensions.AsSpan)
@@ -150,9 +172,58 @@ namespace DaJet.Compiler
 
         internal static int YearOffset { get; set; }
 
-        internal static void MapInput()
+        internal static void MapInput(in FieldInfo context, in Dictionary<string, PropertyInfo> properties, in List<SyntaxNode> input, in ILGenerator IL)
         {
-            //TODO
+            // public abstract class SelectProcessor
+            // protected virtual void Configure(SqlCommand command)
+            // ARG 0 : this
+            // ARG 1 : command
+            // this._context : Ссылка на родительский ScriptProcessor
+            // input : Список входящих данных - переменных скрипта
+
+            ExpressionCompiler expression = new(in context, in properties);
+
+            // _command.Parameters.Clear();
+            IL.Emit(OpCodes.Ldarg_1);
+            IL.Emit(OpCodes.Callvirt, GetParameters);
+            IL.Emit(OpCodes.Callvirt, ParametersClear);
+
+            for (int i = 0; i < input.Count; i++)
+            {
+                SyntaxNode node = input[i];
+
+                Type source = expression.Evaluate(in node, in IL); // compare source type to target ?
+
+                if (node is VariableReference variable)
+                {
+                    if (properties.TryGetValue(variable.Identifier, out PropertyInfo property))
+                    {
+                        // command.Parameters.AddWithValue("p0", DBNull.Value);
+
+                        // command.Parameters.AddWithValue("p0", _context.Свойство);
+                        IL.Emit(OpCodes.Ldarg_1);
+                        IL.Emit(OpCodes.Callvirt, GetParameters);
+                        IL.Emit(OpCodes.Ldstr, $"p{i}");
+                        IL.Emit(OpCodes.Ldarg_0); // this
+                        IL.Emit(OpCodes.Ldfld, context);
+                        IL.Emit(OpCodes.Callvirt, property.GetGetMethod());
+
+                        if (property.PropertyType.IsValueType)
+                        {
+                            //TODO: box value type
+                            //IL.Emit(OpCodes.Box, typeof(decimal)); box [System.Runtime]System.Decimal
+                        }
+
+                        IL.Emit(OpCodes.Callvirt, AddWithValue);
+
+                        IL.Emit(OpCodes.Pop); // Убираем со стека SqlParameter, который возвращает AddWithValue
+                    }
+                }
+                else if (node is MemberAccessExpression memberAccess)
+                {
+                    //TODO: get member value recursively
+                }
+            }
         }
 
         private static List<ColumnDefinition> Columns; // column ordinals in SqlDataReader
@@ -171,22 +242,6 @@ namespace DaJet.Compiler
                     Columns.Add(property.Columns[c]);
                 }
             }
-        }
-        private static ColumnDefinition GetColumnByPurpose(this PropertyDefinition property, ColumnPurpose purpose)
-        {
-            ColumnDefinition column;
-
-            for (int i = 0; i < property.Columns.Count; i++)
-            {
-                column = property.Columns[i];
-
-                if (column.Purpose == purpose)
-                {
-                    return column;
-                }
-            }
-
-            return null;
         }
         
         internal static void MapOutput(in Type output, in EntityDefinition metadata, in ILGenerator IL)
