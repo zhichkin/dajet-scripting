@@ -1,11 +1,14 @@
 ﻿using DaJet.TypeSystem;
 using Microsoft.Data.SqlClient;
+using System.Buffers.Text;
 using System.Data;
 
 namespace DaJet.Compiler
 {
     public abstract class SelectProcessor
     {
+        protected readonly static byte[] TRUE = [0x01];
+        protected readonly static byte[] FALSE = [0x00];
         public int YearOffset { get; set; }
         public string SqlCommand { get; set; }
         public string ConnectionString { get; set; }
@@ -73,7 +76,27 @@ namespace DaJet.Compiler
         }
         protected virtual void Configure(SqlCommand command) // input
         {
-            // set command parameters
+            bool value = true;
+            command.Parameters.Clear();
+            if (value)
+            {
+                command.Parameters.AddWithValue("boolean", new byte[1] { 0x01 });
+            }
+            else
+            {
+                command.Parameters.AddWithValue("boolean", new byte[1] { 0x00 });
+            }
+            command.Parameters.AddWithValue("boolean", true);
+            command.Parameters.AddWithValue("integer", 1234);
+            command.Parameters.AddWithValue("decimal", 5_000_000_000_000.2M);
+            
+            SqlParameter parameter = command.Parameters.AddWithValue("datetime", DateTime.Now);
+            parameter.SqlDbType = SqlDbType.DateTime2;
+
+            command.Parameters.AddWithValue("string", "test");
+            command.Parameters.AddWithValue("binary", new byte[16]);
+            command.Parameters.AddWithValue("uuid", Guid.NewGuid());
+            command.Parameters.AddWithValue("entity", Entity.Undefined.Identity.ToByteArray());
         }
         protected virtual void Process(SqlDataReader reader) // output
         {

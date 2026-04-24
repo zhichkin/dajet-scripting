@@ -93,6 +93,8 @@ namespace DaJet.Compiler
             IL.Emit(OpCodes.Ldarg_0);
             IL.Emit(OpCodes.Call, ctor);
 
+            ExpressionCompiler expression = new(type, ScriptContext);
+
             foreach (SyntaxNode node in script.Statements)
             {
                 if (node is DeclareStatement variable)
@@ -101,13 +103,19 @@ namespace DaJet.Compiler
                     {
                         if (variable.Initializer is ScalarExpression scalar)
                         {
-                            if (scalar.Token == Token.String)
-                            {
-                                // this.Свойство = "ЭтоСтрока";
-                                IL.Emit(OpCodes.Ldarg_0);
-                                IL.Emit(OpCodes.Ldstr, scalar.Literal);
-                                IL.Emit(OpCodes.Callvirt, property.GetSetMethod());
-                            }
+                            //if (scalar.Token == Token.String)
+                            //{
+                            //    // this.Свойство = "ЭтоСтрока";
+                            //    IL.Emit(OpCodes.Ldarg_0);
+                            //    IL.Emit(OpCodes.Ldstr, scalar.Literal);
+                            //    IL.Emit(OpCodes.Callvirt, property.GetSetMethod());
+                            //}
+
+                            IL.Emit(OpCodes.Ldarg_0);
+
+                            Type value = expression.Evaluate(variable.Initializer, in IL);
+                            
+                            IL.Emit(OpCodes.Callvirt, property.GetSetMethod());
                         }
                         else
                         {
@@ -242,12 +250,12 @@ namespace DaJet.Compiler
 
             IL.Emit(OpCodes.Ret);
         }
+        
         private void Compile(in SyntaxNode node, in ILGenerator IL)
         {
             if (node is UseStatement use) { Compile(in use, in IL); }
             else if (node is SelectStatement select) { Compile(in select, in IL); }
         }
-
         private void Compile(in UseStatement statement, in ILGenerator IL)
         {
             //IL.Emit(); // begin transaction scope
@@ -358,10 +366,6 @@ namespace DaJet.Compiler
         }
         private void SelectProcessor_Configure(in TypeBuilder type, in List<SyntaxNode> input, in FieldInfo context)
         {
-            MethodInfo get_Parameters = typeof(SqlCommand).GetProperty("Parameters", BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly).GetGetMethod();
-            MethodInfo clear_Parameters = typeof(SqlParameterCollection).GetMethod("Clear", BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly, Type.EmptyTypes);
-            MethodInfo add_With_Value = typeof(SqlParameterCollection).GetMethod("AddWithValue", BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly, [typeof(string), typeof(object)]);
-
             MethodAttributes attributes = MethodAttributes.Public
                 | MethodAttributes.Virtual
                 | MethodAttributes.HideBySig;
@@ -369,60 +373,9 @@ namespace DaJet.Compiler
             MethodBuilder method = type.DefineMethod("Configure", attributes, typeof(void), [typeof(SqlCommand)]);
 
             ILGenerator IL = method.GetILGenerator();
-            // SqlCommand _command = command;
-            LocalBuilder command = IL.DeclareLocal(typeof(SqlCommand));
-            IL.Emit(OpCodes.Ldarg_1);
-            IL.Emit(OpCodes.Stloc_0);
 
-            // _command.Parameters.Clear();
-            IL.Emit(OpCodes.Ldloc_0);
-            IL.Emit(OpCodes.Callvirt, get_Parameters);
-            IL.Emit(OpCodes.Callvirt, clear_Parameters);
-
-            ExpressionCompiler expression = new(in context, ScriptContext);
-
-            for (int p = 0; p < input.Count; p++)
-            {
-                SyntaxNode node = input[p];
-
-                Type source = expression.Evaluate(in node, in IL); // compare source type to target ?
-
-                if (node is VariableReference variable)
-                {
-                    if (ScriptContext.TryGetValue(variable.Identifier, out PropertyInfo property))
-                    {
-                        // command.Parameters.AddWithValue("p0", DBNull.Value);
-                        IL.Emit(OpCodes.Ldloc_0);
-                        IL.Emit(OpCodes.Callvirt, get_Parameters);
-                        IL.Emit(OpCodes.Ldstr, $"p{p}");
-                        IL.Emit(OpCodes.Ldarg_0); // this
-                        IL.Emit(OpCodes.Ldfld, context);
-                        IL.Emit(OpCodes.Callvirt, property.GetGetMethod());
-                        IL.Emit(OpCodes.Callvirt, add_With_Value);
-
-                        //if (variable.Binding is DeclareStatement declare)
-                        //{
-                        //    if (declare.Type.IsDecimal)
-                        //    {
-                        //        IL.Emit(OpCodes.Box, typeof(decimal)) box [System.Runtime]System.Decimal
-                        //        IL.Emit(OpCodes.Callvirt, add_With_Value);
-                        //    }
-                        //}
-
-                        IL.Emit(OpCodes.Pop); // Убираем со стека SqlParameter, который возвращает AddWithValue
-
-                        //if (value is null)
-                        //{
-                        //    IL.Emit(OpCodes.Ldsfld, typeof(DBNull).GetField("Value"));
-                        //    IL.Emit(OpCodes.Callvirt, add_With_Value);
-                        //}
-                    }
-                }
-                else if (node is MemberAccessExpression memberAccess)
-                {
-
-                }
-            }
+            //MsDataMapper.YearOffset = 2000;
+            MsDataMapper.MapInput(in input, in context, ScriptContext, in IL);
 
             IL.Emit(OpCodes.Ret);
         }

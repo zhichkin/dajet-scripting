@@ -1,5 +1,6 @@
-﻿using DaJet.Scripting.Model;
-using DaJet.TypeSystem;
+﻿using DaJet.Scripting;
+using DaJet.Scripting.Model;
+using System.Globalization;
 using System.Reflection;
 using System.Reflection.Emit;
 
@@ -41,24 +42,112 @@ namespace DaJet.Compiler
         }
         internal Type Evaluate(in ScalarExpression node, in ILGenerator IL)
         {
-            return null;
+            Type type = null;
+
+            if (node.Token == Token.Boolean)
+            {
+                if (node.Literal == "TRUE")
+                {
+                    IL.Emit(OpCodes.Ldc_I4_1);
+                }
+                else
+                {
+                    IL.Emit(OpCodes.Ldc_I4_0);
+                }
+
+                type = typeof(bool);
+            }
+            else if (node.Token == Token.Integer)
+            {
+                if (int.TryParse(node.Literal, out int integer))
+                {
+                    IL.Emit(OpCodes.Ldc_I4, integer);
+                }
+
+                type = typeof(int);
+            }
+            else if (node.Token == Token.Number || node.Token == Token.Decimal)
+            {
+                ConstructorInfo DecimalCtor = typeof(decimal).GetConstructor(
+                    BindingFlags.Instance | BindingFlags.Public,
+                    [typeof(int), typeof(int), typeof(int), typeof(bool), typeof(byte)]);
+
+                if (decimal.TryParse(node.Literal, CultureInfo.InvariantCulture, out decimal number))
+                {
+                    int[] bits = decimal.GetBits(number);
+                    bool negative = (bits[3] & 0x80000000) != 0;
+                    int scale = (byte)((bits[3] >> 16) & 0x7f);
+                    IL.Emit(OpCodes.Ldc_I4, bits[0]);
+                    IL.Emit(OpCodes.Ldc_I4, bits[1]);
+                    IL.Emit(OpCodes.Ldc_I4, bits[2]);
+                    IL.Emit(negative ? OpCodes.Ldc_I4_1 : OpCodes.Ldc_I4_0);
+                    IL.Emit(OpCodes.Ldc_I4, scale);
+                    IL.Emit(OpCodes.Newobj, DecimalCtor);
+                }
+
+                type = typeof(decimal);
+            }
+            else if (node.Token == Token.DateTime)
+            {
+                ConstructorInfo DateTimeCtor = typeof(DateTime).GetConstructor(
+                    BindingFlags.Instance | BindingFlags.Public,
+                    [typeof(int), typeof(int), typeof(int), typeof(int), typeof(int), typeof(int)]);
+
+                if (DateTime.TryParse(node.Literal, out DateTime datetime))
+                {
+                    IL.Emit(OpCodes.Ldc_I4, datetime.Year);
+                    IL.Emit(OpCodes.Ldc_I4, datetime.Month);
+                    IL.Emit(OpCodes.Ldc_I4, datetime.Day);
+                    IL.Emit(OpCodes.Ldc_I4, datetime.Hour);
+                    IL.Emit(OpCodes.Ldc_I4, datetime.Minute);
+                    IL.Emit(OpCodes.Ldc_I4, datetime.Second);
+                    IL.Emit(OpCodes.Newobj, DateTimeCtor);
+                }
+
+                type = typeof(DateTime);
+            }
+            else if (node.Token == Token.String)
+            {
+                IL.Emit(OpCodes.Ldstr, node.Literal);
+
+                type = typeof(string);
+            }
+            else if (node.Token == Token.Binary)
+            {
+                byte[] hex = Convert.FromHexString(node.Literal);
+
+                //IL.Emit(OpCodes.Stelem, typeof(byte));
+
+                type = typeof(byte[]);
+            }
+            else if (node.Token == Token.Uuid)
+            {
+                ConstructorInfo GuidCtor = typeof(Guid).GetConstructor(
+                    BindingFlags.Instance | BindingFlags.Public,
+                    [typeof(string)]);
+
+                IL.Emit(OpCodes.Ldstr, node.Literal);
+                IL.Emit(OpCodes.Newobj, GuidCtor);
+
+                type = typeof(Guid);
+            }
+
+            return type;
         }
         internal Type Evaluate(in VariableReference node, in ILGenerator IL)
         {
-            //IL.Emit(OpCodes.Ldarg_0); // ScriptProcessor : this (without field)
+            IL.Emit(OpCodes.Ldarg_0); // ScriptProcessor : this (without field)
 
             if (_context is not null) // SelectProcessor : this._context
             {
-                //IL.Emit(OpCodes.Ldfld, _context);
+                IL.Emit(OpCodes.Ldfld, _context);
             }
-
-            string propertyName = node.Identifier.TrimStart('@');
 
             if (_properties.TryGetValue(node.Identifier, out PropertyInfo property))
             {
                 MemberInfo getAccessor = property.GetGetMethod();
 
-                //IL.Emit(OpCodes.Callvirt, property.GetGetMethod());
+                IL.Emit(OpCodes.Callvirt, property.GetGetMethod());
             }
 
             return property.PropertyType;

@@ -2,7 +2,7 @@
 using DaJet.TypeSystem;
 using Microsoft.Data.SqlClient;
 using System.Buffers.Binary;
-using System.Linq.Expressions;
+using System.Data;
 using System.Reflection;
 using System.Reflection.Emit;
 
@@ -13,6 +13,7 @@ namespace DaJet.Compiler
         #region "STATIC METADATA FIELDS"
 
         // Array of bytes (buffer) processing
+        private static readonly MethodInfo ToByteArray;
         private static readonly MethodInfo AsSpanOfBytes;
         private static readonly MethodInfo SpanOfBytesToReadOnly;
         private static readonly MethodInfo ReadInt32BigEndian;
@@ -34,21 +35,33 @@ namespace DaJet.Compiler
         private static readonly MethodInfo GetDateTime;
         private static readonly MethodInfo DateTimeAddYears;
         private static readonly MethodInfo GetString;
-        
+
+        // SqlParameter properties
+        private static readonly MethodInfo SetSqlDbType;
+
         // Default values
         private static readonly FieldInfo Zero;
         private static readonly MethodInfo ArrayEmpty;
         private static readonly FieldInfo GuidEmpty;
         private static readonly FieldInfo StringEmpty;
         private static readonly FieldInfo DateTimeMinValue;
-        private static readonly FieldInfo EntityUndefined;
-        private static readonly FieldInfo UnionUndefined;
-        
+        private static readonly FieldInfo TRUE; // byte[1] { 0x01 }
+        private static readonly FieldInfo FALSE; // byte[1] { 0x00 }
+
         // Constructors
         private static readonly ConstructorInfo GuidCtor;
+        private static readonly ConstructorInfo Int32ToDecimal;
+        private static readonly ConstructorInfo Int64ToDecimal;
+        private static readonly ConstructorInfo UInt32ToDecimal;
+        private static readonly ConstructorInfo UInt64ToDecimal;
+
+        // Entity type
+        private static readonly FieldInfo EntityUndefined;
         private static readonly ConstructorInfo EntityCtor;
+        private static readonly PropertyInfo EntityIdentity;
 
         // Union type implicit conversion
+        private static readonly FieldInfo UnionUndefined;
         private static readonly MethodInfo BooleanToUnion;
         private static readonly MethodInfo DecimalToUnion;
         private static readonly MethodInfo DateTimeToUnion;
@@ -59,6 +72,12 @@ namespace DaJet.Compiler
         
         static MsDataMapper()
         {
+            TRUE = typeof(SelectProcessor).GetField(nameof(TRUE),
+                BindingFlags.Static | BindingFlags.NonPublic);
+            
+            FALSE = typeof(SelectProcessor).GetField(nameof(FALSE),
+                BindingFlags.Static | BindingFlags.NonPublic);
+
             GetParameters = typeof(SqlCommand)
                 .GetProperty(nameof(SqlCommand.Parameters),
                 BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly)
@@ -68,6 +87,10 @@ namespace DaJet.Compiler
                 .GetMethod(nameof(SqlParameterCollection.Clear),
                 BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly,
                 Type.EmptyTypes);
+
+            SetSqlDbType = typeof(SqlParameter).GetProperty(nameof(SqlParameter.SqlDbType),
+                BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly)
+                .GetSetMethod();
 
             AddWithValue = typeof(SqlParameterCollection)
                 .GetMethod(nameof(SqlParameterCollection.AddWithValue),
@@ -136,6 +159,9 @@ namespace DaJet.Compiler
             GuidEmpty = typeof(Guid).GetField(nameof(Guid.Empty),
                 BindingFlags.Static | BindingFlags.Public);
 
+            ToByteArray = typeof(Guid).GetMethod(nameof(Guid.ToByteArray),
+                BindingFlags.Instance | BindingFlags.Public, Type.EmptyTypes);
+
             StringEmpty = typeof(string).GetField(nameof(string.Empty),
                 BindingFlags.Static | BindingFlags.Public);
 
@@ -153,6 +179,21 @@ namespace DaJet.Compiler
 
             EntityCtor = typeof(Entity).GetConstructor(BindingFlags.Instance | BindingFlags.Public,
                 [typeof(int), typeof(Guid)]);
+
+            EntityIdentity = typeof(Entity).GetProperty(nameof(Entity.Identity),
+                BindingFlags.Instance | BindingFlags.Public);
+
+            Int32ToDecimal = typeof(decimal).GetConstructor(BindingFlags.Instance | BindingFlags.Public,
+                [typeof(int)]);
+
+            UInt32ToDecimal = typeof(decimal).GetConstructor(BindingFlags.Instance | BindingFlags.Public,
+                [typeof(uint)]);
+
+            Int64ToDecimal = typeof(decimal).GetConstructor(BindingFlags.Instance | BindingFlags.Public,
+                [typeof(long)]);
+
+            UInt64ToDecimal = typeof(decimal).GetConstructor(BindingFlags.Instance | BindingFlags.Public,
+                [typeof(ulong)]);
 
             BooleanToUnion = typeof(Union).GetMethod("op_Implicit",
                 BindingFlags.Static | BindingFlags.Public, [typeof(bool)]);
@@ -172,56 +213,120 @@ namespace DaJet.Compiler
 
         internal static int YearOffset { get; set; }
 
-        internal static void MapInput(in FieldInfo context, in Dictionary<string, PropertyInfo> properties, in List<SyntaxNode> input, in ILGenerator IL)
+        internal static void MapInput(in List<SyntaxNode> input, in FieldInfo context, in Dictionary<string, PropertyInfo> properties, in ILGenerator IL)
         {
             // public abstract class SelectProcessor
             // protected virtual void Configure(SqlCommand command)
             // ARG 0 : this
             // ARG 1 : command
+            // LOC 0 : Guid local value to call Guid.ToByteArray()
+            // LOC 1 : Entity local value to call Entity.Identity
+            // LOC 2 : DateTime to manipulate year offset
             // this._context : Ссылка на родительский ScriptProcessor
             // input : Список входящих данных - переменных скрипта
 
-            ExpressionCompiler expression = new(in context, in properties);
+            _ = IL.DeclareLocal(typeof(Guid));     // LOC 0
+            _ = IL.DeclareLocal(typeof(Entity));   // LOC 1
+            _ = IL.DeclareLocal(typeof(DateTime)); // LOC 2
 
-            // _command.Parameters.Clear();
+            // command.Parameters.Clear();
             IL.Emit(OpCodes.Ldarg_1);
             IL.Emit(OpCodes.Callvirt, GetParameters);
             IL.Emit(OpCodes.Callvirt, ParametersClear);
+
+            ExpressionCompiler expression = new(in context, in properties);
 
             for (int i = 0; i < input.Count; i++)
             {
                 SyntaxNode node = input[i];
 
-                Type source = expression.Evaluate(in node, in IL); // compare source type to target ?
+                // command.Parameters.AddWithValue("p0", _context.Свойство);
 
-                if (node is VariableReference variable)
+                IL.Emit(OpCodes.Ldarg_1);
+                IL.Emit(OpCodes.Callvirt, GetParameters);
+                IL.Emit(OpCodes.Ldstr, $"p{i}");
+
+                Type value = expression.Evaluate(in node, in IL);
+
+                if (value == typeof(bool)) // convert to byte[1]
                 {
-                    if (properties.TryGetValue(variable.Identifier, out PropertyInfo property))
+                    Label _ELSE = IL.DefineLabel();
+                    Label _ENDIF = IL.DefineLabel();
+                    IL.Emit(OpCodes.Brfalse_S, _ELSE);
+                    IL.Emit(OpCodes.Ldsfld, TRUE); // 0x01
+                    IL.Emit(OpCodes.Br_S, _ENDIF);
+                    IL.MarkLabel(_ELSE);
+                    IL.Emit(OpCodes.Ldsfld, FALSE); // 0x00
+                    IL.MarkLabel(_ENDIF);
+
+                    value = typeof(byte[]);
+                }
+                else if (value == typeof(int))
+                {
+                    IL.Emit(OpCodes.Newobj, Int32ToDecimal); value = typeof(decimal);
+                }
+                else if (value == typeof(long))
+                {
+                    IL.Emit(OpCodes.Newobj, Int64ToDecimal); value = typeof(decimal);
+                }
+                else if (value == typeof(uint))
+                {
+                    IL.Emit(OpCodes.Newobj, UInt32ToDecimal); value = typeof(decimal);
+                }
+                else if (value == typeof(ulong))
+                {
+                    IL.Emit(OpCodes.Newobj, UInt64ToDecimal); value = typeof(decimal);
+                }
+                else if (value == typeof(DateTime))
+                {
+                    if (YearOffset > 0)
                     {
-                        // command.Parameters.AddWithValue("p0", DBNull.Value);
-
-                        // command.Parameters.AddWithValue("p0", _context.Свойство);
-                        IL.Emit(OpCodes.Ldarg_1);
-                        IL.Emit(OpCodes.Callvirt, GetParameters);
-                        IL.Emit(OpCodes.Ldstr, $"p{i}");
-                        IL.Emit(OpCodes.Ldarg_0); // this
-                        IL.Emit(OpCodes.Ldfld, context);
-                        IL.Emit(OpCodes.Callvirt, property.GetGetMethod());
-
-                        if (property.PropertyType.IsValueType)
-                        {
-                            //TODO: box value type
-                            //IL.Emit(OpCodes.Box, typeof(decimal)); box [System.Runtime]System.Decimal
-                        }
-
-                        IL.Emit(OpCodes.Callvirt, AddWithValue);
-
-                        IL.Emit(OpCodes.Pop); // Убираем со стека SqlParameter, который возвращает AddWithValue
+                        IL.Emit(OpCodes.Stloc_2);
+                        IL.Emit(OpCodes.Ldloca_S, 2);
+                        IL.Emit(OpCodes.Ldc_I4, YearOffset);
+                        IL.Emit(OpCodes.Call, DateTimeAddYears);
                     }
                 }
-                else if (node is MemberAccessExpression memberAccess)
+                else if (value == typeof(Guid)) // convert to byte[16]
                 {
-                    //TODO: get member value recursively
+                    IL.Emit(OpCodes.Stloc_0);
+                    IL.Emit(OpCodes.Ldloca_S, 0);
+                    IL.Emit(OpCodes.Call, ToByteArray);
+
+                    value = typeof(byte[]);
+                }
+                else if (value == typeof(Entity))
+                {
+                    // _context.Свойство.Identity.ToByteArray()
+
+                    IL.Emit(OpCodes.Stloc_1);
+                    IL.Emit(OpCodes.Ldloca_S, 1);
+                    IL.Emit(OpCodes.Call, EntityIdentity.GetGetMethod());
+
+                    IL.Emit(OpCodes.Stloc_0);
+                    IL.Emit(OpCodes.Ldloca_S, 0);
+                    IL.Emit(OpCodes.Call, ToByteArray);
+
+                    value = typeof(byte[]);
+                }
+
+                if (value.IsValueType)
+                {
+                    IL.Emit(OpCodes.Box, value);
+                }
+
+                IL.Emit(OpCodes.Callvirt, AddWithValue); // Возвращает на стек ссылку на SqlParameter
+
+                if (value == typeof(DateTime))
+                {
+                    // command.Parameters.AddWithValue("p2", _context.ДатаВремя).SqlDbType = SqlDbType.DateTime2;
+
+                    IL.Emit(OpCodes.Ldc_I4, (int)SqlDbType.DateTime2);
+                    IL.Emit(OpCodes.Callvirt, SetSqlDbType);
+                }
+                else
+                {
+                    IL.Emit(OpCodes.Pop); // Убираем со стека SqlParameter, который возвращает AddWithValue
                 }
             }
         }
