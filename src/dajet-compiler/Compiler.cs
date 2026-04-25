@@ -233,8 +233,11 @@ namespace DaJet.Compiler
             return BuildProperty(script, propertyName, propertyType);
         }
 
+        private int _counter;
         private void BuildScriptExecuteMethod(in Script script, in TypeBuilder type, in ModuleBuilder module)
         {
+            _counter = 0;
+
             MethodAttributes attributes = MethodAttributes.Public
                 | MethodAttributes.Virtual
                 | MethodAttributes.HideBySig;
@@ -250,7 +253,7 @@ namespace DaJet.Compiler
 
             IL.Emit(OpCodes.Ret);
         }
-        
+
         private void Compile(in SyntaxNode node, in ILGenerator IL)
         {
             if (node is UseStatement use) { Compile(in use, in IL); }
@@ -280,7 +283,9 @@ namespace DaJet.Compiler
                 return;
             }
 
-            TypeBuilder type = ScriptModule.DefineType("Select1", TypeAttributes.Public, SelectProcessorBase);
+            _counter++;
+
+            TypeBuilder type = ScriptModule.DefineType($"Select{_counter}", TypeAttributes.Public, SelectProcessorBase);
 
             MethodAttributes attributes = MethodAttributes.Public
                 | MethodAttributes.Virtual

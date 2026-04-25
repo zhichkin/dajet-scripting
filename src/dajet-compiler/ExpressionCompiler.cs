@@ -154,7 +154,25 @@ namespace DaJet.Compiler
         }
         internal Type Evaluate(in MemberAccessExpression node, in ILGenerator IL)
         {
-            return null;
+            List<string> members = node.GetAccessMembers(node.Identifier);
+
+            if (members.Count > 2) // TODO: allow more members
+            {
+                throw new InvalidOperationException("Too many members");
+            }
+
+            VariableReference variable = new() { Identifier = members[0] };
+
+            Type source = Evaluate(in variable, in IL);
+
+            PropertyInfo property = source.GetProperty(members[1],
+                BindingFlags.Instance | BindingFlags.Public);
+
+            IL.Emit(OpCodes.Callvirt, property.GetGetMethod());
+
+            source = property.PropertyType;
+
+            return source;
         }
         internal Type Evaluate(in FunctionExpression node, in ILGenerator IL)
         {

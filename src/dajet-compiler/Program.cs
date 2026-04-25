@@ -235,7 +235,7 @@ namespace DaJet.Compiler
             MetadataProvider.Add("PG_TEST", DataSourceType.PostgreSql, in PG_TEST);
 
             string source;
-            string filePath = $"{AppContext.BaseDirectory}scripts\\select_simple.djs";
+            string filePath = $"{AppContext.BaseDirectory}scripts\\select_member_access.djs";
 
             using (StreamReader reader = new(filePath, Encoding.UTF8))
             {
@@ -266,10 +266,13 @@ namespace DaJet.Compiler
                 Console.WriteLine(string.Join('\n', errors)); return;
             }
 
-            if (statements is not null && statements.Count > 0)
+            if (statements is not null)
             {
-                Console.WriteLine(statements[0].Sql);
-                Console.WriteLine("----");
+                foreach (SqlStatement statement in statements)
+                {
+                    Console.WriteLine(statement.Sql);
+                    Console.WriteLine("----");
+                }
             }
 
             Compiler compiler = new();
