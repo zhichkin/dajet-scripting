@@ -4,6 +4,7 @@ using DaJet.Metadata;
 using DaJet.Scripting;
 using DaJet.Scripting.Model;
 using DaJet.TypeSystem;
+using System.Reflection;
 using System.Text;
 using System.Text.Encodings.Web;
 using System.Text.Json;
@@ -34,7 +35,9 @@ namespace DaJet.Compiler
 
             //TestScriptBinding();
 
-            TestCompiler();
+            //TestCompiler();
+
+            CompileDefinitions();
         }
         private static void Test()
         {
@@ -252,7 +255,7 @@ namespace DaJet.Compiler
                 Console.WriteLine(error); return;
             }
 
-            Binder binder = new();
+            DaJet.Scripting.Binder binder = new();
 
             if (!binder.TryBind(in script, schema, out List<string> errors))
             {
@@ -292,6 +295,74 @@ namespace DaJet.Compiler
             {
                 Console.WriteLine("Compile and save");
             }
+        }
+
+        private static void CompileDefinitions()
+        {
+            string source;
+            string inputPath = $"{AppContext.BaseDirectory}scripts\\definitions.djs";
+            string outputFile = "C:\\GitHub\\dajet-scripting\\bld\\definitions.dll";
+
+            Console.WriteLine($"Input: {inputPath}");
+            Console.WriteLine("----");
+
+            using (StreamReader reader = new(inputPath, Encoding.UTF8))
+            {
+                source = reader.ReadToEnd();
+            }
+
+            Console.WriteLine(source);
+            Console.WriteLine("----");
+
+            Parser parser = new();
+
+            if (!parser.TryParse(in source, out Script script, out string error))
+            {
+                Console.WriteLine(error); return;
+            }
+
+            List<DefineStatement> definitions = new();
+
+            foreach (SyntaxNode node in script.Statements)
+            {
+                if (node is DefineStatement definition)
+                {
+                    definitions.Add(definition);
+                }
+            }
+
+            if (definitions.Count > 0)
+            {
+                UserDefinedTypes.Register(in definitions);
+            }
+
+            foreach (DefineStatement definition in definitions)
+            {
+                if (UserDefinedTypes.TryGet(definition.Identifier, out Type type))
+                {
+                    Console.WriteLine(type.FullName);
+
+                    foreach (PropertyInfo property in type.GetProperties())
+                    {
+                        Console.WriteLine($"   + {property.Name} [{property.PropertyType}]");
+                    }
+
+                    Console.WriteLine("---");
+                }
+            }
+
+            //Compiler compiler = new();
+
+            //try
+            //{
+            //    compiler.Compile(in script, in outputFile);
+
+            //    Console.WriteLine($"Output: {outputFile}");
+            //}
+            //catch (Exception exception)
+            //{
+            //    Console.WriteLine($"Output: {exception.Message}");
+            //}
         }
     }
 }

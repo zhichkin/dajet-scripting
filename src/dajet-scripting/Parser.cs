@@ -528,7 +528,7 @@ namespace DaJet.Scripting
 
 			return statement;
 		}
-        private SyntaxNode define_type()
+        private SyntaxNode define_statement()
 		{
 			DefineStatement statement = new();
 
@@ -834,7 +834,7 @@ namespace DaJet.Scripting
             else if (Match(Token.PROCESS)) { return process_statement(); }
             else if (Match(Token.WAIT)) { return wait_statement(); }
             else if (Match(Token.MODIFY)) { return modify_statement(); }
-            else if (Match(Token.DEFINE)) { return define_type(); }
+            else if (Match(Token.DEFINE)) { return define_statement(); }
             else if (Match(Token.EndOfStatement)) { return null; }
 
             Ignore();

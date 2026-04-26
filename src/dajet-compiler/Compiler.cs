@@ -48,6 +48,84 @@ namespace DaJet.Compiler
             return processor;
         }
 
+        public void Compile(in Script script, in string outputFile)
+        {
+            string assemblyName = Path.GetFileNameWithoutExtension(outputFile);
+
+            AssemblyName name = new(assemblyName);
+
+            PersistedAssemblyBuilder assembly = new(name, typeof(object).Assembly);
+
+            ModuleBuilder module = assembly.DefineDynamicModule(assemblyName);
+
+            ScriptModule = module;
+
+            CompileTypeDefinitions(in script);
+
+            assembly.Save(outputFile);
+        }
+        private void CompileTypeDefinitions(in Script script)
+        {
+            Dictionary<string, Type> registry = new();
+
+            Dictionary<string, DefineStatement> definitions = new();
+
+            foreach (SyntaxNode node in script.Statements)
+            {
+                if (node is DefineStatement definition)
+                {
+                    definitions.Add(definition.Identifier, definition);
+                }
+            }
+
+            foreach (SyntaxNode node in script.Statements)
+            {
+                if (node is DefineStatement definition)
+                {
+                    _ = GetOrCompileTypeDefinition(definition.Identifier, in  registry, in definitions);
+                }
+            }
+        }
+        private Type GetOrCompileTypeDefinition(in string schema, in Dictionary<string, Type> registry, in Dictionary<string, DefineStatement> definitions)
+        {
+            if (registry.TryGetValue(schema, out Type type))
+            {
+                return type;
+            }
+
+            if (!definitions.TryGetValue(schema, out DefineStatement definition))
+            {
+                throw new InvalidOperationException($"Definition of [{schema}] is not found!");
+            }
+
+            string typeName = definition.Identifier;
+
+            TypeBuilder builder = ScriptModule.DefineType(typeName, TypeAttributes.Public);
+
+            foreach (DefineProperty property in definition.Properties)
+            {
+                Type propertyType = property.Type.MapToType();
+
+                if (property.Type.IsObject || property.Type.IsArray)
+                {
+                    propertyType = GetOrCompileTypeDefinition(property.Schema, in registry, in definitions);
+                }
+
+                if (property.Type.IsArray)
+                {
+                    propertyType = typeof(List<>).MakeGenericType([propertyType]);
+                }
+
+                _ = BuildProperty(builder, property.Name, propertyType);
+            }
+
+            type = builder.CreateType();
+
+            registry.Add(typeName, type);
+
+            return type;
+        }
+        
         private ModuleBuilder ScriptModule;
         private TypeInfo ScriptProcessor = null;
         private Dictionary<string, PropertyInfo> ScriptContext = new();
