@@ -267,7 +267,7 @@ namespace DaJet.Compiler
         }
         private Type GetOrBuildType(in EntityDefinition entity, in ModuleBuilder module)
         {
-            string typeName = "__" + entity.Name.TrimStart('@');
+            string typeName = "AnonymousDataSchema." + entity.Name.TrimStart('@');
 
             TypeBuilder type = module.DefineType(typeName, TypeAttributes.Public);
 
@@ -288,7 +288,19 @@ namespace DaJet.Compiler
 
             if (variable.Type.IsObject || variable.Type.IsArray)
             {
-                if (variable.Binding is not null)
+                if (!string.IsNullOrEmpty(variable.Schema))
+                {
+                    if (!SchemaRegistry.TryGet(variable.Schema, out propertyType))
+                    {
+                        throw new InvalidOperationException($"Definition of [{variable.Schema}] is not found!");
+                    }
+
+                    if (variable.Type.IsArray)
+                    {
+                        propertyType = typeof(List<>).MakeGenericType([propertyType]);
+                    }
+                }
+                else if (variable.Binding is not null)
                 {
                     propertyType = GetOrBuildType(variable.Binding, in module);
 

@@ -40,6 +40,7 @@ namespace DaJet.Scripting
                 if (string.IsNullOrEmpty(source.Name)) // Источник данных - выражение
                 {
                     property.Name = column.Alias;
+
                     schema.Properties.Add(property);
 
                     if (column.Source is null) // Константа, функция, параметр или выражение
@@ -69,10 +70,8 @@ namespace DaJet.Scripting
                     throw new InvalidCastException("Property name missing");
                 }
 
-                //for (int c = 0; c < source.Columns.Count; c++)
-                //{
                 property.Columns = source.Columns;
-                //}
+                
                 schema.Properties.Add(property);
             }
 
@@ -228,7 +227,7 @@ namespace DaJet.Scripting
                 throw new InvalidCastException($"Invalid binding of MemberAccessExpression [{node.Identifier}]");
             }
 
-            if (!(declare.Binding is EntityDefinition entity))
+            if (declare.Binding is not EntityDefinition entity)
             {
                 throw new InvalidCastException($"Failed to get data type schema of MemberAccessExpression [{node.Identifier}]");
             }

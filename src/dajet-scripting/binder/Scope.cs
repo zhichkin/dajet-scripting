@@ -20,7 +20,7 @@ namespace DaJet.Scripting
         public Scope Parent { get; set; }
         ///<summary>Дочерние области видимости (логические)</summary>
         public List<Scope> Children { get; } = new();
-        public Dictionary<string, EntityDefinition> Types { get; } = new(); // DEFINE statement : object schema definitions 
+        
         public Dictionary<string, DeclareStatement> Variables { get; } = new(); // DECLARE statement
         public Dictionary<string, object> Tables { get; } = new(); // CTE (common table expression) or temporary tables
         public Dictionary<string, object> Aliases { get; } = new(); // table expression (subquery) or schema tables
@@ -93,22 +93,6 @@ namespace DaJet.Scripting
         }
         public Scope CloseScope() { return _ancestor; }
 
-        public EntityDefinition GetSchema(in string identifier)
-        {
-            Scope scope = this;
-
-            while (scope is not null)
-            {
-                if (scope.Types.TryGetValue(identifier, out EntityDefinition schema))
-                {
-                    return schema;
-                }
-
-                scope = scope.Parent;
-            }
-
-            return null;
-        }
         public DeclareStatement GetVariable(in string identifier)
         {
             Scope scope = this;

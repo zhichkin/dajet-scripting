@@ -26,6 +26,7 @@ namespace DaJet.Scripting
             }
 
             errors = _errors;
+
             _errors = null;
 
             return (errors.Count == 0);
@@ -42,7 +43,6 @@ namespace DaJet.Scripting
 
             else if (node is StatementBlock statement_block) { Bind(in statement_block); } // ?
 
-            else if (node is DefineStatement define) { Bind(in define); }
             else if (node is DeclareStatement declare) { Bind(in declare); }
             else if (node is VariableReference variable) { Bind(in variable); }
             else if (node is MemberAccessExpression member) { Bind(in member); }
@@ -151,54 +151,13 @@ namespace DaJet.Scripting
             }
         }
         
-        ///<summary>DEFINE statement</summary>
-        private void Bind(in DefineStatement node)
-        {
-            EntityDefinition schema = new()
-            {
-                Name = node.Identifier
-            };
-
-            DefineProperty property;
-            EntityDefinition entity;
-
-            for (int i = 0; i < node.Properties.Count; i++)
-            {
-                property = node.Properties[i];
-
-                if (property.Type.IsArray)
-                {
-                    entity = _scope.GetSchema(property.Schema);
-
-                    if (entity is null)
-                    {
-                        RegisterBindingError(node.Token, node.Identifier);
-                    }
-
-                    schema.Entities.Add(entity);
-                }
-                else
-                {
-                    schema.Properties.Add(new PropertyDefinition()
-                    {
-                        Name = property.Name,
-                        Type = property.Type,
-                        Purpose = PropertyPurpose.Property
-                    });
-                }
-            }
-
-            _scope.Types.Add(schema.Name, schema);
-        }
         private void Bind(in DeclareStatement node)
         {
             _scope.Variables.Add(node.Identifier, node);
 
             if (!string.IsNullOrEmpty(node.Schema))
             {
-                node.Binding = _scope.GetSchema(node.Schema);
-
-                if (node.Binding is null)
+                if (!SchemaRegistry.TryGet(node.Schema, out _))
                 {
                     RegisterBindingError(node.Token, node.Schema);
                 }
@@ -292,9 +251,11 @@ namespace DaJet.Scripting
                 if (declare.Binding is null)
                 {
                     EntityDefinition schema = DataMapper.InferSchema(in node);
-                    schema.Name = declare.Identifier;
+
+                    // Script processor property name - see compiler
+                    schema.Name = declare.Identifier.TrimStart('@');
+
                     declare.Binding = schema;
-                    declare.Schema = schema.Name;
                 }
             }
 

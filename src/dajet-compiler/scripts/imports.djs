@@ -1,4 +1,8 @@
 
+--IMPORT '/mnt/c/GitHub/dajet-scripting/src/dajet-compiler/bin/Debug/net10.0/scripts/imports/'
+
+IMPORT 'C:\GitHub\dajet-scripting\src\dajet-compiler\bin\Debug\net10.0\scripts\imports\'
+
 DEFINE ОбменДанными.Сообщение
 (
    Булево          boolean,
@@ -22,14 +26,4 @@ DEFINE ОбменДанными.ОбъектДанных
 DEFINE ОбменДанными.ЭлементМассива
 (
    Свойство decimal
-)
-
-DEFINE ОбменДанными.Класс1
-(
-   Класс2 object OF ОбменДанными.Класс2
-)
-
-DEFINE ОбменДанными.Класс2
-(
-   Класс1 object OF ОбменДанными.Класс1
 )

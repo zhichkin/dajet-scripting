@@ -35,9 +35,10 @@ namespace DaJet.Compiler
 
             //TestScriptBinding();
 
-            //TestCompiler();
+            TestCompiler();
 
-            CompileDefinitions();
+            //ImportDefinitions();
+            //RegisterDefinitions();
         }
         private static void Test()
         {
@@ -255,7 +256,22 @@ namespace DaJet.Compiler
                 Console.WriteLine(error); return;
             }
 
-            DaJet.Scripting.Binder binder = new();
+            List<DefineStatement> definitions = new();
+
+            foreach (SyntaxNode node in script.Statements)
+            {
+                if (node is DefineStatement definition)
+                {
+                    definitions.Add(definition);
+                }
+            }
+
+            if (!SchemaRegistry.TryRegister(in definitions, out error))
+            {
+                Console.WriteLine(error); return;
+            }
+
+            Scripting.Binder binder = new();
 
             if (!binder.TryBind(in script, schema, out List<string> errors))
             {
@@ -297,7 +313,31 @@ namespace DaJet.Compiler
             }
         }
 
-        private static void CompileDefinitions()
+        private static void ImportDefinitions()
+        {
+            string catalogPath = $"{AppContext.BaseDirectory}scripts\\imports\\"; // imports.djs // 
+
+            Console.WriteLine(catalogPath);
+            Console.WriteLine("---");
+
+            if (!SchemaRegistry.TryImport(in catalogPath, out string error))
+            {
+                Console.WriteLine(error); return;
+            }
+
+            foreach (Type type in SchemaRegistry.GetTypes())
+            {
+                Console.WriteLine(type.FullName);
+
+                foreach (PropertyInfo property in type.GetProperties())
+                {
+                    Console.WriteLine($"   + {property.Name} [{property.PropertyType}]");
+                }
+
+                Console.WriteLine("---");
+            }
+        }
+        private static void RegisterDefinitions()
         {
             string source;
             string inputPath = $"{AppContext.BaseDirectory}scripts\\definitions.djs";
@@ -331,14 +371,14 @@ namespace DaJet.Compiler
                 }
             }
 
-            if (definitions.Count > 0)
+            if (!SchemaRegistry.TryRegister(in definitions, out error))
             {
-                UserDefinedTypes.Register(in definitions);
+                Console.WriteLine(error); return;
             }
 
             foreach (DefineStatement definition in definitions)
             {
-                if (UserDefinedTypes.TryGet(definition.Identifier, out Type type))
+                if (SchemaRegistry.TryGet(definition.Identifier, out Type type))
                 {
                     Console.WriteLine(type.FullName);
 

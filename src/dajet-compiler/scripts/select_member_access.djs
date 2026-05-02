@@ -1,7 +1,24 @@
 
+DEFINE Справочник.Справочник1.Запись
+(
+  Ссылка       entity,
+  Наименование string,
+  Список       object OF Справочник.Справочник1
+)
+
+DEFINE Справочник.Справочник1
+(
+  Ссылка          entity,
+  Владелец        entity,
+  Код             string,
+  Наименование    string,
+  ПометкаУдаления boolean,
+  Тест            string
+)
+
 DECLARE @Код    string  = '000000001'
-DECLARE @Запись object
-DECLARE @Список array
+DECLARE @Запись object -- OF Справочник.Справочник1.Запись
+DECLARE @Список array  -- OF Справочник.Справочник1
 
 USE 'MS_TEST'
   
