@@ -15,6 +15,7 @@ namespace DaJet.Compiler
 {
     internal class Program
     {
+        private static readonly string MS_UNF = "Data Source=ZHICHKIN;Initial Catalog=unf;Integrated Security=True;Encrypt=False;";
         private static readonly string MS_TEST = "Data Source=ZHICHKIN;Initial Catalog=dajet-metadata;Integrated Security=True;Encrypt=False;";
         private static readonly string PG_TEST = "Host=localhost;Port=5432;Database=dajet-metadata;Username=postgres;Password=postgres;";
 
@@ -232,87 +233,6 @@ namespace DaJet.Compiler
             Console.WriteLine(json);
         }
 
-        private static void TestCompiler()
-        {
-            OneDbSchemaProvider schema = new();
-            MetadataProvider.Add("MS_TEST", DataSourceType.SqlServer, in MS_TEST);
-            MetadataProvider.Add("PG_TEST", DataSourceType.PostgreSql, in PG_TEST);
-
-            string source;
-            string filePath = $"{AppContext.BaseDirectory}scripts\\select_member_access.djs";
-
-            using (StreamReader reader = new(filePath, Encoding.UTF8))
-            {
-                source = reader.ReadToEnd();
-            }
-
-            Console.WriteLine(source);
-            Console.WriteLine("----");
-
-            Parser parser = new();
-
-            if (!parser.TryParse(in source, out Script script, out string error))
-            {
-                Console.WriteLine(error); return;
-            }
-
-            List<DefineStatement> definitions = new();
-
-            foreach (SyntaxNode node in script.Statements)
-            {
-                if (node is DefineStatement definition)
-                {
-                    definitions.Add(definition);
-                }
-            }
-
-            if (!SchemaRegistry.TryRegister(in definitions, out error))
-            {
-                Console.WriteLine(error); return;
-            }
-
-            Scripting.Binder binder = new();
-
-            if (!binder.TryBind(in script, schema, out List<string> errors))
-            {
-                Console.WriteLine(string.Join('\n', errors)); return;
-            }
-
-            SqlTranspiler transpiler = new("SqlServer", 2000);
-
-            if (!transpiler.TryTranspile(script, out List<SqlStatement> statements, out errors))
-            {
-                Console.WriteLine(string.Join('\n', errors)); return;
-            }
-
-            if (statements is not null)
-            {
-                foreach (SqlStatement statement in statements)
-                {
-                    Console.WriteLine(statement.Sql);
-                    Console.WriteLine("----");
-                }
-            }
-
-            Compiler compiler = new();
-            ScriptProcessor processor = compiler.Compile(in script, in statements);
-
-            if (processor is not null)
-            {
-                processor.Execute();
-
-                Console.WriteLine(processor.GetType());
-
-                string json = JsonSerializer.Serialize(processor, processor.GetType(), JsonOptions);
-
-                Console.WriteLine(json);
-            }
-            else
-            {
-                Console.WriteLine("Compile and save");
-            }
-        }
-
         private static void ImportDefinitions()
         {
             string catalogPath = $"{AppContext.BaseDirectory}scripts\\imports\\"; // imports.djs // 
@@ -403,6 +323,97 @@ namespace DaJet.Compiler
             //{
             //    Console.WriteLine($"Output: {exception.Message}");
             //}
+        }
+
+        private static void TestCompiler()
+        {
+            OneDbSchemaProvider schema = new();
+            MetadataProvider.Add("MS_UNF", DataSourceType.SqlServer, in MS_UNF);
+            MetadataProvider.Add("MS_TEST", DataSourceType.SqlServer, in MS_TEST);
+
+            string source;
+            string filePath = $"{AppContext.BaseDirectory}scripts\\select_member_access.djs";
+
+            using (StreamReader reader = new(filePath, Encoding.UTF8))
+            {
+                source = reader.ReadToEnd();
+            }
+
+            Console.WriteLine(source);
+            Console.WriteLine("----");
+
+            Parser parser = new();
+
+            if (!parser.TryParse(in source, out Script script, out string error))
+            {
+                Console.WriteLine(error); return;
+            }
+
+            List<DefineStatement> definitions = new();
+
+            foreach (SyntaxNode node in script.Statements)
+            {
+                if (node is DefineStatement definition)
+                {
+                    definitions.Add(definition);
+                }
+            }
+
+            if (!SchemaRegistry.TryRegister(in definitions, out error))
+            {
+                Console.WriteLine(error); return;
+            }
+
+            Scripting.Binder binder = new();
+
+            if (!binder.TryBind(in script, schema, out List<string> errors))
+            {
+                Console.WriteLine(string.Join('\n', errors)); return;
+            }
+
+            SqlTranspiler transpiler = new("SqlServer", 2000);
+
+            if (!transpiler.TryTranspile(script, out List<SqlStatement> statements, out errors))
+            {
+                Console.WriteLine(string.Join('\n', errors)); return;
+            }
+
+            if (statements is not null)
+            {
+                foreach (SqlStatement statement in statements)
+                {
+                    Console.WriteLine(statement.Sql);
+                    Console.WriteLine("----");
+                }
+            }
+
+            Compiler compiler = new();
+
+            ScriptProcessor processor = compiler.Compile(in script, in statements);
+
+            if (processor is not null)
+            {
+                try
+                {
+                    processor.Execute();
+
+                    Console.WriteLine(processor.GetType());
+
+                    string json = JsonSerializer.Serialize(processor, processor.GetType(), JsonOptions);
+
+                    Console.WriteLine(json);
+                }
+                catch (Exception exception)
+                {
+                    Console.WriteLine(exception.Message);
+                    Console.WriteLine("---");
+                    Console.WriteLine(exception.StackTrace);
+                }
+            }
+            else
+            {
+                Console.WriteLine("Compile and save");
+            }
         }
     }
 }

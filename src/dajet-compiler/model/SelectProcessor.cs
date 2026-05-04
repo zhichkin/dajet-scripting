@@ -4,68 +4,63 @@ using System.Data;
 
 namespace DaJet.Compiler
 {
-    public abstract class SelectProcessor
+    public abstract class SelectProcessor : ProcessorBase
     {
         protected readonly static byte[] TRUE = [0x01];
         protected readonly static byte[] FALSE = [0x00];
+        
+        protected readonly ScriptProcessor _script;
+        protected SelectProcessor(ScriptProcessor script)
+        {
+            _script = script;
+        }
         public int YearOffset { get; set; }
         public string SqlCommand { get; set; }
-        public string ConnectionString { get; set; }
         public void Execute()
         {
             Setup();
 
-            int processed = 0;
+            int processed = 0; //TODO: @@ROWCOUNT
 
-            using (SqlConnection connection = new(ConnectionString))
+            MsDataSource source = _script.GetDataSource();
+
+            using (SqlCommand command = source.CreateCommand())
             {
-                connection.Open();
+                command.CommandText = SqlCommand;
 
-                SqlTransaction transaction = connection.BeginTransaction();
+                Configure(command);
 
-                using (SqlCommand command = connection.CreateCommand())
+                try
                 {
-                    command.Connection = connection;
-                    command.Transaction = transaction;
-                    command.CommandType = CommandType.Text;
-                    command.CommandText = SqlCommand;
-
-                    Configure(command);
-
-                    try
+                    using (SqlDataReader reader = command.ExecuteReader())
                     {
-                        using (SqlDataReader reader = command.ExecuteReader())
+                        while (reader.Read())
                         {
-                            while (reader.Read())
-                            {
-                                Process(reader); processed++;
-                            }
-
-                            reader.Close();
+                            Process(reader); processed++;
                         }
 
-                        if (processed > 0)
-                        {
-                            Synchronize();
-                        }
-
-                        transaction.Commit();
+                        reader.Close();
                     }
-                    catch (Exception error)
+
+                    if (processed > 0)
                     {
-                        try
-                        {
-                            transaction.Rollback(); throw;
-                        }
-                        catch
-                        {
-                            throw error;
-                        }
+                        Synchronize();
                     }
-                    finally
-                    {
-                        Cleanup();
-                    }
+                }
+                //catch (Exception error)
+                //{
+                //    try
+                //    {
+                //        source.TxRollback(); throw;
+                //    }
+                //    catch
+                //    {
+                //        throw error;
+                //    }
+                //}
+                finally
+                {
+                    Cleanup();
                 }
             }
         }
@@ -85,7 +80,7 @@ namespace DaJet.Compiler
             {
                 command.Parameters.AddWithValue("boolean", new byte[1] { 0x00 });
             }
-            command.Parameters.AddWithValue("boolean", true);
+            //command.Parameters.AddWithValue("boolean", true);
             command.Parameters.AddWithValue("integer", 1234);
             command.Parameters.AddWithValue("decimal", 5_000_000_000_000.2M);
             

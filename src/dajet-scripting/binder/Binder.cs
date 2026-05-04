@@ -253,6 +253,8 @@ namespace DaJet.Scripting
                     EntityDefinition schema = DataMapper.InferSchema(in node);
 
                     // Script processor property name - see compiler
+                    // Variable name is used in case schema is not defined
+                    // New type is compiled and added to AnonymousDataSchema
                     schema.Name = declare.Identifier.TrimStart('@');
 
                     declare.Binding = schema;

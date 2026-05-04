@@ -17,8 +17,10 @@ DEFINE Справочник.Справочник1
 )
 
 DECLARE @Код    string  = '000000001'
-DECLARE @Запись object -- OF Справочник.Справочник1.Запись
-DECLARE @Список array  -- OF Справочник.Справочник1
+DECLARE @Запись object --OF Справочник.Справочник1.Запись
+DECLARE @Список array  --OF Справочник.Справочник1
+
+DECLARE @PG_Запись object
 
 USE 'MS_TEST'
   
@@ -34,4 +36,13 @@ USE 'MS_TEST'
     FROM Справочник.Справочник1
    WHERE Ссылка = @Запись.Ссылка
 
+   USE 'MS_UNF'
+     SELECT TOP 1 Ссылка, Наименование
+       INTO @PG_Запись
+       FROM Справочник.Номенклатура
+       -- WHERE 1 / 0 = 0
+   END
+
 END
+
+PRINT 'Конец скрипта'
