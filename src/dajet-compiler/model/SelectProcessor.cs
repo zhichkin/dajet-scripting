@@ -16,13 +16,13 @@ namespace DaJet.Compiler
         }
         public int YearOffset { get; set; }
         public string SqlCommand { get; set; }
-        public void Execute()
+        public override void Execute()
         {
             Setup();
 
             int processed = 0; //TODO: @@ROWCOUNT
 
-            MsDataSource source = _script.GetDataSource();
+            MsDataSource source = _script.GetMsDataSource();
 
             using (SqlCommand command = source.CreateCommand())
             {
@@ -60,7 +60,7 @@ namespace DaJet.Compiler
                 //}
                 finally
                 {
-                    Cleanup();
+                    //Cancel(); ?
                 }
             }
         }
@@ -136,8 +136,11 @@ namespace DaJet.Compiler
 
             // ISynchronizable.Synchronize();
         }
-        protected virtual void Cleanup()
+
+        public override void Cancel()
         {
+            Console.WriteLine($"SelectProcessor.Cancel() invoked");
+
             //_context.Variable = null; // clear output buffer
         }
     }

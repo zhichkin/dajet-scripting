@@ -3,6 +3,13 @@ using System.Data;
 
 namespace DaJet.Compiler
 {
+    public abstract class DbDataSource : IDisposable
+    {
+        public void Dispose()
+        {
+            
+        }
+    }
     public sealed class MsDataSource: IDisposable
     {
         private bool _disposed;
@@ -10,10 +17,10 @@ namespace DaJet.Compiler
         private SqlTransaction _transaction;
         public MsDataSource(string connectionString, string isolationLevel)
         {
+            _connection = new SqlConnection(connectionString);
+
             try
             {
-                _connection = new SqlConnection(connectionString);
-
                 _connection.Open();
 
                 if (!string.IsNullOrEmpty(isolationLevel))

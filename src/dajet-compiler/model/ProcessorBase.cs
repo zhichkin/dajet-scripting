@@ -1,11 +1,8 @@
 ﻿namespace DaJet.Compiler
 {
-    public abstract class ProcessorBase : IDisposable
+    public abstract class ProcessorBase
     {
-
-        public void Dispose()
-        {
-            throw new NotImplementedException();
-        }
+        public abstract void Execute();
+        public abstract void Cancel();
     }
 }

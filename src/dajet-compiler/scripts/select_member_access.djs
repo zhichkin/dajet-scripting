@@ -40,7 +40,7 @@ USE 'MS_TEST'
      SELECT TOP 1 Ссылка, Наименование
        INTO @PG_Запись
        FROM Справочник.Номенклатура
-       -- WHERE 1 / 0 = 0
+      --WHERE 1 / 0 = 0
    END
 
 END

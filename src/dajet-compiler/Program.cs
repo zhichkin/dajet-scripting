@@ -13,6 +13,29 @@ using System.Text.Unicode;
 
 namespace DaJet.Compiler
 {
+    internal class Runner
+    {
+        private bool cancel;
+        internal string Name { get; set; } = string.Empty;
+        internal string Status { get; set; } = string.Empty;
+        internal void Execute()
+        {
+            while (!cancel)
+            {
+                Console.WriteLine($"[{Environment.CurrentManagedThreadId}] running ...");
+
+                Task.Delay(TimeSpan.FromSeconds(1)).Wait();
+            }
+
+            Console.WriteLine($"[{Environment.CurrentManagedThreadId}] canceled.");
+
+            Status = "Canceled";
+        }
+        internal void Cancel()
+        {
+            cancel = true;
+        }
+    }
     internal class Program
     {
         private static readonly string MS_UNF = "Data Source=ZHICHKIN;Initial Catalog=unf;Integrated Security=True;Encrypt=False;";
@@ -27,10 +50,15 @@ namespace DaJet.Compiler
         };
         static void Main(string[] args)
         {
-            //Test(); return;
-
             JsonOptions.Converters.Add(new DataTypeJsonConverter());
             JsonOptions.Converters.Add(new JsonStringEnumConverter());
+
+            //ProcessorBase select = new TestSelectProcessor(null);
+
+            //select.Cancel(); return;
+
+            //Test(); return;
+            //TestRunner(); return;
 
             //TestDeclareStatement();
 
@@ -48,54 +76,33 @@ namespace DaJet.Compiler
             string encoded = UrlEncoder.Create(UnicodeRanges.All).Encode(source);
             Console.WriteLine(encoded);
         }
+        private static void TestRunner()
+        {
+            Runner runner1 = new()
+            {
+                Name = "Runner one"
+            };
 
-        //private static void ActivateStreams(in string path)
-        //{
-        //    foreach (string file in Directory.EnumerateFiles(path, DAJET_SCRIPT_FILE_EXTENSION))
-        //    {
-        //        ActivateStream(in file);
-        //    }
+            Runner runner2 = new()
+            {
+                Name = "Runner two"
+            };
 
-        //    foreach (string catalog in Directory.EnumerateDirectories(path))
-        //    {
-        //        ActivateStreams(in catalog);
-        //    }
-        //}
-        //private static void ActivateStream(in string file)
-        //{
-        //    if (_streams.ContainsKey(file)) { return; }
+            Task task1 = Task.Factory.StartNew(runner1.Execute);
+            Task task2 = Task.Factory.StartNew(runner2.Execute);
 
-        //    if (!File.Exists(file)) { return; }
+            Task.Delay(TimeSpan.FromSeconds(3)).Wait();
 
-        //    string script;
+            runner1.Cancel();
+            runner2.Cancel();
 
-        //    using (StreamReader reader = new(file, Encoding.UTF8))
-        //    {
-        //        script = reader.ReadToEnd();
-        //    }
+            Task.WaitAll([task1, task2]);
 
-        //    Stopwatch watch = new();
+            Console.WriteLine($"Runner 1: {runner1.Status}");
+            Console.WriteLine($"Runner 2: {runner2.Status}");
 
-        //    watch.Start();
-
-        //    Dictionary<string, object> parameters = new();
-
-        //    if (StreamFactory.TryCreateStream(in script, in parameters, out IProcessor stream, out string error))
-        //    {
-        //        _ = Task.Factory.StartNew(stream.Process, TaskCreationOptions.LongRunning);
-
-        //        _ = _streams.TryAdd(file, stream);
-
-        //        watch.Stop();
-
-        //        FileLogger.Default.Write($"[STREAM][Assembled in {watch.ElapsedMilliseconds} ms] {file}");
-        //    }
-        //    else
-        //    {
-        //        FileLogger.Default.Write($"[ERROR] {file}");
-        //        FileLogger.Default.Write(error);
-        //    }
-        //}
+            Console.WriteLine("Runners done");
+        }
 
         private static void TestDeclareStatement()
         {
@@ -415,5 +422,6 @@ namespace DaJet.Compiler
                 Console.WriteLine("Compile and save");
             }
         }
+        
     }
 }

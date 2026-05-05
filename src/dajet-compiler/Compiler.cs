@@ -115,7 +115,7 @@ namespace DaJet.Compiler
 
                             Type value = expression.Evaluate(variable.Initializer, in IL);
                             
-                            IL.Emit(OpCodes.Callvirt, property.GetSetMethod());
+                            IL.Emit(OpCodes.Call, property.GetSetMethod());
                         }
                         else
                         {
@@ -129,7 +129,7 @@ namespace DaJet.Compiler
                                     // this.Свойство = new Type1();
                                     IL.Emit(OpCodes.Ldarg_0);
                                     IL.Emit(OpCodes.Newobj, _ctor);
-                                    IL.Emit(OpCodes.Callvirt, property.GetSetMethod());
+                                    IL.Emit(OpCodes.Call, property.GetSetMethod());
                                 }
                                 else if (variable.Type.IsArray) // List<Type1>
                                 {
@@ -149,7 +149,7 @@ namespace DaJet.Compiler
                                     // this.Свойство = new List<Type1>();
                                     IL.Emit(OpCodes.Ldarg_0);
                                     IL.Emit(OpCodes.Newobj, _ctor);
-                                    IL.Emit(OpCodes.Callvirt, property.GetSetMethod());
+                                    IL.Emit(OpCodes.Call, property.GetSetMethod());
                                 }
                             }
                         }
@@ -250,11 +250,11 @@ namespace DaJet.Compiler
         {
             _counter = 0;
 
-            MethodAttributes attributes = MethodAttributes.Public
+            MethodAttributes attributes = MethodAttributes.Family
                 | MethodAttributes.Virtual
                 | MethodAttributes.HideBySig;
 
-            MethodBuilder method = type.DefineMethod("Execute", attributes, typeof(void), Type.EmptyTypes);
+            MethodBuilder method = type.DefineMethod("Process", attributes, typeof(void), Type.EmptyTypes);
             
             ILGenerator IL = method.GetILGenerator();
 
@@ -285,13 +285,12 @@ namespace DaJet.Compiler
         {
             MetadataProvider provider = MetadataProvider.Get(statement.Uri);
 
-            Label endOfExceptionBlock = IL.BeginExceptionBlock();
-
             IL.Emit(OpCodes.Ldarg_0); // this ScriptProcessor
             IL.Emit(OpCodes.Ldstr, provider.ConnectionString);
-            IL.Emit(OpCodes.Call, typeof(ScriptProcessor).GetMethod(
-                nameof(ScriptProcessor.UseDataSource),
-                BindingFlags.Instance | BindingFlags.Public, [typeof(string)]));
+            IL.Emit(OpCodes.Call, typeof(ScriptProcessor).GetMethod("UseDataSource",
+                BindingFlags.Instance | BindingFlags.NonPublic, [typeof(string)]));
+            
+            _ = IL.BeginExceptionBlock();
 
             foreach (SyntaxNode node in statement.Statements.Statements)
             {
@@ -301,13 +300,10 @@ namespace DaJet.Compiler
             IL.BeginFinallyBlock();
 
             IL.Emit(OpCodes.Ldarg_0); // this ScriptProcessor
-            IL.Emit(OpCodes.Call, typeof(ScriptProcessor).GetMethod(
-                nameof(ScriptProcessor.DisposeDataSource),
-                BindingFlags.Instance | BindingFlags.Public, Type.EmptyTypes));
+            IL.Emit(OpCodes.Call, typeof(ScriptProcessor).GetMethod("DisposeDataSource",
+                BindingFlags.Instance | BindingFlags.NonPublic, Type.EmptyTypes));
 
             IL.EndExceptionBlock();
-
-            //IL.MarkLabel(endOfExceptionBlock);
         }
         private void Compile(in SelectStatement statement, in ILGenerator IL)
         {
