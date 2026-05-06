@@ -16,7 +16,9 @@ namespace DaJet.Compiler
 
             Initialize(); // initialize SqlCommand
         }
-        public int YearOffset { get; set; }
+        protected abstract void Configure(SqlCommand command); // input
+        protected abstract void Process(SqlDataReader reader); // output
+        internal int YearOffset { get; set; }
         public string SqlCommand { get; set; }
         public override void Execute()
         {
@@ -66,9 +68,7 @@ namespace DaJet.Compiler
                 }
             }
         }
-        protected abstract void Configure(SqlCommand command); // input
-        protected abstract void Process(SqlDataReader reader); // output
-        public override void Cancel()
+        public override void Dispose()
         {
             //IsCancellationRequested = true;
         }

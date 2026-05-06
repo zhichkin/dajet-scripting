@@ -2,33 +2,37 @@
 {
     public abstract class ScriptProcessor
     {
-        private readonly List<ProcessorBase> __Processors = new();
-        private readonly Stack<MsDataSource> __DataSources = new();
+        protected readonly Stack<MsDataSource> _sources = new();
+        protected readonly List<ProcessorBase> _processors = new();
         protected ScriptProcessor()
         {
             // reserved for the future
         }
+        protected abstract void Process();
         public void Execute()
         {
             try
             {
                 Process();
             }
-            catch // ?
+            catch (OperationCanceledException)
             {
-                throw; //TODO: CANCEL script command
+                throw; //TODO: CANCEL script command - canceled by code
+            }
+            catch
+            {
+                throw; // unexpected exception
             }
             finally
             {
-                Cancel();
+                Cancel(); // completed successfully
             }
         }
-        protected abstract void Process();
-        public void Cancel()
+        public void Cancel() // canceled by host
         {
-            foreach (ProcessorBase processor in __Processors)
+            foreach (ProcessorBase processor in _processors)
             {
-                processor.Cancel();
+                processor.Dispose();
             }
         }
         protected void UseDataSource(string connectionString)
@@ -40,18 +44,18 @@
             // The constructor must guarantee that it will return an object or throw an exception.
             MsDataSource source = new(connectionString, "READCOMMITTED");
 
-            __DataSources.Push(source);
+            _sources.Push(source);
         }
         protected void DisposeDataSource()
         {
-            if (__DataSources.TryPop(out MsDataSource source))
+            if (_sources.TryPop(out MsDataSource source))
             {
                 source.Dispose();
             }
         }
-        public MsDataSource GetMsDataSource() // make internal ?
+        internal MsDataSource GetMsDataSource()
         {
-            return __DataSources.Peek() as MsDataSource;
+            return _sources.Peek() as MsDataSource;
         }
         protected void Synchronize()
         {

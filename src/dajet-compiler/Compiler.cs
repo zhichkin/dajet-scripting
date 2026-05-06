@@ -49,8 +49,12 @@ namespace DaJet.Compiler
         }
 
         private ModuleBuilder ScriptModule;
-        private TypeInfo NewScriptProcessor = null;
+        private TypeInfo NewScriptProcessor;
+        private ILGenerator Constructor;
         private FieldInfo ScriptDataField;
+        private FieldInfo ScriptProcessorsField;
+        private MethodInfo ScriptProcessorsAdd;
+        private MethodInfo ScriptProcessorsGetItem;
         private Dictionary<string, PropertyInfo> ScriptData = new();
         
         private Stack<MetadataProvider> ScriptUse = new();
@@ -60,11 +64,22 @@ namespace DaJet.Compiler
 
             NewScriptProcessor = script;
 
+            ScriptProcessorsField = typeof(ScriptProcessor).GetField("_processors",
+                BindingFlags.Instance | BindingFlags.NonPublic);
+
+            ScriptProcessorsAdd = ScriptProcessorsField.FieldType.GetMethod(nameof(List<>.Add),
+                BindingFlags.Instance | BindingFlags.Public, [typeof(ProcessorBase)]);
+
+            ScriptProcessorsGetItem = ScriptProcessorsField.FieldType.GetMethod("get_Item",
+                BindingFlags.Instance | BindingFlags.Public, [typeof(int)]);
+
             ScriptDataField = BuildScriptData(in source, in script);
 
             BuildScriptConstructor(in source, in script);
 
             BuildScriptExecuteMethod(in source, in script);
+
+            Constructor.Emit(OpCodes.Ret);
 
             return script.CreateType();
         }
@@ -102,8 +117,10 @@ namespace DaJet.Compiler
             ConstructorInfo dataCtor = ScriptDataField.FieldType.GetConstructor(
                 BindingFlags.Instance | BindingFlags.Public, Type.EmptyTypes);
 
-            ILGenerator IL = thisCtor.GetILGenerator();
-            
+            Constructor = thisCtor.GetILGenerator();
+
+            ILGenerator IL = Constructor;
+
             // call base class constructor
             IL.Emit(OpCodes.Ldarg_0);
             IL.Emit(OpCodes.Call, baseCtor);
@@ -180,7 +197,11 @@ namespace DaJet.Compiler
                 }
             }
 
-            IL.Emit(OpCodes.Ret);
+            //IL.Emit(OpCodes.Ret);
+        }
+        private void InitializeScriptData()
+        {
+
         }
         
         private PropertyInfo BuildProperty(TypeBuilder builder, string name, Type type)
@@ -338,7 +359,7 @@ namespace DaJet.Compiler
             _counter++;
 
             TypeBuilder type = ScriptModule.DefineType($"Select{_counter}",
-                TypeAttributes.Public, SelectProcessorBase); // TypeAttributes.NestedAssembly !?
+                TypeAttributes.Public, SelectProcessorBase);
 
             MethodAttributes attributes = MethodAttributes.Public
                 | MethodAttributes.Virtual
@@ -350,7 +371,7 @@ namespace DaJet.Compiler
 
             //MetadataProvider use = ScriptUse.Peek();
             MethodInfo set_SqlCommand = typeof(SelectProcessor)
-                .GetProperty("SqlCommand", BindingFlags.Public | BindingFlags.Instance)
+                .GetProperty("SqlCommand", BindingFlags.Instance | BindingFlags.Public)
                 .GetSetMethod();
             
             MethodBuilder initializer = type.DefineMethod("Initialize", attributes, typeof(void), Type.EmptyTypes);
@@ -373,18 +394,34 @@ namespace DaJet.Compiler
             }
 
             Type processor = type.CreateType();
-            
-            MethodInfo execute = processor.GetMethod("Execute",
+
+            // this._processors.Add(new Select1(this));
+            Constructor.Emit(OpCodes.Ldarg_0);
+            Constructor.Emit(OpCodes.Ldfld, ScriptProcessorsField);
+            Constructor.Emit(OpCodes.Ldarg_0);
+            Constructor.Emit(OpCodes.Newobj, ctor);
+            Constructor.Emit(OpCodes.Callvirt, ScriptProcessorsAdd);
+
+            MethodInfo execute = processor.GetMethod(nameof(ProcessorBase.Execute),
                 BindingFlags.Instance | BindingFlags.Public, Type.EmptyTypes);
 
             // Select1 select = new Select1(this);
-            LocalBuilder select = IL.DeclareLocal(processor);
-            IL.Emit(OpCodes.Ldarg_0); // this - ScriptProcessor (context)
-            IL.Emit(OpCodes.Newobj, ctor);
-            IL.Emit(OpCodes.Stloc, select);
+            //LocalBuilder select = IL.DeclareLocal(processor);
+            //IL.Emit(OpCodes.Ldarg_0); // this - ScriptProcessor (context)
+            //IL.Emit(OpCodes.Newobj, ctor);
+            //IL.Emit(OpCodes.Stloc, select);
 
-            // select.Execute();
-            IL.Emit(OpCodes.Ldloc, select);
+            //// select.Execute();
+            //IL.Emit(OpCodes.Ldloc, select);
+            //IL.Emit(OpCodes.Callvirt, execute);
+
+            // this._processors[0].Execute();
+            int index = _counter - 1; //TODO: fix this !!!
+            IL.Emit(OpCodes.Ldarg_0);
+            IL.Emit(OpCodes.Ldfld, ScriptProcessorsField);
+            IL.Emit(OpCodes.Ldc_I4, index);
+            IL.Emit(OpCodes.Callvirt, ScriptProcessorsGetItem);
+            //IL.Emit(OpCodes.Isinst, processor); ?
             IL.Emit(OpCodes.Callvirt, execute);
         }
         private ConstructorInfo BuildSelectProcessorConstructor(in TypeBuilder type, in FieldInfo data, in MethodInfo initializer)

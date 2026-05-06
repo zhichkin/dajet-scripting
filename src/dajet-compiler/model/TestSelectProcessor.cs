@@ -2,15 +2,15 @@
 
 namespace DaJet.Compiler
 {
-    public sealed class TestSelectProcessor : SelectProcessor
+    internal sealed class TestSelectProcessor : SelectProcessor
     {
-        public TestSelectProcessor(TestScriptProcessor script) : base(script)
+        internal TestSelectProcessor(TestScriptProcessor script) : base(script)
         {
             //script.Synchronize();
         }
-        public override void Cancel()
+        public override void Dispose()
         {
-            base.Cancel();
+            base.Dispose();
 
             Console.WriteLine($"TestSelectProcessor.Cancel() invoked");
         }

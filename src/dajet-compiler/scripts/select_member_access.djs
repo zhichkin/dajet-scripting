@@ -1,4 +1,12 @@
 
+DEFINE ЭлементСправочника
+(
+  Ссылка          entity,
+  Код             string,
+  Наименование    string,
+  ПометкаУдаления boolean
+)
+
 DEFINE Справочник.Справочник1.Запись
 (
   Ссылка       entity,
@@ -19,7 +27,7 @@ DEFINE Справочник.Справочник1
 DECLARE @Код       string  = '000000001'
 DECLARE @Запись    object --OF Справочник.Справочник1.Запись
 DECLARE @Список    array  --OF Справочник.Справочник1
-DECLARE @PG_Запись object
+DECLARE @PG_Запись object OF ЭлементСправочника
 
 USE 'MS_TEST'
   

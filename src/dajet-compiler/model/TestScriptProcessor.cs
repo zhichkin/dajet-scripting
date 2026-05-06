@@ -12,7 +12,11 @@
         }
         protected override void Process()
         {
-            throw new NotImplementedException();
+            _processors.Add(new TestSelectProcessor(this));
+
+            (_processors[0] as SelectProcessor).Execute();
+
+            //throw new NotImplementedException();
         }
     }
 }
