@@ -36,9 +36,11 @@ namespace DaJet.Compiler
         public SqlCommand CreateCommand()
         {
             SqlCommand command = _connection.CreateCommand();
+
             command.Connection = _connection;
             command.Transaction = _transaction;
             command.CommandType = CommandType.Text;
+
             return command;
         }
         public void TxBegin()

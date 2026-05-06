@@ -37,6 +37,7 @@
             // Repeatable Read
             // Serializable
 
+            // The constructor must guarantee that it will return an object or throw an exception.
             MsDataSource source = new(connectionString, "READCOMMITTED");
 
             __DataSources.Push(source);

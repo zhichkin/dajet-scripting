@@ -50,56 +50,76 @@ namespace DaJet.Compiler
 
         private ModuleBuilder ScriptModule;
         private TypeInfo NewScriptProcessor = null;
-        private Dictionary<string, PropertyInfo> ScriptContext = new();
+        private FieldInfo ScriptDataField;
+        private Dictionary<string, PropertyInfo> ScriptData = new();
+        
         private Stack<MetadataProvider> ScriptUse = new();
-        private Type BuildScriptProcessor(in Script script, in ModuleBuilder module)
+        private Type BuildScriptProcessor(in Script source, in ModuleBuilder module)
         {
-            TypeBuilder type = module.DefineType("Script1", TypeAttributes.Public, ScriptProcessorBase);
+            TypeBuilder script = module.DefineType("Script1", TypeAttributes.Public, ScriptProcessorBase);
 
-            NewScriptProcessor = type;
+            NewScriptProcessor = script;
 
-            foreach (SyntaxNode node in script.Statements)
+            ScriptDataField = BuildScriptData(in source, in script);
+
+            BuildScriptConstructor(in source, in script);
+
+            BuildScriptExecuteMethod(in source, in script);
+
+            return script.CreateType();
+        }
+        private FieldBuilder BuildScriptData(in Script source, in TypeBuilder script)
+        {
+            TypeBuilder data = ScriptModule.DefineType("ScriptData1", TypeAttributes.Public | TypeAttributes.Sealed);
+
+            foreach (SyntaxNode node in source.Statements)
             {
                 if (node is DeclareStatement variable)
                 {
-                    PropertyInfo property = BuildScriptProperty(in variable, in type, in module);
+                    PropertyInfo property = BuildScriptProperty(in variable, in data);
 
                     if (property is not null)
                     {
-                        ScriptContext.Add(variable.Identifier, property);
+                        ScriptData.Add(variable.Identifier, property);
                     }
                 }
             }
 
-            BuildScriptConstructor(in script, in type);
+            Type type = data.CreateType();
 
-            BuildScriptExecuteMethod(in script, in type, in module);
-
-            return type.CreateType();
+            return script.DefineField("_data", type, FieldAttributes.Assembly);
         }
-        private void BuildScriptConstructor(in Script script, in TypeBuilder type)
+        private void BuildScriptConstructor(in Script source, in TypeBuilder script)
         {
-            ConstructorInfo ctor = ScriptProcessorBase.GetConstructor(
+            ConstructorInfo baseCtor = ScriptProcessorBase.GetConstructor(
                 BindingFlags.Instance | BindingFlags.NonPublic, Type.EmptyTypes);
 
-            ConstructorBuilder builder = type.DefineConstructor(
+            ConstructorBuilder thisCtor = script.DefineConstructor(
                 MethodAttributes.Public,
                 CallingConventions.Standard,
                 Type.EmptyTypes);
 
-            ILGenerator IL = builder.GetILGenerator();
+            ConstructorInfo dataCtor = ScriptDataField.FieldType.GetConstructor(
+                BindingFlags.Instance | BindingFlags.Public, Type.EmptyTypes);
+
+            ILGenerator IL = thisCtor.GetILGenerator();
             
             // call base class constructor
             IL.Emit(OpCodes.Ldarg_0);
-            IL.Emit(OpCodes.Call, ctor);
+            IL.Emit(OpCodes.Call, baseCtor);
 
-            ExpressionCompiler expression = new(type, ScriptContext);
+            // this._data = new ScriptData();
+            IL.Emit(OpCodes.Ldarg_0); // this
+            IL.Emit(OpCodes.Newobj, dataCtor); // value
+            IL.Emit(OpCodes.Stfld, ScriptDataField);
 
-            foreach (SyntaxNode node in script.Statements)
+            ExpressionCompiler expression = new(ScriptDataField, ScriptData);
+
+            foreach (SyntaxNode node in source.Statements)
             {
                 if (node is DeclareStatement variable)
                 {
-                    if (ScriptContext.TryGetValue(variable.Identifier, out PropertyInfo property))
+                    if (ScriptData.TryGetValue(variable.Identifier, out PropertyInfo property))
                     {
                         if (variable.Initializer is ScalarExpression scalar)
                         {
@@ -111,7 +131,8 @@ namespace DaJet.Compiler
                             //    IL.Emit(OpCodes.Callvirt, property.GetSetMethod());
                             //}
 
-                            IL.Emit(OpCodes.Ldarg_0);
+                            IL.Emit(OpCodes.Ldarg_0); // this
+                            IL.Emit(OpCodes.Ldfld, ScriptDataField); // _data
 
                             Type value = expression.Evaluate(variable.Initializer, in IL);
                             
@@ -128,6 +149,7 @@ namespace DaJet.Compiler
 
                                     // this.Свойство = new Type1();
                                     IL.Emit(OpCodes.Ldarg_0);
+                                    IL.Emit(OpCodes.Ldfld, ScriptDataField); // _data
                                     IL.Emit(OpCodes.Newobj, _ctor);
                                     IL.Emit(OpCodes.Call, property.GetSetMethod());
                                 }
@@ -148,6 +170,7 @@ namespace DaJet.Compiler
 
                                     // this.Свойство = new List<Type1>();
                                     IL.Emit(OpCodes.Ldarg_0);
+                                    IL.Emit(OpCodes.Ldfld, ScriptDataField); // _data
                                     IL.Emit(OpCodes.Newobj, _ctor);
                                     IL.Emit(OpCodes.Call, property.GetSetMethod());
                                 }
@@ -159,7 +182,7 @@ namespace DaJet.Compiler
 
             IL.Emit(OpCodes.Ret);
         }
-
+        
         private PropertyInfo BuildProperty(TypeBuilder builder, string name, Type type)
         {
             MethodAttributes getSetAttr = MethodAttributes.Public
@@ -187,11 +210,11 @@ namespace DaJet.Compiler
 
             return property;
         }
-        private Type GetOrBuildType(in EntityDefinition entity, in ModuleBuilder module)
+        private Type GetOrBuildType(in EntityDefinition entity)
         {
             string typeName = "AnonymousDataSchema." + entity.Name.TrimStart('@');
 
-            TypeBuilder type = module.DefineType(typeName, TypeAttributes.Public);
+            TypeBuilder type = ScriptModule.DefineType(typeName, TypeAttributes.Public);
 
             foreach (PropertyDefinition property in entity.Properties)
             {
@@ -202,7 +225,7 @@ namespace DaJet.Compiler
 
             return type.CreateType();
         }
-        private PropertyInfo BuildScriptProperty(in DeclareStatement variable, in TypeBuilder script, in ModuleBuilder module)
+        private PropertyInfo BuildScriptProperty(in DeclareStatement variable, in TypeBuilder script)
         {
             string propertyName = variable.Identifier.TrimStart('@');
 
@@ -224,7 +247,7 @@ namespace DaJet.Compiler
                 }
                 else if (variable.Binding is not null)
                 {
-                    propertyType = GetOrBuildType(variable.Binding, in module);
+                    propertyType = GetOrBuildType(variable.Binding);
 
                     if (variable.Type.IsArray)
                     {
@@ -246,7 +269,7 @@ namespace DaJet.Compiler
         }
 
         private int _counter;
-        private void BuildScriptExecuteMethod(in Script script, in TypeBuilder type, in ModuleBuilder module)
+        private void BuildScriptExecuteMethod(in Script source, in TypeBuilder script)
         {
             _counter = 0;
 
@@ -254,11 +277,11 @@ namespace DaJet.Compiler
                 | MethodAttributes.Virtual
                 | MethodAttributes.HideBySig;
 
-            MethodBuilder method = type.DefineMethod("Process", attributes, typeof(void), Type.EmptyTypes);
+            MethodBuilder method = script.DefineMethod("Process", attributes, typeof(void), Type.EmptyTypes);
             
             ILGenerator IL = method.GetILGenerator();
 
-            foreach (SyntaxNode node in script.Statements)
+            foreach (SyntaxNode node in source.Statements)
             {
                 Compile(in node, in IL);
             }
@@ -274,7 +297,7 @@ namespace DaJet.Compiler
         }
         private void Compile(in PrintStatement statement, in ILGenerator IL)
         {
-            ExpressionCompiler expression = new(NewScriptProcessor, ScriptContext);
+            ExpressionCompiler expression = new(ScriptDataField, ScriptData);
 
             Type value = expression.Evaluate(statement.Expression, in IL);
 
@@ -314,52 +337,43 @@ namespace DaJet.Compiler
 
             _counter++;
 
-            TypeBuilder type = ScriptModule.DefineType($"Select{_counter}", TypeAttributes.Public, SelectProcessorBase);
+            TypeBuilder type = ScriptModule.DefineType($"Select{_counter}",
+                TypeAttributes.Public, SelectProcessorBase); // TypeAttributes.NestedAssembly !?
 
             MethodAttributes attributes = MethodAttributes.Public
                 | MethodAttributes.Virtual
                 | MethodAttributes.HideBySig;
 
             // Ссылка на родительский ScriptProcessor
-            FieldBuilder context = type.DefineField("_context", NewScriptProcessor, FieldAttributes.Private);
-
-            ConstructorInfo ctor = BuildSelectProcessorConstructor(in type, context);
+            FieldInfo _data = type.DefineField("_data", ScriptDataField.FieldType,
+                FieldAttributes.Private | FieldAttributes.InitOnly);
 
             //MetadataProvider use = ScriptUse.Peek();
             MethodInfo set_SqlCommand = typeof(SelectProcessor)
                 .GetProperty("SqlCommand", BindingFlags.Public | BindingFlags.Instance)
                 .GetSetMethod();
-            //MethodInfo set_ConnectionString = typeof(SelectProcessor)
-            //    .GetProperty("ConnectionString", BindingFlags.Public | BindingFlags.Instance)
-            //    .GetSetMethod();
-            MethodBuilder method = type.DefineMethod("Setup", attributes, typeof(void), Type.EmptyTypes);
-            ILGenerator setupIL = method.GetILGenerator();
-            setupIL.Emit(OpCodes.Ldarg_0);
-            setupIL.Emit(OpCodes.Ldstr, sql.Sql);
-            setupIL.Emit(OpCodes.Callvirt, set_SqlCommand);
-            //setupIL.Emit(OpCodes.Ldarg_0);
-            //setupIL.Emit(OpCodes.Ldstr, use.ConnectionString);
-            //setupIL.Emit(OpCodes.Callvirt, set_ConnectionString);
-            setupIL.Emit(OpCodes.Ret);
+            
+            MethodBuilder initializer = type.DefineMethod("Initialize", attributes, typeof(void), Type.EmptyTypes);
+            ILGenerator initIL = initializer.GetILGenerator();
+            initIL.Emit(OpCodes.Ldarg_0);
+            initIL.Emit(OpCodes.Ldstr, sql.Sql);
+            initIL.Emit(OpCodes.Call, set_SqlCommand);
+            initIL.Emit(OpCodes.Ret);
 
-            if (sql.Input is not null && sql.Input.Count > 0)
-            {
-                SelectProcessor_Configure(in type, sql.Input, context);
-            }
+            ConstructorInfo ctor = BuildSelectProcessorConstructor(in type, in _data, initializer);
+
+            SelectProcessor_Configure(in type, sql.Input, in _data);
 
             if (sql.Output is VariableReference variable)
             {
-                if (ScriptContext.TryGetValue(variable.Identifier, out PropertyInfo output))
+                if (ScriptData.TryGetValue(variable.Identifier, out PropertyInfo output))
                 {
-                    SelectProcessor_Process(in type, in variable, context);
+                    SelectProcessor_Process(in type, in variable, in _data);
                 }
             }
 
             Type processor = type.CreateType();
             
-            //ConstructorInfo ctor = processor.GetConstructor(
-            //    BindingFlags.Instance | BindingFlags.Public, [context.FieldType]);
-
             MethodInfo execute = processor.GetMethod("Execute",
                 BindingFlags.Instance | BindingFlags.Public, Type.EmptyTypes);
 
@@ -373,7 +387,7 @@ namespace DaJet.Compiler
             IL.Emit(OpCodes.Ldloc, select);
             IL.Emit(OpCodes.Callvirt, execute);
         }
-        private ConstructorInfo BuildSelectProcessorConstructor(in TypeBuilder type, in FieldInfo context)
+        private ConstructorInfo BuildSelectProcessorConstructor(in TypeBuilder type, in FieldInfo data, in MethodInfo initializer)
         {
             ConstructorInfo ctor = SelectProcessorBase.GetConstructor(
                 BindingFlags.Instance | BindingFlags.NonPublic, [ScriptProcessorBase]);
@@ -385,21 +399,25 @@ namespace DaJet.Compiler
 
             ILGenerator IL = builder.GetILGenerator();
 
-            // call base class constructor
+            // call base class constructor : base(ScriptProcessor)
             IL.Emit(OpCodes.Ldarg_0); // this SelectProcessor
-            IL.Emit(OpCodes.Ldarg_1); // ScriptProcessor
-            IL.Emit(OpCodes.Call, ctor);
+            IL.Emit(OpCodes.Ldarg_1); // parameter ScriptProcessor
+            IL.Emit(OpCodes.Call, ctor); // base class constructor
 
-            // _context = context;
+            // this._data = script._data;
+            IL.Emit(OpCodes.Ldarg_0); // this SelectProcessor
+            IL.Emit(OpCodes.Ldarg_1); // parameter ScriptProcessor
+            IL.Emit(OpCodes.Ldfld, ScriptDataField); // script._data
+            IL.Emit(OpCodes.Stfld, data); // this._data = script._data
+
             IL.Emit(OpCodes.Ldarg_0);
-            IL.Emit(OpCodes.Ldarg_1);
-            IL.Emit(OpCodes.Stfld, context);
+            IL.Emit(OpCodes.Callvirt, initializer);
 
             IL.Emit(OpCodes.Ret);
 
             return builder;
         }
-        private void SelectProcessor_Configure(in TypeBuilder type, in List<SyntaxNode> input, in FieldInfo context)
+        private void SelectProcessor_Configure(in TypeBuilder type, in List<SyntaxNode> input, in FieldInfo data)
         {
             MethodAttributes attributes = MethodAttributes.Public
                 | MethodAttributes.Virtual
@@ -410,11 +428,15 @@ namespace DaJet.Compiler
             ILGenerator IL = method.GetILGenerator();
 
             //MsDataMapper.YearOffset = 2000;
-            MsDataMapper.MapInput(in input, in context, ScriptContext, in IL);
+
+            if (input is not null && input.Count > 0)
+            {
+                MsDataMapper.MapInput(in input, in data, ScriptData, in IL);
+            }
 
             IL.Emit(OpCodes.Ret);
         }
-        private void SelectProcessor_Process(in TypeBuilder type, in VariableReference output, in FieldInfo context)
+        private void SelectProcessor_Process(in TypeBuilder type, in VariableReference output, in FieldInfo data)
         {
             if (output.Binding is not DeclareStatement declare)
             {
@@ -426,7 +448,7 @@ namespace DaJet.Compiler
                 return;
             }
 
-            if (!ScriptContext.TryGetValue(output.Identifier, out PropertyInfo property))
+            if (!ScriptData.TryGetValue(output.Identifier, out PropertyInfo property))
             {
                 return;
             }
@@ -467,7 +489,7 @@ namespace DaJet.Compiler
                 // OutputType record = _context.OutputProperty;
 
                 IL.Emit(OpCodes.Ldarg_0); // this SelectProcessor
-                IL.Emit(OpCodes.Ldfld, context); // script context field
+                IL.Emit(OpCodes.Ldfld, data); // script data field
                 IL.Emit(OpCodes.Call, property.GetGetMethod());
                 IL.Emit(OpCodes.Stloc_0);
             }
@@ -493,7 +515,7 @@ namespace DaJet.Compiler
                     BindingFlags.Instance | BindingFlags.Public, [outputType]);
 
                 IL.Emit(OpCodes.Ldarg_0); // this SelectProcessor
-                IL.Emit(OpCodes.Ldfld, context); // _context
+                IL.Emit(OpCodes.Ldfld, data); // _data
                 IL.Emit(OpCodes.Call, property.GetGetMethod());
                 IL.Emit(OpCodes.Ldloc_0); // OutputType record
 

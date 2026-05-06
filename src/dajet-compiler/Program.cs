@@ -404,9 +404,18 @@ namespace DaJet.Compiler
                 {
                     processor.Execute();
 
-                    Console.WriteLine(processor.GetType());
+                    Type type = processor.GetType();
 
-                    string json = JsonSerializer.Serialize(processor, processor.GetType(), JsonOptions);
+                    Console.WriteLine(type);
+
+                    FieldInfo data = type.GetField("_data",
+                        BindingFlags.Instance | BindingFlags.NonPublic);
+
+                    type = data.FieldType;
+
+                    object value = data.GetValue(processor);
+
+                    string json = JsonSerializer.Serialize(value, type, JsonOptions);
 
                     Console.WriteLine(json);
                 }

@@ -10,17 +10,12 @@ namespace DaJet.Compiler
     {
         // Ссылка на объект, свойства которого используются
         // для вычисления значений переменных/свойств скрипта.
-        private readonly Type _script;
-        private readonly FieldInfo _context;
+        private readonly FieldInfo _data;
+        // Свойства объекта, ссылка на который хранится в поле _data
         private readonly Dictionary<string, PropertyInfo> _properties;
-        internal ExpressionCompiler(in Type script, in Dictionary<string, PropertyInfo> properties)
+        internal ExpressionCompiler(in FieldInfo data, in Dictionary<string, PropertyInfo> properties)
         {
-            _script = script;
-            _properties = properties;
-        }
-        internal ExpressionCompiler(in FieldInfo context, in Dictionary<string, PropertyInfo> properties)
-        {
-            _context = context;
+            _data = data;
             _properties = properties;
         }
         ///<summary>Evaluates expression and pushes value onto stack</summary>
@@ -138,9 +133,9 @@ namespace DaJet.Compiler
         {
             IL.Emit(OpCodes.Ldarg_0); // ScriptProcessor : this (without field)
 
-            if (_context is not null) // SelectProcessor : this._context
+            if (_data is not null) // SelectProcessor : this._data
             {
-                IL.Emit(OpCodes.Ldfld, _context);
+                IL.Emit(OpCodes.Ldfld, _data);
             }
 
             if (_properties.TryGetValue(node.Identifier, out PropertyInfo property))

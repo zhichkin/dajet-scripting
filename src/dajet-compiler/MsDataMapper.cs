@@ -213,7 +213,7 @@ namespace DaJet.Compiler
 
         internal static int YearOffset { get; set; }
 
-        internal static void MapInput(in List<SyntaxNode> input, in FieldInfo context, in Dictionary<string, PropertyInfo> properties, in ILGenerator IL)
+        internal static void MapInput(in List<SyntaxNode> input, in FieldInfo data, in Dictionary<string, PropertyInfo> properties, in ILGenerator IL)
         {
             // public abstract class SelectProcessor
             // protected virtual void Configure(SqlCommand command)
@@ -234,7 +234,7 @@ namespace DaJet.Compiler
             IL.Emit(OpCodes.Callvirt, GetParameters);
             IL.Emit(OpCodes.Callvirt, ParametersClear);
 
-            ExpressionCompiler expression = new(in context, in properties);
+            ExpressionCompiler expression = new(in data, in properties);
 
             for (int i = 0; i < input.Count; i++)
             {

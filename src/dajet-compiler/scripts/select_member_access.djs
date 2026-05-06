@@ -16,10 +16,9 @@ DEFINE Справочник.Справочник1
   Тест            string
 )
 
-DECLARE @Код    string  = '000000001'
-DECLARE @Запись object --OF Справочник.Справочник1.Запись
-DECLARE @Список array  --OF Справочник.Справочник1
-
+DECLARE @Код       string  = '000000001'
+DECLARE @Запись    object --OF Справочник.Справочник1.Запись
+DECLARE @Список    array  --OF Справочник.Справочник1
 DECLARE @PG_Запись object
 
 USE 'MS_TEST'
