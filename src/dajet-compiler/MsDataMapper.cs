@@ -222,7 +222,7 @@ namespace DaJet.Compiler
             // LOC 0 : Guid local value to call Guid.ToByteArray()
             // LOC 1 : Entity local value to call Entity.Identity
             // LOC 2 : DateTime to manipulate year offset
-            // this._context : Ссылка на родительский ScriptProcessor
+            // this._data : Ссылка на данные ScriptProcessor
             // input : Список входящих данных - переменных скрипта
 
             _ = IL.DeclareLocal(typeof(Guid));     // LOC 0
@@ -240,13 +240,15 @@ namespace DaJet.Compiler
             {
                 SyntaxNode node = input[i];
 
-                // command.Parameters.AddWithValue("p0", _context.Свойство);
+                // command.Parameters.AddWithValue("p0", _data.Свойство);
 
                 IL.Emit(OpCodes.Ldarg_1);
                 IL.Emit(OpCodes.Callvirt, GetParameters);
                 IL.Emit(OpCodes.Ldstr, $"p{i}");
 
                 Type value = expression.Evaluate(in node, in IL);
+
+                //TODO: null -> DBNull.Value
 
                 if (value == typeof(bool)) // convert to byte[1]
                 {
@@ -297,7 +299,7 @@ namespace DaJet.Compiler
                 }
                 else if (value == typeof(Entity))
                 {
-                    // _context.Свойство.Identity.ToByteArray()
+                    // _data.Свойство.Identity.ToByteArray()
 
                     IL.Emit(OpCodes.Stloc_1);
                     IL.Emit(OpCodes.Ldloca_S, 1);
@@ -319,7 +321,7 @@ namespace DaJet.Compiler
 
                 if (value == typeof(DateTime))
                 {
-                    // command.Parameters.AddWithValue("p2", _context.ДатаВремя).SqlDbType = SqlDbType.DateTime2;
+                    // command.Parameters.AddWithValue("p2", _data.ДатаВремя).SqlDbType = SqlDbType.DateTime2;
 
                     IL.Emit(OpCodes.Ldc_I4, (int)SqlDbType.DateTime2);
                     IL.Emit(OpCodes.Callvirt, SetSqlDbType);
@@ -761,6 +763,8 @@ namespace DaJet.Compiler
 
             column = property.GetColumnByPurpose(ColumnPurpose.Value); // binary(16)
 
+            // single column value
+
             if (column is not null) // binary(16)
             {
                 ordinal = Columns.IndexOf(column);
@@ -806,68 +810,150 @@ namespace DaJet.Compiler
 
             // union type column
 
+            IL.Emit(OpCodes.Ldloc_0); // output variable reference
+
             column = property.GetColumnByPurpose(ColumnPurpose.TypeCode); // binary(4)
 
             if (column is not null) // binary(4)
             {
                 ordinal = Columns.IndexOf(column);
 
-                IL.Emit(OpCodes.Ldloc_0); // output variable reference
+                Label _ELSE = IL.DefineLabel();
+                Label _ENDIF = IL.DefineLabel();
+                Label _ELSE_IF = IL.DefineLabel();
+                Label _ELSE_IF_END = IL.DefineLabel();
 
-                // reader.GetBytes(ordinal, 0L, buffer, 0, 4);
+                // if (reader.IsDBNull(ordinal))
                 IL.Emit(OpCodes.Ldarg_1); // reader
-                IL.Emit(OpCodes.Ldc_I4, ordinal); // ordinal
-                IL.Emit(OpCodes.Ldc_I4_0); // 0
-                IL.Emit(OpCodes.Conv_I8); // 0 -> 0L
-                IL.Emit(OpCodes.Ldloc_1); // byte[16] buffer reference
-                IL.Emit(OpCodes.Ldc_I4_0); // buffer start
-                IL.Emit(OpCodes.Ldc_I4_4); // bytes to read
-                IL.Emit(OpCodes.Callvirt, GetBytes);
-                IL.Emit(OpCodes.Pop); // remove return value from stack
+                IL.Emit(OpCodes.Ldc_I4, ordinal);
+                IL.Emit(OpCodes.Callvirt, IsDBNull);
+                IL.Emit(OpCodes.Brfalse, _ELSE_IF);
+                // TRUE
+                IL.Emit(OpCodes.Ldsfld, EntityUndefined); // Pushes Entity structure onto stack
+                IL.Emit(OpCodes.Br, _ENDIF);
+                
+                IL.MarkLabel(_ELSE_IF);
 
-                // BinaryPrimitives.ReadInt32BigEndian(array.AsSpan(0, 4));
-                IL.Emit(OpCodes.Ldloc_1); // byte[16] buffer reference
-                IL.Emit(OpCodes.Ldc_I4_0); // buffer start
-                IL.Emit(OpCodes.Ldc_I4_4); // bytes to process
-                IL.Emit(OpCodes.Call, AsSpanOfBytes);
-                IL.Emit(OpCodes.Call, SpanOfBytesToReadOnly); // implicit conversion
-                IL.Emit(OpCodes.Call, ReadInt32BigEndian); // byte[4] to int32
+                MapTypeCode(ordinal, in IL); // Pushes type code onto stack
+
+                column = property.GetColumnByPurpose(ColumnPurpose.Identity); // binary(16)
+
+                if (column is not null)
+                {
+                    ordinal = Columns.IndexOf(column);
+
+                    // else if (reader.IsDBNull(ordinal))
+                    IL.Emit(OpCodes.Ldarg_1); // reader
+                    IL.Emit(OpCodes.Ldc_I4, ordinal);
+                    IL.Emit(OpCodes.Callvirt, IsDBNull);
+                    IL.Emit(OpCodes.Brfalse_S, _ELSE);
+
+                    IL.Emit(OpCodes.Ldsfld, GuidEmpty); // Pushes empty UUID onto stack
+
+                    IL.Emit(OpCodes.Br_S, _ELSE_IF_END);
+
+                    IL.MarkLabel(_ELSE);
+
+                    MapIdentity(ordinal, in IL); // Reads and pushes UUID onto stack
+                }
+                else
+                {
+                    IL.Emit(OpCodes.Ldsfld, GuidEmpty); // Pushes empty UUID onto stack
+                }
+
+                IL.MarkLabel(_ELSE_IF_END);
+
+                IL.Emit(OpCodes.Newobj, EntityCtor);
+
+                IL.MarkLabel(_ENDIF);
+
+                if (target.PropertyType == typeof(Union))
+                {
+                    IL.Emit(OpCodes.Call, EntityToUnion);
+                }
             }
-            else // IsReferenceOnlyUnion == true
+            else // IsReferenceOnlyUnion == true (оптимизация хранения на стороне базы данных)
             {
-                IL.Emit(OpCodes.Ldloc_0); // output variable reference
-                IL.Emit(OpCodes.Ldc_I4, property.Type.TypeCode); // push type code to stack
-            }
+                IL.Emit(OpCodes.Ldsfld, EntityUndefined); // test stub !!!
 
-            column = property.GetColumnByPurpose(ColumnPurpose.Identity); // binary(16)
+                if (target.PropertyType == typeof(Union)) // test stub !!!
+                {
+                    IL.Emit(OpCodes.Call, EntityToUnion); // test stub !!!
+                }
 
-            if (column is not null)
-            {
-                ordinal = Columns.IndexOf(column);
+                //IL.Emit(OpCodes.Ldc_I4, property.Type.TypeCode); // push type code to stack
 
-                // reader.GetBytes(ordinal, 0L, buffer, 0, 16);
-                IL.Emit(OpCodes.Ldarg_1); // reader
-                IL.Emit(OpCodes.Ldc_I4, ordinal); // ordinal
-                IL.Emit(OpCodes.Ldc_I4_0);
-                IL.Emit(OpCodes.Conv_I8); // 0L
-                IL.Emit(OpCodes.Ldloc_1); // byte[16] buffer reference
-                IL.Emit(OpCodes.Ldc_I4_0); // buffer start
-                IL.Emit(OpCodes.Ldc_I4, 16); // bytes to read
-                IL.Emit(OpCodes.Callvirt, GetBytes);
-                IL.Emit(OpCodes.Pop); // remove return value from stack
-            }
+                //column = property.GetColumnByPurpose(ColumnPurpose.Identity); // binary(16)
 
-            // _output.Свойство = new Entity(_TRef, _RRef);
-            IL.Emit(OpCodes.Ldloc_1); // byte[16] buffer reference
-            IL.Emit(OpCodes.Newobj, GuidCtor);
-            IL.Emit(OpCodes.Newobj, EntityCtor);
+                //if (column is not null)
+                //{
+                //    ordinal = Columns.IndexOf(column);
 
-            if (target.PropertyType == typeof(Union))
-            {
-                IL.Emit(OpCodes.Call, EntityToUnion);
+                //    Label _ELSE = IL.DefineLabel();
+                //    Label _ENDIF = IL.DefineLabel();
+
+                //    // else if (reader.IsDBNull(ordinal))
+                //    IL.Emit(OpCodes.Ldarg_1); // reader
+                //    IL.Emit(OpCodes.Ldc_I4, ordinal);
+                //    IL.Emit(OpCodes.Callvirt, IsDBNull);
+                //    IL.Emit(OpCodes.Brfalse_S, _ELSE);
+
+                //    IL.Emit(OpCodes.Ldsfld, GuidEmpty); // Pushes empty UUID onto stack
+
+                //    IL.Emit(OpCodes.Br_S, _ENDIF);
+
+                //    IL.MarkLabel(_ELSE);
+
+                //    MapIdentity(ordinal, in IL); // Reads and pushes UUID onto stack
+
+                //    IL.MarkLabel(_ENDIF);
+                //}
+                //else
+                //{
+                //    IL.Emit(OpCodes.Ldsfld, GuidEmpty); // Pushes empty UUID onto stack
+                //}
             }
 
             IL.Emit(OpCodes.Call, setAccessor);
+        }
+        private static void MapTypeCode(int ordinal, in ILGenerator IL)
+        {
+            // reader.GetBytes(ordinal, 0L, buffer, 0, 4);
+            IL.Emit(OpCodes.Ldarg_1); // reader
+            IL.Emit(OpCodes.Ldc_I4, ordinal); // ordinal
+            IL.Emit(OpCodes.Ldc_I4_0); // 0
+            IL.Emit(OpCodes.Conv_I8); // 0 -> 0L
+            IL.Emit(OpCodes.Ldloc_1); // byte[16] buffer reference
+            IL.Emit(OpCodes.Ldc_I4_0); // buffer start
+            IL.Emit(OpCodes.Ldc_I4_4); // bytes to read
+            IL.Emit(OpCodes.Callvirt, GetBytes);
+            
+            IL.Emit(OpCodes.Pop); // remove return value from stack
+
+            // BinaryPrimitives.ReadInt32BigEndian(array.AsSpan(0, 4));
+            IL.Emit(OpCodes.Ldloc_1); // byte[16] buffer reference
+            IL.Emit(OpCodes.Ldc_I4_0); // buffer start
+            IL.Emit(OpCodes.Ldc_I4_4); // bytes to process
+            IL.Emit(OpCodes.Call, AsSpanOfBytes);
+            IL.Emit(OpCodes.Call, SpanOfBytesToReadOnly); // implicit conversion
+            IL.Emit(OpCodes.Call, ReadInt32BigEndian); // byte[4] to int32
+        }
+        private static void MapIdentity(int ordinal, in ILGenerator IL)
+        {
+            // reader.GetBytes(ordinal, 0L, buffer, 0, 16);
+            IL.Emit(OpCodes.Ldarg_1); // reader
+            IL.Emit(OpCodes.Ldc_I4, ordinal); // ordinal
+            IL.Emit(OpCodes.Ldc_I4_0);
+            IL.Emit(OpCodes.Conv_I8); // 0L
+            IL.Emit(OpCodes.Ldloc_1); // byte[16] buffer reference
+            IL.Emit(OpCodes.Ldc_I4_0); // buffer start
+            IL.Emit(OpCodes.Ldc_I4, 16); // bytes to read
+            IL.Emit(OpCodes.Callvirt, GetBytes);
+            
+            IL.Emit(OpCodes.Pop); // remove return value from stack
+
+            IL.Emit(OpCodes.Ldloc_1); // byte[16] buffer reference
+            IL.Emit(OpCodes.Newobj, GuidCtor);
         }
         private static void MapUnion(in Type output, in PropertyDefinition property, in ILGenerator IL)
         {
