@@ -769,25 +769,28 @@ namespace DaJet.Compiler
             {
                 ordinal = Columns.IndexOf(column);
 
-                Label IsDBNull_true = IL.DefineLabel();
-                Label IsDBNull_false = IL.DefineLabel();
-                Label IsDBNull_endif = IL.DefineLabel();
+                Label _ELSE = IL.DefineLabel();
+                Label _ENDIF = IL.DefineLabel();
 
                 // if (reader.IsDBNull(ordinal))
                 IL.Emit(OpCodes.Ldarg_1); // reader
                 IL.Emit(OpCodes.Ldc_I4, ordinal); // field ordinal
                 IL.Emit(OpCodes.Callvirt, IsDBNull);
-                IL.Emit(OpCodes.Brfalse_S, IsDBNull_false);
+                IL.Emit(OpCodes.Brfalse_S, _ELSE);
                 // IsDBNull == true
                 // _output.Свойство = Entity.Undefined;
                 IL.Emit(OpCodes.Ldloc_0); // output variable reference
                 IL.Emit(OpCodes.Ldsfld, EntityUndefined); // property value to assign
                 IL.Emit(OpCodes.Call, setAccessor);
-                IL.Emit(OpCodes.Br_S, IsDBNull_endif);
+                
+                IL.Emit(OpCodes.Br_S, _ENDIF);
+                
                 // IsDBNull == false
-                IL.MarkLabel(IsDBNull_false);
+                IL.MarkLabel(_ELSE);
+
                 IL.Emit(OpCodes.Ldloc_0); // output variable reference
                 IL.Emit(OpCodes.Ldc_I4, property.Type.TypeCode);
+                
                 // reader.GetBytes(ordinal, 0L, buffer, 0, 16);
                 IL.Emit(OpCodes.Ldarg_1); // reader
                 IL.Emit(OpCodes.Ldc_I4, ordinal); // ordinal
@@ -797,13 +800,16 @@ namespace DaJet.Compiler
                 IL.Emit(OpCodes.Ldc_I4_0); // buffer start
                 IL.Emit(OpCodes.Ldc_I4, 16); // bytes to read
                 IL.Emit(OpCodes.Callvirt, GetBytes);
+                
                 IL.Emit(OpCodes.Pop); // remove return value from stack
+                
                 // _output.Свойство = new Entity(column.Type.TypeCode, new Guid(buffer));
                 IL.Emit(OpCodes.Ldloc_1); // byte[16] buffer reference
                 IL.Emit(OpCodes.Newobj, GuidCtor);
                 IL.Emit(OpCodes.Newobj, EntityCtor);
                 IL.Emit(OpCodes.Call, setAccessor);
-                IL.MarkLabel(IsDBNull_endif);
+
+                IL.MarkLabel(_ENDIF);
 
                 return;
             }
@@ -830,6 +836,7 @@ namespace DaJet.Compiler
                 IL.Emit(OpCodes.Brfalse, _ELSE_IF);
                 // TRUE
                 IL.Emit(OpCodes.Ldsfld, EntityUndefined); // Pushes Entity structure onto stack
+
                 IL.Emit(OpCodes.Br, _ENDIF);
                 
                 IL.MarkLabel(_ELSE_IF);
@@ -866,52 +873,47 @@ namespace DaJet.Compiler
                 IL.Emit(OpCodes.Newobj, EntityCtor);
 
                 IL.MarkLabel(_ENDIF);
-
-                if (target.PropertyType == typeof(Union))
-                {
-                    IL.Emit(OpCodes.Call, EntityToUnion);
-                }
             }
             else // IsReferenceOnlyUnion == true (оптимизация хранения на стороне базы данных)
             {
-                IL.Emit(OpCodes.Ldsfld, EntityUndefined); // test stub !!!
+                IL.Emit(OpCodes.Ldc_I4, property.Type.TypeCode); // push type code to stack
 
-                if (target.PropertyType == typeof(Union)) // test stub !!!
+                column = property.GetColumnByPurpose(ColumnPurpose.Identity); // binary(16)
+
+                if (column is not null)
                 {
-                    IL.Emit(OpCodes.Call, EntityToUnion); // test stub !!!
+                    ordinal = Columns.IndexOf(column);
+
+                    Label _ELSE = IL.DefineLabel();
+                    Label _ENDIF = IL.DefineLabel();
+
+                    // else if (reader.IsDBNull(ordinal))
+                    IL.Emit(OpCodes.Ldarg_1); // reader
+                    IL.Emit(OpCodes.Ldc_I4, ordinal);
+                    IL.Emit(OpCodes.Callvirt, IsDBNull);
+                    IL.Emit(OpCodes.Brfalse_S, _ELSE);
+
+                    IL.Emit(OpCodes.Ldsfld, GuidEmpty); // Pushes empty UUID onto stack
+
+                    IL.Emit(OpCodes.Br_S, _ENDIF);
+
+                    IL.MarkLabel(_ELSE);
+
+                    MapIdentity(ordinal, in IL); // Reads and pushes UUID onto stack
+
+                    IL.MarkLabel(_ENDIF);
+                }
+                else
+                {
+                    IL.Emit(OpCodes.Ldsfld, GuidEmpty); // Pushes empty UUID onto stack
                 }
 
-                //IL.Emit(OpCodes.Ldc_I4, property.Type.TypeCode); // push type code to stack
+                IL.Emit(OpCodes.Newobj, EntityCtor);
+            }
 
-                //column = property.GetColumnByPurpose(ColumnPurpose.Identity); // binary(16)
-
-                //if (column is not null)
-                //{
-                //    ordinal = Columns.IndexOf(column);
-
-                //    Label _ELSE = IL.DefineLabel();
-                //    Label _ENDIF = IL.DefineLabel();
-
-                //    // else if (reader.IsDBNull(ordinal))
-                //    IL.Emit(OpCodes.Ldarg_1); // reader
-                //    IL.Emit(OpCodes.Ldc_I4, ordinal);
-                //    IL.Emit(OpCodes.Callvirt, IsDBNull);
-                //    IL.Emit(OpCodes.Brfalse_S, _ELSE);
-
-                //    IL.Emit(OpCodes.Ldsfld, GuidEmpty); // Pushes empty UUID onto stack
-
-                //    IL.Emit(OpCodes.Br_S, _ENDIF);
-
-                //    IL.MarkLabel(_ELSE);
-
-                //    MapIdentity(ordinal, in IL); // Reads and pushes UUID onto stack
-
-                //    IL.MarkLabel(_ENDIF);
-                //}
-                //else
-                //{
-                //    IL.Emit(OpCodes.Ldsfld, GuidEmpty); // Pushes empty UUID onto stack
-                //}
+            if (target.PropertyType == typeof(Union))
+            {
+                IL.Emit(OpCodes.Call, EntityToUnion);
             }
 
             IL.Emit(OpCodes.Call, setAccessor);
@@ -965,9 +967,19 @@ namespace DaJet.Compiler
             {
                 int ordinal = Columns.IndexOf(column);
 
-                Label defaultCase = IL.DefineLabel();
-                Label endOfSwitch = IL.DefineLabel();
+                Label _ELSE = IL.DefineLabel();
+                Label _ENDIF = IL.DefineLabel();
 
+                // if (reader.IsDBNull(ordinal))
+                IL.Emit(OpCodes.Ldarg_1); // reader
+                IL.Emit(OpCodes.Ldc_I4, ordinal);
+                IL.Emit(OpCodes.Callvirt, IsDBNull);
+                IL.Emit(OpCodes.Brfalse_S, _ELSE);
+                // TRUE
+                IL.Emit(OpCodes.Ldc_I4_1); // 1 - Неопределено
+                IL.Emit(OpCodes.Br_S, _ENDIF);
+
+                IL.MarkLabel(_ELSE);
                 // reader.GetBytes(ordinal, 0L, buffer, 0, 1);
                 IL.Emit(OpCodes.Ldarg_1); // reader
                 IL.Emit(OpCodes.Ldc_I4, ordinal); // ordinal
@@ -979,47 +991,52 @@ namespace DaJet.Compiler
                 IL.Emit(OpCodes.Callvirt, GetBytes);
                 IL.Emit(OpCodes.Pop); // remove return value from stack
 
-                // switch (buffer[0])
                 IL.Emit(OpCodes.Ldloc_1); // byte[16] buffer reference
                 IL.Emit(OpCodes.Ldc_I4_0); // index of the value
                 IL.Emit(OpCodes.Ldelem_U1); // push buffer[0] value onto the stack
+
+                IL.MarkLabel(_ENDIF);
+
+                Label DEFAULT_CASE = IL.DefineLabel();
+                Label END_SWITCH = IL.DefineLabel();
+
+                // switch (buffer[0])
                 IL.Emit(OpCodes.Ldc_I4_1); // Нужно вычесть единицу из значения _TYPE
-                IL.Emit(OpCodes.Sub); // Приводим значение _TYPE к индексам switch
-                Label[] cases = [     // Jump table:
+                IL.Emit(OpCodes.Sub);      // Приводим значение _TYPE к индексам switch
+                Label[] CASES = [     // Jump table:
                     IL.DefineLabel(), // 1 = Неопределено
                     IL.DefineLabel(), // 2 = Булево
                     IL.DefineLabel(), // 3 = Число
                     IL.DefineLabel(), // 4 = Дата
                     IL.DefineLabel()  // 5 = Строка
                     ];
-                IL.Emit(OpCodes.Switch, cases); // default - Ссылка
-                IL.Emit(OpCodes.Br, defaultCase);
+                IL.Emit(OpCodes.Switch, CASES); // default - Ссылка
+                IL.Emit(OpCodes.Br, DEFAULT_CASE);
                 
-                IL.MarkLabel(cases[0]); // Неопределено
+                IL.MarkLabel(CASES[0]); // Неопределено
                 MapUndefined(in output, in property, in IL);
-                IL.Emit(OpCodes.Br, endOfSwitch);
+                IL.Emit(OpCodes.Br, END_SWITCH);
 
-                IL.MarkLabel(cases[1]); // Булево
+                IL.MarkLabel(CASES[1]); // Булево
                 MapBoolean(in output, in property, in IL);
-                IL.Emit(OpCodes.Br, endOfSwitch);
+                IL.Emit(OpCodes.Br, END_SWITCH);
 
-                IL.MarkLabel(cases[2]); // Число
+                IL.MarkLabel(CASES[2]); // Число
                 MapDecimal(in output, in property, in IL);
-                IL.Emit(OpCodes.Br, endOfSwitch);
+                IL.Emit(OpCodes.Br, END_SWITCH);
 
-                IL.MarkLabel(cases[3]); // Дата
+                IL.MarkLabel(CASES[3]); // Дата
                 MapDateTime(in output, in property, in IL);
-                IL.Emit(OpCodes.Br, endOfSwitch);
+                IL.Emit(OpCodes.Br, END_SWITCH);
 
-                IL.MarkLabel(cases[4]); // Строка
+                IL.MarkLabel(CASES[4]); // Строка
                 MapString(in output, in property, in IL);
-                IL.Emit(OpCodes.Br, endOfSwitch);
+                IL.Emit(OpCodes.Br, END_SWITCH);
 
-                IL.MarkLabel(defaultCase); // 0x08 Ссылка
+                IL.MarkLabel(DEFAULT_CASE); // 0x08 Ссылка
                 MapEntity(in output, in property, in IL);
-                //IL.Emit(OpCodes.Br, endOfSwitch);
-
-                IL.MarkLabel(endOfSwitch);
+                
+                IL.MarkLabel(END_SWITCH);
             }
             else // _TRef + _RRef
             {

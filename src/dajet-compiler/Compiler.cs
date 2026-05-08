@@ -405,23 +405,13 @@ namespace DaJet.Compiler
             MethodInfo execute = processor.GetMethod(nameof(ProcessorBase.Execute),
                 BindingFlags.Instance | BindingFlags.Public, Type.EmptyTypes);
 
-            // Select1 select = new Select1(this);
-            //LocalBuilder select = IL.DeclareLocal(processor);
-            //IL.Emit(OpCodes.Ldarg_0); // this - ScriptProcessor (context)
-            //IL.Emit(OpCodes.Newobj, ctor);
-            //IL.Emit(OpCodes.Stloc, select);
-
-            //// select.Execute();
-            //IL.Emit(OpCodes.Ldloc, select);
-            //IL.Emit(OpCodes.Callvirt, execute);
-
             // this._processors[0].Execute();
             int index = _counter - 1; //TODO: fix this !!!
             IL.Emit(OpCodes.Ldarg_0);
             IL.Emit(OpCodes.Ldfld, ScriptProcessorsField);
             IL.Emit(OpCodes.Ldc_I4, index);
             IL.Emit(OpCodes.Callvirt, ScriptProcessorsGetItem);
-            //IL.Emit(OpCodes.Isinst, processor); ?
+            //IL.Emit(OpCodes.Isinst, processor); !?
             IL.Emit(OpCodes.Callvirt, execute);
         }
         private ConstructorInfo BuildSelectProcessorConstructor(in TypeBuilder type, in FieldInfo data, in MethodInfo initializer)

@@ -339,7 +339,7 @@ namespace DaJet.Compiler
             MetadataProvider.Add("MS_TEST", DataSourceType.SqlServer, in MS_TEST);
 
             string source;
-            string filePath = $"{AppContext.BaseDirectory}scripts\\select_entity_union.djs";
+            string filePath = $"{AppContext.BaseDirectory}scripts\\select_join_null.djs";
 
             using (StreamReader reader = new(filePath, Encoding.UTF8))
             {
