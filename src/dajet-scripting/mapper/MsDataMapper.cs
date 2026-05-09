@@ -6,7 +6,7 @@ using System.Data;
 using System.Reflection;
 using System.Reflection.Emit;
 
-namespace DaJet.Compiler
+namespace DaJet.Scripting
 {
     internal static class MsDataMapper
     {

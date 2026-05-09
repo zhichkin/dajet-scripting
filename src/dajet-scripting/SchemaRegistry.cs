@@ -31,6 +31,82 @@ namespace DaJet.Scripting
             return type is not null;
         }
 
+        public static bool TryImport(in string fullPath, out string error)
+        {
+            error = null;
+
+            try
+            {
+                List<DefineStatement> definitions = new();
+
+                if (Path.GetExtension(fullPath) == ".djs")
+                {
+                    ImportFromFile(in fullPath, in definitions);
+                }
+                else if (Directory.Exists(fullPath))
+                {
+                    Import(in fullPath, in definitions);
+                }
+                else
+                {
+                    error = $"Path not found!"; return false;
+                }
+
+                Register(in definitions);
+            }
+            catch (Exception exception)
+            {
+                error = ExceptionHelper.GetErrorMessage(exception);
+            }
+
+            return error is null;
+        }
+        private static void Import(in string catalogPath, in List<DefineStatement> definitions)
+        {
+            foreach (string catalog in Directory.EnumerateDirectories(catalogPath))
+            {
+                Import(in catalog, in definitions);
+            }
+
+            foreach (string file in Directory.EnumerateFiles(catalogPath, "*.djs"))
+            {
+                ImportFromFile(in file, in definitions);
+            }
+        }
+        private static void ImportFromFile(in string filePath, in List<DefineStatement> definitions)
+        {
+            if (!File.Exists(filePath))
+            {
+                return;
+            }
+
+            string source;
+
+            using (StreamReader reader = new(filePath, Encoding.UTF8))
+            {
+                source = reader.ReadToEnd();
+            }
+
+            Parser parser = new();
+
+            if (!parser.TryParse(in source, out Script script, out string error))
+            {
+                throw new FormatException(error);
+            }
+
+            foreach (SyntaxNode node in script.Statements)
+            {
+                if (node is ImportStatement import)
+                {
+                    Import(import.Source, in definitions);
+                }
+                else if (node is DefineStatement definition)
+                {
+                    definitions.Add(definition);
+                }
+            }
+        }
+
         public static bool TryRegister(in List<DefineStatement> definitions, out string error)
         {
             error = null;
@@ -156,82 +232,6 @@ namespace DaJet.Scripting
             setIL.Emit(OpCodes.Stfld, field);
             setIL.Emit(OpCodes.Ret);
             property.SetSetMethod(setAccessor);
-        }
-
-        public static bool TryImport(in string fullPath, out string error)
-        {
-            error = null;
-
-            try
-            {
-                List<DefineStatement> definitions = new();
-
-                if (Path.GetExtension(fullPath) == ".djs")
-                {
-                    ImportFromFile(in fullPath, in definitions);
-                }
-                else if (Directory.Exists(fullPath))
-                {
-                    Import(in fullPath, in definitions);
-                }
-                else
-                {
-                    error = $"Path not found!"; return false;
-                }
-
-                Register(in definitions);
-            }
-            catch (Exception exception)
-            {
-                error = ExceptionHelper.GetErrorMessage(exception);
-            }
-
-            return error is null;
-        }
-        private static void Import(in string catalogPath, in List<DefineStatement> definitions)
-        {
-            foreach (string catalog in Directory.EnumerateDirectories(catalogPath))
-            {
-                Import(in catalog, in definitions);
-            }
-
-            foreach (string file in Directory.EnumerateFiles(catalogPath, "*.djs"))
-            {
-                ImportFromFile(in file, in definitions);
-            }
-        }
-        private static void ImportFromFile(in string filePath, in List<DefineStatement> definitions)
-        {
-            if (!File.Exists(filePath))
-            {
-                return;
-            }
-
-            string source;
-
-            using (StreamReader reader = new(filePath, Encoding.UTF8))
-            {
-                source = reader.ReadToEnd();
-            }
-
-            Parser parser = new();
-
-            if (!parser.TryParse(in source, out Script script, out string error))
-            {
-                throw new FormatException(error);
-            }
-
-            foreach (SyntaxNode node in script.Statements)
-            {
-                if (node is ImportStatement import)
-                {
-                    Import(import.Source, in definitions);
-                }
-                else if (node is DefineStatement definition)
-                {
-                    definitions.Add(definition);
-                }
-            }
         }
     }
 }

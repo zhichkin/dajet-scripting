@@ -1,6 +1,6 @@
 
-DECLARE @Запись object
 DECLARE @Код    string  = '000000007'
+DECLARE @Запись object
 
 USE 'MS_TEST'
 

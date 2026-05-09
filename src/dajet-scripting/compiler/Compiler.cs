@@ -1,12 +1,11 @@
 ﻿using DaJet.Metadata;
-using DaJet.Scripting;
 using DaJet.Scripting.Model;
 using DaJet.TypeSystem;
 using Microsoft.Data.SqlClient;
 using System.Reflection;
 using System.Reflection.Emit;
 
-namespace DaJet.Compiler
+namespace DaJet.Scripting
 {
     public sealed class Compiler
     {
@@ -51,6 +50,7 @@ namespace DaJet.Compiler
         private ModuleBuilder ScriptModule;
         private TypeInfo NewScriptProcessor;
         private ILGenerator Constructor;
+        private FieldInfo ScriptReturnValue;
         private FieldInfo ScriptDataField;
         private FieldInfo ScriptProcessorsField;
         private MethodInfo ScriptProcessorsAdd;
@@ -63,6 +63,9 @@ namespace DaJet.Compiler
             TypeBuilder script = module.DefineType("Script1", TypeAttributes.Public, ScriptProcessorBase);
 
             NewScriptProcessor = script;
+
+            ScriptReturnValue = typeof(ScriptProcessor).GetField("_returnValue",
+                BindingFlags.Instance | BindingFlags.NonPublic);
 
             ScriptProcessorsField = typeof(ScriptProcessor).GetField("_processors",
                 BindingFlags.Instance | BindingFlags.NonPublic);
@@ -77,7 +80,7 @@ namespace DaJet.Compiler
 
             BuildScriptConstructor(in source, in script);
 
-            BuildScriptExecuteMethod(in source, in script);
+            ScriptProcessor_Execute(in source, in script);
 
             Constructor.Emit(OpCodes.Ret);
 
@@ -283,14 +286,14 @@ namespace DaJet.Compiler
 
             if (propertyType is null)
             {
-                return null;
+                return null; //TODO: throw !?
             }
 
             return BuildProperty(script, propertyName, propertyType);
         }
 
         private int _counter;
-        private void BuildScriptExecuteMethod(in Script source, in TypeBuilder script)
+        private void ScriptProcessor_Execute(in Script source, in TypeBuilder script)
         {
             _counter = 0;
 
@@ -307,7 +310,10 @@ namespace DaJet.Compiler
                 Compile(in node, in IL);
             }
 
-            IL.Emit(OpCodes.Ret);
+            if (source.Statements[source.Statements.Count - 1] is not ReturnStatement)
+            {
+                IL.Emit(OpCodes.Ret);
+            }
         }
 
         private void Compile(in SyntaxNode node, in ILGenerator IL)
@@ -315,6 +321,7 @@ namespace DaJet.Compiler
             if (node is PrintStatement print) { Compile(in print, in IL); }
             else if (node is UseStatement use) { Compile(in use, in IL); }
             else if (node is SelectStatement select) { Compile(in select, in IL); }
+            else if (node is ReturnStatement _return) { Compile(in _return, in IL); }
         }
         private void Compile(in PrintStatement statement, in ILGenerator IL)
         {
@@ -324,6 +331,32 @@ namespace DaJet.Compiler
 
             IL.Emit(OpCodes.Call, typeof(Console).GetMethod(nameof(Console.WriteLine),
                 BindingFlags.Static | BindingFlags.Public, [typeof(string)]));
+        }
+        private void Compile(in ReturnStatement statement, in ILGenerator IL)
+        {
+            ExpressionCompiler expression = new(ScriptDataField, ScriptData);
+
+            IL.Emit(OpCodes.Ldarg_0); // this ScriptProcessor
+
+            Type value = null;
+
+            if (statement.Expression is not null)
+            {
+                value = expression.Evaluate(statement.Expression, in IL);
+            }
+
+            if (value is null)
+            {
+                IL.Emit(OpCodes.Ldnull);
+            }
+            else if (value.IsValueType)
+            {
+                IL.Emit(OpCodes.Box, value);
+            }
+
+            IL.Emit(OpCodes.Stfld, ScriptReturnValue); // _returnValue
+
+            IL.Emit(OpCodes.Ret); //THINK: flag existence of the RETURN statement !?
         }
         private void Compile(in UseStatement statement, in ILGenerator IL)
         {

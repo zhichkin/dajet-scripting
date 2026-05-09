@@ -82,10 +82,7 @@ namespace DaJet.Scripting
         {
             if (Consume())
             {
-                if (_ignore == null)
-                {
-                    _ignore = new List<Lexeme>();
-                }
+                _ignore ??= new List<Lexeme>();
 
                 _ignore.Add(Previous());
             }

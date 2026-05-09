@@ -1,6 +1,6 @@
 ﻿using DaJet.Scripting.Model;
 
-namespace DaJet.Compiler
+namespace DaJet.Scripting
 {
     public static class ReflectionExtensions
     {

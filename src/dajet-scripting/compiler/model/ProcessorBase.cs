@@ -1,4 +1,4 @@
-﻿namespace DaJet.Compiler
+﻿namespace DaJet.Scripting
 {
     public abstract class ProcessorBase
     {

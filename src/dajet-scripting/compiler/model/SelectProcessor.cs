@@ -1,6 +1,7 @@
-﻿using Microsoft.Data.SqlClient;
+﻿using DaJet.Data;
+using Microsoft.Data.SqlClient;
 
-namespace DaJet.Compiler
+namespace DaJet.Scripting
 {
     public abstract class SelectProcessor : ProcessorBase
     {

@@ -1,10 +1,9 @@
-﻿using DaJet.Scripting;
-using DaJet.Scripting.Model;
+﻿using DaJet.Scripting.Model;
 using System.Globalization;
 using System.Reflection;
 using System.Reflection.Emit;
 
-namespace DaJet.Compiler
+namespace DaJet.Scripting
 {
     internal sealed class ExpressionCompiler
     {
@@ -18,8 +17,8 @@ namespace DaJet.Compiler
             _data = data;
             _properties = properties;
         }
-        ///<summary>Evaluates expression and pushes value onto stack</summary>
-        ///<returns>Type returned by expression</returns>
+        ///<summary>Evaluates expression and pushes returned value onto stack</summary>
+        ///<returns>Expected type of the value returned by expression</returns>
         internal Type Evaluate(in SyntaxNode node, in ILGenerator IL)
         {
             if (node is ScalarExpression scalar) { return Evaluate(in scalar, in IL); }

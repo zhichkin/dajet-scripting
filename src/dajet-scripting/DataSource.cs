@@ -1,7 +1,7 @@
 ﻿using Microsoft.Data.SqlClient;
 using System.Data;
 
-namespace DaJet.Compiler
+namespace DaJet.Data
 {
     public abstract class DbDataSource : IDisposable
     {
