@@ -809,6 +809,7 @@ namespace DaJet.Scripting
             else if (Match(Token.IF)) { return if_statement(); }
             else if (Match(Token.CASE)) { return case_statement(); }
             else if (Match(Token.WHILE)) { return while_statement(); }
+            else if (Match(Token.WITH)) { return statement_with_cte(); }
             else if (Match(Token.CREATE)) { return create_statement(); }
             else if (Check(Token.SELECT)) { return select_statement(); }
             else if (Check(Token.INSERT)) { return insert_statement(); }
@@ -1090,7 +1091,7 @@ namespace DaJet.Scripting
 
             Token token = Token.TABLE;
 
-            if (Match(Token.COMPUTED, Token.TEMPORARY))
+            if (Match(Token.TEMPORARY))
             {
                 token = Previous().Token;
             }
@@ -1115,11 +1116,7 @@ namespace DaJet.Scripting
                 throw new FormatException("Table identifier expected.");
             }
 
-            if (token == Token.COMPUTED)
-            {
-                return statement_with_cte();
-            }
-            else if (token == Token.VARIABLE)
+            if (token == Token.VARIABLE)
             {
                 return table_variable();
             }
@@ -1393,7 +1390,7 @@ namespace DaJet.Scripting
             else if (Check(Token.DELETE)) { cte.Expression = delete_statement(); }
             else
             {
-                cte.Expression = union();
+                cte.Expression = union(); // SELECT
             }
 
             Skip(Token.Comment);

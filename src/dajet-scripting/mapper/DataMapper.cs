@@ -37,9 +37,18 @@ namespace DaJet.Scripting
                     Purpose = PropertyPurpose.Property
                 };
 
-                if (string.IsNullOrEmpty(source.Name)) // Источник данных - выражение
+                // Источник данных - выражение
+
+                if (string.IsNullOrEmpty(source.Name))
                 {
-                    property.Name = column.Alias;
+                    if (!string.IsNullOrEmpty(column.Alias))
+                    {
+                        property.Name = column.Alias;
+                    }
+                    else if (column.Expression is ColumnReference derived)
+                    {
+                        property.Name = derived.Identifier;
+                    }
 
                     schema.Properties.Add(property);
 
@@ -61,6 +70,10 @@ namespace DaJet.Scripting
                 {
                     property.Name = column.Alias;
                 }
+                else if (column.Expression is ColumnReference derived)
+                {
+                    property.Name = derived.Identifier;
+                }
                 else if (!string.IsNullOrEmpty(source.Name))
                 {
                     property.Name = source.Name;
@@ -70,8 +83,18 @@ namespace DaJet.Scripting
                     throw new InvalidCastException("Property name missing");
                 }
 
-                property.Columns = source.Columns;
-                
+                //FIXME: the same columns references brakes mapping output !!! see MsDataMapper
+                //property.Columns = source.Columns; //TODO: make copy of columns !!!
+
+                for (int c = 0; c < source.Columns.Count; c++)
+                {
+                    property.Columns.Add(new ColumnDefinition()
+                    {
+                        Type = source.Columns[c].Type,
+                        Purpose = source.Columns[c].Purpose
+                    });
+                }
+
                 schema.Properties.Add(property);
             }
 

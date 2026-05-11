@@ -210,9 +210,14 @@ namespace DaJet.Scripting
             }
             else if (node.Binding is ColumnExpression derived) // Наследуемый источник данных
             {
-                if (derived.Source is null)
+                if (derived.Source is null) // Константа, функция, параметр или выражение
                 {
-                    throw new InvalidOperationException(); // Ошибка привязки данных
+                    if (derived.Expression is ScalarExpression)
+                    {
+                        script.Append(node.Identifier); return;
+                    }
+                    
+                    throw new InvalidOperationException($"Ошибка привязки данных: {node.Identifier}");
                 }
                 else
                 {
