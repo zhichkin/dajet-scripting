@@ -263,9 +263,9 @@ namespace DaJet.Scripting
 
                     value = typeof(byte[]);
                 }
-                else if (value == typeof(int))
+                else if (value == typeof(int)) //THINK: convert to binary(4) ???
                 {
-                    IL.Emit(OpCodes.Newobj, Int32ToDecimal); value = typeof(decimal);
+                    //IL.Emit(OpCodes.Newobj, Int32ToDecimal); value = typeof(decimal);
                 }
                 else if (value == typeof(long))
                 {

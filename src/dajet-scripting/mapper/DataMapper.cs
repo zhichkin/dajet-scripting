@@ -1,5 +1,6 @@
 ﻿using DaJet.Scripting.Model;
 using DaJet.TypeSystem;
+using System.Xml.Linq;
 
 // Исключения из правил:
 // - _KeyField (табличная часть) binary(4) -> int CanBeNumeric
@@ -29,7 +30,7 @@ namespace DaJet.Scripting
             {
                 column = columns[i];
 
-                source = Infer(in column);
+                source = Infer(in column); //TODO: CASE infers single entity if can be returned multiple
 
                 PropertyDefinition property = new()
                 {
@@ -90,6 +91,7 @@ namespace DaJet.Scripting
                 {
                     property.Columns.Add(new ColumnDefinition()
                     {
+                        Name = source.Columns[c].Name,
                         Type = source.Columns[c].Type,
                         Purpose = source.Columns[c].Purpose
                     });
@@ -144,14 +146,26 @@ namespace DaJet.Scripting
 
             return string.IsNullOrEmpty(error);
         }
-        
+
+        public static DataType InferType(in SyntaxNode expression)
+        {
+            PropertyDefinition property = Infer(in expression);
+
+            if (property is null)
+            {
+                throw new InvalidCastException($"Failed to infer data type from {expression.GetType()} expression.");
+            }
+
+            return property.Type;
+        }
+
         private static PropertyDefinition Infer(in SyntaxNode node)
         {
             if (node is ColumnExpression column) { return Infer(in column); }
             else if (node is ColumnReference identifier) { return Infer(in identifier); }
             else if (node is ScalarExpression scalar) { return Infer(in scalar); }
             else if (node is VariableReference variable) { return Infer(in variable); }
-            else if (node is MemberAccessExpression member) { Infer(in member); }
+            else if (node is MemberAccessExpression member) { return Infer(in member); }
             else if (node is FunctionExpression function) { return Infer(in function); }
             else if (node is GroupOperator group) { return Infer(in group); }
             else if (node is UnaryOperator unary) { return Infer(in unary); }

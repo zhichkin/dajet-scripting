@@ -1,4 +1,5 @@
 ﻿using DaJet.Scripting.Model;
+using DaJet.TypeSystem;
 using System.Globalization;
 using System.Reflection;
 using System.Reflection.Emit;
@@ -170,7 +171,60 @@ namespace DaJet.Scripting
         }
         internal Type Evaluate(in FunctionExpression node, in ILGenerator IL)
         {
-            return null;
+            PropertyInfo EntityTypeCode = typeof(Entity).GetProperty(nameof(Entity.TypeCode),
+                BindingFlags.Instance | BindingFlags.Public);
+
+            PropertyInfo EntityIdentity = typeof(Entity).GetProperty(nameof(Entity.Identity),
+                BindingFlags.Instance | BindingFlags.Public);
+
+            if (UdfFunctions.TryGet(node.Name, out UdfFunction function))
+            {
+                SyntaxNode parameter = node.Parameters[0];
+
+                if (parameter is VariableReference variable)
+                {
+                    if (variable.Binding is DeclareStatement declare && declare.Type.IsEntity)
+                    {
+                        Type result = Evaluate(in variable, in IL); // push entity value onto stack
+
+                        IL.Emit(OpCodes.Stloc_1); ///<see cref="MsDataMapper.MapInput"/>
+                        IL.Emit(OpCodes.Ldloca_S, 1); // load address of local variable onto stack
+
+                        if (node.Name == nameof(TYPEOF))
+                        {
+                            IL.Emit(OpCodes.Call, EntityTypeCode.GetGetMethod());
+                        }
+                        else if (node.Name == nameof(UUIDOF))
+                        {
+                            IL.Emit(OpCodes.Call, EntityIdentity.GetGetMethod());
+                        }
+                    }
+                }
+                else if (parameter is MemberAccessExpression member)
+                {
+                    Type result = Evaluate(in member, in IL); // push entity value onto stack
+
+                    IL.Emit(OpCodes.Stloc_1); ///<see cref="MsDataMapper.MapInput"/>
+                    IL.Emit(OpCodes.Ldloca_S, 1); // load address of local variable onto stack
+
+                    if (node.Name == nameof(TYPEOF))
+                    {
+                        IL.Emit(OpCodes.Call, EntityTypeCode.GetGetMethod());
+                    }
+                    else if (node.Name == nameof(UUIDOF))
+                    {
+                        IL.Emit(OpCodes.Call, EntityIdentity.GetGetMethod());
+                    }
+                }
+            }
+            else
+            {
+                throw new InvalidOperationException($"Unknown function name: {node.Name}");
+            }
+
+            DataType type = function.GetReturnType(in node);
+
+            return type.MapToType();
         }
         internal Type Evaluate(in GroupOperator node, in ILGenerator IL)
         {

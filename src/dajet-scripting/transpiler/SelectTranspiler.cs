@@ -22,7 +22,8 @@ namespace DaJet.Scripting
 
             return TryTranspile(in select, out statement, out error);
         }
-        
+
+        private static readonly BooleanClauseTransformer _transformer = new();
         public bool TryTranspile(in SelectStatement node, out SqlStatement statement, out string error)
         {
             error = null;
@@ -403,6 +404,8 @@ namespace DaJet.Scripting
         {
             script.AppendLine().Append("WHERE ");
 
+            _transformer.Transform(node);
+
             Visit(node.Expression, in script);
         }
         protected virtual void Visit(in GroupClause node, in StringBuilder script)
@@ -434,6 +437,8 @@ namespace DaJet.Scripting
         protected virtual void Visit(in OnClause node, in StringBuilder script)
         {
             script.AppendLine().Append("ON ");
+
+            _transformer.Transform(node);
 
             Visit(node.Expression, in script);
         }
@@ -684,7 +689,7 @@ namespace DaJet.Scripting
         }
         protected virtual void Visit(in VariableReference node, in StringBuilder script)
         {
-            int count = _statement.Input.Count;
+            int count = _statement.Input.Count; //FIXME: create RegisterInputParameter !?
 
             string parameter = string.Format("@p{0}", count);
 
@@ -694,7 +699,7 @@ namespace DaJet.Scripting
         }
         protected virtual void Visit(in MemberAccessExpression node, in StringBuilder script)
         {
-            int count = _statement.Input.Count;
+            int count = _statement.Input.Count; //FIXME: create RegisterInputParameter !?
 
             string parameter = string.Format("@p{0}", count);
 
@@ -715,6 +720,16 @@ namespace DaJet.Scripting
             if (SqlFunctions.TryGet(node.Token, out SqlFunction function))
             {
                 function.Visit(in node, in script, this);
+            }
+            else if (UdfFunctions.TryGet(node.Name, out UdfFunction udf))
+            {
+                int count = _statement.Input.Count; //FIXME: create RegisterInputParameter !?
+
+                string parameter = string.Format("@p{0}", count);
+
+                script.Append(parameter);
+
+                _statement.Input.Add(node);
             }
             else
             {

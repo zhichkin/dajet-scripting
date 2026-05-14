@@ -20,7 +20,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Folder Include="function\udt\" />
+    <Folder Include="transformer\" />
   </ItemGroup>
 
 </Project>
