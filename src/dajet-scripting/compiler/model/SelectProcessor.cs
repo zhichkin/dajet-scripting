@@ -1,5 +1,6 @@
 ﻿using DaJet.Data;
 using Microsoft.Data.SqlClient;
+using System.Buffers.Binary;
 
 namespace DaJet.Scripting
 {

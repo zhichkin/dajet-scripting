@@ -1,4 +1,5 @@
-﻿using DaJet.Metadata;
+﻿using DaJet.Data;
+using DaJet.Metadata;
 using DaJet.Scripting.Model;
 using DaJet.TypeSystem;
 using Microsoft.Data.SqlClient;
@@ -57,7 +58,7 @@ namespace DaJet.Scripting
         private MethodInfo ScriptProcessorsGetItem;
         private Dictionary<string, PropertyInfo> ScriptData = new();
         
-        private Stack<MetadataProvider> ScriptUse = new();
+        private readonly Stack<MetadataProvider> ScriptUse = new();
         private Type BuildScriptProcessor(in Script source, in ModuleBuilder module)
         {
             TypeBuilder script = module.DefineType("Script1", TypeAttributes.Public, ScriptProcessorBase);
@@ -88,7 +89,7 @@ namespace DaJet.Scripting
         }
         private FieldBuilder BuildScriptData(in Script source, in TypeBuilder script)
         {
-            TypeBuilder data = ScriptModule.DefineType("ScriptData1", TypeAttributes.Public | TypeAttributes.Sealed);
+            TypeBuilder data = ScriptModule.DefineType("ScriptData", TypeAttributes.Public | TypeAttributes.Sealed);
 
             foreach (SyntaxNode node in source.Statements)
             {
@@ -361,6 +362,8 @@ namespace DaJet.Scripting
         private void Compile(in UseStatement statement, in ILGenerator IL)
         {
             MetadataProvider provider = MetadataProvider.Get(statement.Uri);
+            
+            ScriptUse.Push(provider);
 
             IL.Emit(OpCodes.Ldarg_0); // this ScriptProcessor
             IL.Emit(OpCodes.Ldstr, provider.ConnectionString);
@@ -381,6 +384,8 @@ namespace DaJet.Scripting
                 BindingFlags.Instance | BindingFlags.NonPublic, Type.EmptyTypes));
 
             IL.EndExceptionBlock();
+
+            _ = ScriptUse.Pop();
         }
         private void Compile(in SelectStatement statement, in ILGenerator IL)
         {
@@ -487,7 +492,11 @@ namespace DaJet.Scripting
 
             ILGenerator IL = method.GetILGenerator();
 
-            //MsDataMapper.YearOffset = 2000;
+            MetadataProvider provider = ScriptUse.Peek();
+            if (provider.DataSource == DataSourceType.SqlServer)
+            {
+                MsDataMapper.YearOffset = provider.GetYearOffset();
+            }
 
             if (input is not null && input.Count > 0)
             {

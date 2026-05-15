@@ -1,4 +1,5 @@
-﻿using DaJet.Scripting.Model;
+﻿using DaJet.Data;
+using DaJet.Scripting.Model;
 using DaJet.TypeSystem;
 using Microsoft.Data.SqlClient;
 using System.Buffers.Binary;
@@ -17,6 +18,7 @@ namespace DaJet.Scripting
         private static readonly MethodInfo AsSpanOfBytes;
         private static readonly MethodInfo SpanOfBytesToReadOnly;
         private static readonly MethodInfo ReadInt32BigEndian;
+        private static readonly MethodInfo Int32ToByteArray;
 
         // SqlCommand methods
         private static readonly MethodInfo GetParameters;
@@ -114,6 +116,9 @@ namespace DaJet.Scripting
             ReadInt32BigEndian = typeof(BinaryPrimitives)
                 .GetMethod(nameof(BinaryPrimitives.ReadInt32BigEndian),
                 BindingFlags.Public | BindingFlags.Static, [typeof(ReadOnlySpan<byte>)]);
+
+            Int32ToByteArray = typeof(DbUtilities).GetMethod(nameof(DbUtilities.GetByteArray),
+                BindingFlags.Public | BindingFlags.Static, [typeof(int)]);
 
             IsDBNull = typeof(SqlDataReader).GetMethod(nameof(SqlDataReader.IsDBNull),
                 BindingFlags.Instance | BindingFlags.Public, [typeof(int)]);
@@ -265,9 +270,16 @@ namespace DaJet.Scripting
                 }
                 else if (value == typeof(int)) //THINK: convert to binary(4) ???
                 {
-                    //IL.Emit(OpCodes.Newobj, Int32ToDecimal); value = typeof(decimal);
+                    if (node is FunctionExpression function && function.Token == Token.UDF)
+                    {
+                        if (function.Name == nameof(TYPEOF))
+                        {
+                            //byte[] value = DaJet.Data.DbUtilities.GetByteArray(int)
+                            IL.Emit(OpCodes.Call, Int32ToByteArray); value = typeof(byte[]);
+                        }
+                    }
                 }
-                else if (value == typeof(long))
+                else if (value == typeof(long)) //TODO: binary(8) !?
                 {
                     IL.Emit(OpCodes.Newobj, Int64ToDecimal); value = typeof(decimal);
                 }
@@ -371,17 +383,28 @@ namespace DaJet.Scripting
             {
                 property = properties[i];
 
-                DataType target = property.Type;
+                //TODO:
+                //PropertyInfo target = output.GetProperty(property.Name,
+                //    BindingFlags.Instance | BindingFlags.Public);
 
-                if (target.IsUnion) { MapUnion(in output, in property, in IL); }
-                else if (target.IsBoolean) { MapBoolean(in output, in property, in IL); }
-                else if (target.IsDecimal) { MapDecimal(in output, in property, in IL); }
-                else if (target.IsInteger) { MapInteger(in output, in property, in IL); }
-                else if (target.IsDateTime) { MapDateTime(in output, in property, in IL); }
-                else if (target.IsString) { MapString(in output, in property, in IL); }
-                else if (target.IsBinary) { MapBinary(in output, in property, in IL); }
-                else if (target.IsUuid) { MapUuid(in output, in property, in IL); }
-                else if (target.IsEntity) { MapEntity(in output, in property, in IL); }
+                //if (target is null)
+                //{
+                //    return; //THINK: warning - property not found on target object
+                //}
+
+                //TODO: compare source data type to target
+
+                DataType source = property.Type;
+
+                if (source.IsUnion) { MapUnion(in output, in property, in IL); }
+                else if (source.IsBoolean) { MapBoolean(in output, in property, in IL); }
+                else if (source.IsDecimal) { MapDecimal(in output, in property, in IL); }
+                else if (source.IsInteger) { MapInteger(in output, in property, in IL); }
+                else if (source.IsDateTime) { MapDateTime(in output, in property, in IL); }
+                else if (source.IsString) { MapString(in output, in property, in IL); }
+                else if (source.IsBinary) { MapBinary(in output, in property, in IL); }
+                else if (source.IsUuid) { MapUuid(in output, in property, in IL); }
+                else if (source.IsEntity) { MapEntity(in output, in property, in IL); }
             }
 
             // cleanup
@@ -392,6 +415,11 @@ namespace DaJet.Scripting
         {
             PropertyInfo target = output.GetProperty(property.Name,
                 BindingFlags.Instance | BindingFlags.Public);
+
+            if (target is null)
+            {
+                return; //THINK: warning - property not found on target object
+            }
 
             MethodInfo setAccessor = target.GetSetMethod();
 
@@ -454,6 +482,11 @@ namespace DaJet.Scripting
             PropertyInfo target = output.GetProperty(property.Name,
                 BindingFlags.Instance | BindingFlags.Public);
 
+            if (target is null)
+            {
+                return; //THINK: warning - property not found on target object
+            }
+
             MethodInfo setAccessor = target.GetSetMethod();
 
             ColumnDefinition column = property.GetColumnByPurpose(ColumnPurpose.Value);
@@ -500,8 +533,15 @@ namespace DaJet.Scripting
         {
             // _output.Свойство = reader.IsDBNull(0) ? 0 : reader.GetInt32(0);
 
-            MethodInfo setAccessor = output.GetProperty(property.Name,
-                BindingFlags.Instance | BindingFlags.Public).GetSetMethod();
+            PropertyInfo target = output.GetProperty(property.Name,
+                BindingFlags.Instance | BindingFlags.Public);
+
+            if (target is null)
+            {
+                return; //THINK: warning - property not found on target object
+            }
+
+            MethodInfo setAccessor = target.GetSetMethod();
 
             ColumnDefinition column = property.GetColumnByPurpose(ColumnPurpose.Value);
 
@@ -558,6 +598,11 @@ namespace DaJet.Scripting
 
             PropertyInfo target = output.GetProperty(property.Name,
                 BindingFlags.Instance | BindingFlags.Public);
+
+            if (target is null)
+            {
+                return; //THINK: warning - property not found on target object
+            }
 
             MethodInfo setAccessor = target.GetSetMethod();
 
@@ -616,6 +661,11 @@ namespace DaJet.Scripting
             PropertyInfo target = output.GetProperty(property.Name,
                 BindingFlags.Instance | BindingFlags.Public);
 
+            if (target is null)
+            {
+                return; //THINK: warning - property not found on target object
+            }
+
             MethodInfo setAccessor = target.GetSetMethod();
 
             ColumnDefinition column = property.GetColumnByPurpose(ColumnPurpose.Value); // single value column
@@ -662,8 +712,15 @@ namespace DaJet.Scripting
         {
             // _output.Свойство = reader.IsDBNull(ordinal) ? Array.Empty<byte>() : (byte[])reader.GetValue(ordinal);
 
-            MethodInfo setAccessor = output.GetProperty(property.Name,
-                BindingFlags.Instance | BindingFlags.Public).GetSetMethod();
+            PropertyInfo target = output.GetProperty(property.Name,
+                BindingFlags.Instance | BindingFlags.Public);
+
+            if (target is null)
+            {
+                return; //THINK: warning - property not found on target object
+            }
+
+            MethodInfo setAccessor = target.GetSetMethod();
 
             ColumnDefinition column = property.GetColumnByPurpose(ColumnPurpose.Value);
 
@@ -701,8 +758,15 @@ namespace DaJet.Scripting
         }
         private static void MapUuid(in Type output, in PropertyDefinition property, in ILGenerator IL)
         {
-            MethodInfo setAccessor = output.GetProperty(property.Name,
-                BindingFlags.Instance | BindingFlags.Public).GetSetMethod();
+            PropertyInfo target = output.GetProperty(property.Name,
+                BindingFlags.Instance | BindingFlags.Public);
+
+            if (target is null)
+            {
+                return; //THINK: warning - property not found on target object
+            }
+
+            MethodInfo setAccessor = target.GetSetMethod();
 
             ColumnDefinition column = property.GetColumnByPurpose(ColumnPurpose.Value);
 
@@ -752,7 +816,12 @@ namespace DaJet.Scripting
         {
             PropertyInfo target = output.GetProperty(property.Name,
                 BindingFlags.Instance | BindingFlags.Public);
-            
+
+            if (target is null)
+            {
+                return; //THINK: warning - property not found on target object
+            }
+
             MethodInfo setAccessor = target.GetSetMethod();
 
             int ordinal;
@@ -959,7 +1028,13 @@ namespace DaJet.Scripting
         }
         private static void MapUnion(in Type output, in PropertyDefinition property, in ILGenerator IL)
         {
-            DataType target = property.Type;
+            PropertyInfo target = output.GetProperty(property.Name,
+                BindingFlags.Instance | BindingFlags.Public);
+
+            if (target is null)
+            {
+                return; //THINK: warning - property not found on target object
+            }
 
             ColumnDefinition column = property.GetColumnByPurpose(ColumnPurpose.Tag); // binary(1)
 
