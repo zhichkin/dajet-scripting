@@ -59,10 +59,9 @@ namespace DaJet.Scripting
             
             //else if (node is TemporaryTableExpression temporary_table) { Bind(in temporary_table); }
 
-            else if (node is FromClause from) { Bind(in from); }
-            else if (node is IntoClause into) { Bind(in into); }
-
-            else if (node is TopClause top) { Bind(in top); }
+            //else if (node is FromClause from) { Bind(in from); }
+            //else if (node is IntoClause into) { Bind(in into); }
+            //else if (node is TopClause top) { Bind(in top); }
 
             else if (node is CaseExpression case_when_then_else) { Bind(in case_when_then_else); }
             else if (node is WhenClause when) { Bind(in when); }
@@ -230,8 +229,6 @@ namespace DaJet.Scripting
         }
         private void Bind(in SelectStatement node)
         {
-            //ValidateStatement(in node); APPEND operator
-
             _scope = _scope.OpenScope(node);
 
             if (node.CommonTables is not null)
@@ -241,17 +238,47 @@ namespace DaJet.Scripting
 
             Bind(node.Expression); //NOTE: SelectExpression | TableUnionOperator
 
-            // Define and apply schema to object or array variable
+            BindIntoClause(in node);
 
-            IntoClause into = node.GetIntoClause();
+            _scope = _scope.CloseScope();
+        }
+        private void BindIntoClause(in SelectStatement select)
+        {
+            //NOTE: INTO columns are derived from the host SELECT expression
+            //NOTE: INTO columns are bound already !!!
+
+            IntoClause into = select.GetIntoClause();
+
+            if (into is null) { return; }
+
+            if (into.Table is not null) 
+            {
+                //TODO: temporary table
+            }
+            else
+            {
+                Bind(into.Value); // script variable
+            }
+
+            // Define and apply schema to object or array variable
 
             if (into.Value is VariableReference variable &&
                 variable.Binding is DeclareStatement declare)
             {
-                if (declare.Binding is null)
-                {
-                    EntityDefinition schema = DataMapper.InferSchema(in node);
+                EntityDefinition schema = DataMapper.InferSchema(in select);
 
+                if (declare.Binding is EntityDefinition binding)
+                {
+                    foreach (PropertyDefinition property in schema.Properties)
+                    {
+                        if (binding.GetPropertyByName(property.Name) is null)
+                        {
+                            binding.Properties.Add(property); // extend anonymous schema
+                        }
+                    }
+                }
+                else // this is the first time of binding variable to SELECT INTO output
+                {
                     // Script processor property name - see compiler
                     // Variable name is used in case schema is not defined
                     // New type is compiled and added to AnonymousDataSchema
@@ -260,8 +287,6 @@ namespace DaJet.Scripting
                     declare.Binding = schema;
                 }
             }
-
-            _scope = _scope.CloseScope();
         }
 
         #region "TABLE BINDING"
@@ -291,21 +316,10 @@ namespace DaJet.Scripting
             }
 
             if (node.Top is not null) { Bind(node.Top); }
-            if (node.Into is not null) { Bind(node.Into); }
             if (node.Where is not null) { Bind(node.Where); }
             if (node.Order is not null) { Bind(node.Order); }
             if (node.Group is not null) { Bind(node.Group); }
             if (node.Having is not null) { Bind(node.Having); }
-
-            //if (node.From is not null)
-            //{
-            //    var appends = new AppendOperatorExtractor().Extract(node.From);
-
-            //    foreach (var append in appends)
-            //    {
-            //        BindAppend(append); //FIXME: recursive multiple times binding when nested APPEND
-            //    }
-            //}
 
             _scope = _scope.CloseScope();
         }
@@ -321,9 +335,6 @@ namespace DaJet.Scripting
         private void Bind(in TableJoinOperator node)
         {
             Bind(node.Expression1); //NOTE: { TableReference | TableExpression | TableJoinOperator }
-
-            ////NOTE: delay binding till INTO clause has been binded
-            //if (node.Token == Token.APPEND) { return; }
 
             Bind(node.Expression2);
 
@@ -425,14 +436,6 @@ namespace DaJet.Scripting
                 }
             }
         }
-
-        //private void BindAppend(in TableJoinOperator node)
-        //{
-        //    if (node.Token == Token.APPEND)
-        //    {
-        //        Bind(node.Expression2);
-        //    }
-        //}
 
         #endregion
 
@@ -539,20 +542,6 @@ namespace DaJet.Scripting
             for (int i = 0; i < node.Columns.Count; i++)
             {
                 Bind(node.Columns[i]);
-            }
-        }
-        private void Bind(in IntoClause node)
-        {
-            //NOTE: INTO columns are derived from the host SELECT expression
-            //NOTE: INTO columns are bound already !!!
-
-            if (node.Table is not null)
-            {
-                //CreateTableVariable(in node); ?
-            }
-            else
-            {
-                Bind(node.Value);
             }
         }
         private void Bind(in ValuesExpression node)

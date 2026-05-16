@@ -42,11 +42,11 @@ namespace DaJet.Scripting
                 {
                     if (into.Value is VariableReference variable)
                     {
-                        _statement.Output = variable;
+                        _statement.Output = variable; // script variable
                     }
                     else if (into.Table is not null)
                     {
-                        _statement.Output = into.Table;
+                        _statement.Output = into.Table; // temporary table
                     }
                 }
             }

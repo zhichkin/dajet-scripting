@@ -18,10 +18,13 @@
   </ItemGroup>
 
   <ItemGroup>
-    <None Update="scripts\definitions.djs">
+    <None Update="scripts\mapping\overlapping.djs">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <None Update="scripts\imports.djs">
+    <None Update="scripts\schema\definitions.djs">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Update="scripts\schema\imports.djs">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
     <None Update="scripts\imports\cross-refs\Класс1.djs">

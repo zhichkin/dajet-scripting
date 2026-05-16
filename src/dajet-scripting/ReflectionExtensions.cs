@@ -15,5 +15,10 @@ namespace DaJet.Scripting
                 && type.GetGenericTypeDefinition() == typeof(List<>)
                 && IsSyntaxNode(type.GetGenericArguments()[0]);
         }
+        public static bool IsGenericList(this Type type)
+        {
+            return type.IsGenericType
+                && type.GetGenericTypeDefinition() == typeof(List<>);
+        }
     }
 }

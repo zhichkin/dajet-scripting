@@ -394,6 +394,8 @@ namespace DaJet.Scripting
                 return;
             }
 
+            EntityDefinition schema = DataMapper.InferSchema(in statement);
+
             _counter++;
 
             TypeBuilder type = ScriptModule.DefineType($"Select{_counter}",
@@ -427,7 +429,7 @@ namespace DaJet.Scripting
             {
                 if (ScriptData.TryGetValue(variable.Identifier, out PropertyInfo output))
                 {
-                    SelectProcessor_Process(in type, in variable, in _data);
+                    SelectProcessor_Process(in type, in schema, in _data, in output);
                 }
             }
 
@@ -505,28 +507,13 @@ namespace DaJet.Scripting
 
             IL.Emit(OpCodes.Ret);
         }
-        private void SelectProcessor_Process(in TypeBuilder type, in VariableReference output, in FieldInfo data)
+        private void SelectProcessor_Process(in TypeBuilder type, in EntityDefinition schema, in FieldInfo data, in PropertyInfo output)
         {
-            if (output.Binding is not DeclareStatement declare)
-            {
-                return;
-            }
+            Type outputType = output.PropertyType;
 
-            if (declare.Binding is not EntityDefinition metadata)
-            {
-                return;
-            }
+            bool isArray = outputType.IsGenericList();
 
-            if (!ScriptData.TryGetValue(output.Identifier, out PropertyInfo property))
-            {
-                return;
-            }
-
-            Type outputType = property.PropertyType;
-
-            if (declare.Type.IsArray &&
-                outputType.IsGenericType &&
-                outputType.GetGenericTypeDefinition() == typeof(List<>))
+            if (isArray)
             {
                 outputType = outputType.GetGenericArguments()[0];
             }
@@ -543,7 +530,7 @@ namespace DaJet.Scripting
             _ = IL.DeclareLocal(typeof(byte[])); // Loc_1
             _ = IL.DeclareLocal(typeof(DateTime)); // Loc_2
 
-            if (declare.Type.IsArray)
+            if (isArray) // array
             {
                 ConstructorInfo ctor = outputType.GetConstructor(
                     BindingFlags.Instance | BindingFlags.Public, Type.EmptyTypes);
@@ -553,13 +540,13 @@ namespace DaJet.Scripting
                 IL.Emit(OpCodes.Newobj, ctor);
                 IL.Emit(OpCodes.Stloc_0);
             }
-            else // declare.Type.IsObject
+            else // object
             {
                 // OutputType record = _context.OutputProperty;
 
                 IL.Emit(OpCodes.Ldarg_0); // this SelectProcessor
                 IL.Emit(OpCodes.Ldfld, data); // script data field
-                IL.Emit(OpCodes.Call, property.GetGetMethod());
+                IL.Emit(OpCodes.Call, output.GetGetMethod());
                 IL.Emit(OpCodes.Stloc_0);
             }
 
@@ -570,27 +557,33 @@ namespace DaJet.Scripting
 
             // record.Ссылка = new Entity(123, new Guid(buffer));
 
-            //TODO: MsDataMapper.YearOffset = 2000;
-            MsDataMapper.MapOutput(in outputType, in metadata, in IL);
+            ///<see cref="SelectProcessor_Configure"/>
+            //MetadataProvider provider = ScriptUse.Peek();
+            //if (provider.DataSource == DataSourceType.SqlServer)
+            //{
+            //    MsDataMapper.YearOffset = provider.GetYearOffset();
+            //}
+
+            MsDataMapper.MapOutput(in outputType, in schema, in IL);
 
             // _context.OutputProperty.Add(record);
 
-            if (declare.Type.IsArray)
+            if (isArray)
             {
                 MethodInfo ListAdd = CompileAndSave
                     ? typeof(List<>).GetMethod(nameof(List<>.Add),
                     BindingFlags.Instance | BindingFlags.Public)
-                    : property.PropertyType.GetMethod(nameof(List<>.Add),
+                    : output.PropertyType.GetMethod(nameof(List<>.Add),
                     BindingFlags.Instance | BindingFlags.Public, [outputType]);
 
                 IL.Emit(OpCodes.Ldarg_0); // this SelectProcessor
                 IL.Emit(OpCodes.Ldfld, data); // _data
-                IL.Emit(OpCodes.Call, property.GetGetMethod());
+                IL.Emit(OpCodes.Call, output.GetGetMethod());
                 IL.Emit(OpCodes.Ldloc_0); // OutputType record
 
                 if (CompileAndSave) // Режим записи библиотеки на диск
                 {
-                    IL.Emit(OpCodes.Callvirt, TypeBuilder.GetMethod(property.PropertyType, ListAdd));
+                    IL.Emit(OpCodes.Callvirt, TypeBuilder.GetMethod(output.PropertyType, ListAdd));
                 }
                 else
                 {

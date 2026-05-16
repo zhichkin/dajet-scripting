@@ -1,6 +1,4 @@
-﻿using System.Xml.Linq;
-
-namespace DaJet.Scripting.Model
+﻿namespace DaJet.Scripting.Model
 {
     public sealed class SelectStatement : SyntaxNode
     {
