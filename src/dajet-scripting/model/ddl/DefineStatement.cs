@@ -9,6 +9,23 @@
         {
             return $"[{Token}: {Identifier}]";
         }
+        public DefineProperty GetPropertyByName(in string name)
+        {
+            if (Properties == null || Properties.Count == 0)
+            {
+                return null;
+            }
+
+            foreach (DefineProperty property in Properties)
+            {
+                if (property.Name.Equals(name, StringComparison.Ordinal))
+                {
+                    return property;
+                }
+            }
+
+            return null;
+        }
     }
 }
 

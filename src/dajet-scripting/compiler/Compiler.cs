@@ -235,14 +235,19 @@ namespace DaJet.Scripting
 
             return property;
         }
-        private Type GetOrBuildType(in EntityDefinition entity)
+        private Type GetOrBuildType(in DefineStatement schema)
         {
-            string typeName = "AnonymousDataSchema." + entity.Name.TrimStart('@');
+            string typeName = "AnonymousDataSchema." + schema.Identifier.TrimStart('@');
 
             TypeBuilder type = ScriptModule.DefineType(typeName, TypeAttributes.Public);
 
-            foreach (PropertyDefinition property in entity.Properties)
+            foreach (DefineProperty property in schema.Properties)
             {
+                if (property.Type.IsObject || property.Type.IsArray)
+                {
+                    //TODO: get type from schema name
+                }
+
                 Type propertyType = property.Type.MapToType();
 
                 _ = BuildProperty(type, property.Name, propertyType);
@@ -394,7 +399,7 @@ namespace DaJet.Scripting
                 return;
             }
 
-            EntityDefinition schema = DataMapper.InferSchema(in statement);
+            EntityDefinition schema = DataMapper.InferEntity(in statement);
 
             _counter++;
 

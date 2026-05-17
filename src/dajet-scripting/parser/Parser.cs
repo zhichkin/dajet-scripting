@@ -608,12 +608,20 @@ namespace DaJet.Scripting
         {
             AssignmentStatement statement = new();
 
-            if (!Match(Token.Variable) || variable() is not VariableReference _variable)
+            if (!Match(Token.Variable))
             {
-                throw new FormatException("[SET] variable identifier expected");
+                throw new FormatException("[SET] Target variable expected");
             }
 
-            statement.Target = _variable;
+            SyntaxNode target = variable();
+
+            if (target is not VariableReference _variable &&
+                target is not MemberAccessExpression memberAccess)
+            {
+                throw new FormatException("[SET] Variable identifier or member access expression expected");
+            }
+
+            statement.Target = target;
 
             if (!Match(Token.Equals))
             {
@@ -631,7 +639,7 @@ namespace DaJet.Scripting
 
             if (statement.Initializer is null)
             {
-                throw new FormatException("[SET] Variable initializer expected");
+                throw new FormatException("[SET] Target initializer expected");
             }
 
             return statement;

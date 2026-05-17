@@ -1,6 +1,5 @@
 ﻿using DaJet.Scripting.Model;
 using DaJet.TypeSystem;
-using System.Xml.Linq;
 
 // Исключения из правил:
 // - _KeyField (табличная часть) binary(4) -> int CanBeNumeric
@@ -17,9 +16,76 @@ namespace DaJet.Scripting
 {
     public static class DataMapper
     {
-        public static EntityDefinition InferSchema(in SelectStatement node)
+        public static DefineStatement InferSchema(in SelectStatement node)
         {
-            EntityDefinition schema = new();
+            DefineStatement schema = new();
+
+            List<ColumnExpression> columns = GetColumnExpressions(in node);
+
+            ColumnExpression column;
+            PropertyDefinition source;
+
+            for (int i = 0; i < columns.Count; i++)
+            {
+                column = columns[i];
+
+                source = Infer(in column); //TODO: CASE infers single entity if can be returned multiple
+
+                DefineProperty property = new()
+                {
+                    Type = source.Type
+                };
+
+                // Источник данных - выражение
+
+                if (string.IsNullOrEmpty(source.Name))
+                {
+                    if (!string.IsNullOrEmpty(column.Alias))
+                    {
+                        property.Name = column.Alias;
+                    }
+                    else if (column.Expression is ColumnReference derived)
+                    {
+                        property.Name = derived.Identifier;
+                    }
+
+                    schema.Properties.Add(property);
+
+                    if (column.Source is null)
+                    {
+                        // Константа, функция, параметр или выражение
+                    }
+
+                    continue; //TODO: fix it by refactoring
+                }
+
+                // Схема данных (колонки таблицы СУБД)
+
+                if (!string.IsNullOrEmpty(column.Alias))
+                {
+                    property.Name = column.Alias;
+                }
+                else if (column.Expression is ColumnReference derived)
+                {
+                    property.Name = derived.Identifier;
+                }
+                else if (!string.IsNullOrEmpty(source.Name))
+                {
+                    property.Name = source.Name;
+                }
+                else
+                {
+                    throw new InvalidCastException("Property name missing");
+                }
+
+                schema.Properties.Add(property);
+            }
+
+            return schema;
+        }
+        public static EntityDefinition InferEntity(in SelectStatement node)
+        {
+            EntityDefinition entity = new();
 
             List<ColumnExpression> columns = GetColumnExpressions(in node);
 
@@ -51,7 +117,7 @@ namespace DaJet.Scripting
                         property.Name = derived.Identifier;
                     }
 
-                    schema.Properties.Add(property);
+                    entity.Properties.Add(property);
 
                     if (column.Source is null) // Константа, функция, параметр или выражение
                     {
@@ -84,23 +150,30 @@ namespace DaJet.Scripting
                     throw new InvalidCastException("Property name missing");
                 }
 
-                //FIXME: the same columns references brakes mapping output !!! see MsDataMapper
-                //property.Columns = source.Columns; //TODO: make copy of columns !!!
+                //NOTE: the same column references brakes mapping output (see MsDataMapper)
+                //NOTE: that is why we need to make copy of columns
+
+                ColumnDefinition copy;
+                ColumnDefinition original;
 
                 for (int c = 0; c < source.Columns.Count; c++)
                 {
-                    property.Columns.Add(new ColumnDefinition()
+                    original = source.Columns[c];
+
+                    copy = new ColumnDefinition()
                     {
-                        Name = source.Columns[c].Name,
-                        Type = source.Columns[c].Type,
-                        Purpose = source.Columns[c].Purpose
-                    });
+                        Name = original.Name,
+                        Type = original.Type,
+                        Purpose = original.Purpose
+                    };
+
+                    property.Columns.Add(copy);
                 }
 
-                schema.Properties.Add(property);
+                entity.Properties.Add(property);
             }
 
-            return schema;
+            return entity;
         }
         private static List<ColumnExpression> GetColumnExpressions(in SelectStatement node)
         {
@@ -264,30 +337,36 @@ namespace DaJet.Scripting
                 throw new InvalidCastException($"Invalid binding of MemberAccessExpression [{node.Identifier}]");
             }
 
-            if (declare.Binding is not EntityDefinition entity)
+            if (declare.Binding is not DefineStatement schema)
             {
                 throw new InvalidCastException($"Failed to get data type schema of MemberAccessExpression [{node.Identifier}]");
             }
             
-            PropertyDefinition property = new();
+            DefineProperty property = new();
 
             List<string> members = node.GetAccessMembers(node.Identifier);
 
+            string member;
+
             for (int i = 1; i < members.Count; i++)
             {
-                string member = members[i];
+                member = members[i];
 
-                property = entity.Properties.Where(p => p.Name == member).FirstOrDefault();
+                property = schema.GetPropertyByName(in member);
 
                 if (property is not null)
                 {
-                    return property;
+                    return new PropertyDefinition()
+                    {
+                        Type = property.Type
+                    };
                 }
 
-                entity = entity.Entities.Where(e => e.Name == member).FirstOrDefault();
+                //TODO: get schema by name : schema = property.Schema
+                //entity = entity.Entities.Where(e => e.Name == member).FirstOrDefault();
             }
 
-            return property;
+            return new PropertyDefinition();
         }
         private static PropertyDefinition Infer(in FunctionExpression node)
         {

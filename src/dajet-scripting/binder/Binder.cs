@@ -46,9 +46,10 @@ namespace DaJet.Scripting
             else if (node is DeclareStatement declare) { Bind(in declare); }
             else if (node is VariableReference variable) { Bind(in variable); }
             else if (node is MemberAccessExpression member) { Bind(in member); }
+            else if (node is AssignmentStatement set) { Bind(in set); }
 
             else if (node is UseStatement use) { Bind(in use); }
-
+            
             else if (node is SelectStatement select_statement) { Bind(in select_statement); }
             else if (node is CommonTableExpression cte) { Bind(in cte); }
             else if (node is SelectExpression select) { Bind(in select); }
@@ -184,6 +185,54 @@ namespace DaJet.Scripting
                 RegisterBindingError(node.Token, node.Identifier);
             }
         }
+        private void Bind(in AssignmentStatement node)
+        {
+            if (node.Target is not null)
+            {
+                Bind(node.Target);
+            }
+
+            if (node.Initializer is not null)
+            {
+                Bind(node.Initializer);
+            }
+
+            if (node.Target is MemberAccessExpression member &&
+                member.Binding is DeclareStatement declare)
+            {
+                if (declare.Binding is DefineStatement binding)
+                {
+                    List<string> members = member.GetAccessMembers(member.Identifier);
+
+                    string memberName = members[1];
+
+                    DefineProperty property = binding.GetPropertyByName(memberName);
+
+                    if (property is null)
+                    {
+                        //binding.Properties.Add(new DefineProperty()
+                        //{
+                        //    Name = memberName //TODO: define data type
+                        //});
+                    }
+                }
+            }
+
+            //if (into.Value is VariableReference variable &&
+            //    variable.Binding is DeclareStatement declare)
+            //{
+            //    if (declare.Binding is DefineStatement binding)
+            //    {
+            //        foreach (DefineProperty property in schema.Properties)
+            //        {
+            //            if (binding.GetPropertyByName(property.Name) is null)
+            //            {
+            //                binding.Properties.Add(property); // extend anonymous schema
+            //            }
+            //        }
+            //    }
+            //}
+        }
 
         #region "ARITHMETIC AND LOGICAL OPERATORS"
         private void Bind(in GroupOperator node)
@@ -245,7 +294,7 @@ namespace DaJet.Scripting
         private void BindIntoClause(in SelectStatement select)
         {
             //NOTE: INTO columns are derived from the host SELECT expression
-            //NOTE: INTO columns are bound already !!!
+            //NOTE: SELECT columns are bound already
 
             IntoClause into = select.GetIntoClause();
 
@@ -265,11 +314,11 @@ namespace DaJet.Scripting
             if (into.Value is VariableReference variable &&
                 variable.Binding is DeclareStatement declare)
             {
-                EntityDefinition schema = DataMapper.InferSchema(in select);
+                DefineStatement schema = DataMapper.InferSchema(in select);
 
-                if (declare.Binding is EntityDefinition binding)
+                if (declare.Binding is DefineStatement binding)
                 {
-                    foreach (PropertyDefinition property in schema.Properties)
+                    foreach (DefineProperty property in schema.Properties)
                     {
                         if (binding.GetPropertyByName(property.Name) is null)
                         {
@@ -282,9 +331,10 @@ namespace DaJet.Scripting
                     // Script processor property name - see compiler
                     // Variable name is used in case schema is not defined
                     // New type is compiled and added to AnonymousDataSchema
-                    schema.Name = declare.Identifier.TrimStart('@');
+                    
+                    schema.Identifier = declare.Identifier;
 
-                    declare.Binding = schema;
+                    declare.Binding = schema; //entity;
                 }
             }
         }
