@@ -606,7 +606,7 @@ namespace DaJet.Scripting
         }
         private SyntaxNode assignment()
         {
-            AssignmentStatement statement = new();
+            AssignmentOperator statement = new();
 
             if (!Match(Token.Variable))
             {

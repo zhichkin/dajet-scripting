@@ -241,14 +241,48 @@ namespace DaJet.Scripting
 
             TypeBuilder type = ScriptModule.DefineType(typeName, TypeAttributes.Public);
 
+            //TODO: AnonymousDataSchemaRegistry !
+
             foreach (DefineProperty property in schema.Properties)
             {
+                Type propertyType = null;
+
                 if (property.Type.IsObject || property.Type.IsArray)
                 {
-                    //TODO: get type from schema name
-                }
+                    if (string.IsNullOrEmpty(property.Schema))
+                    {
+                        throw new InvalidOperationException($"Property data type schema is not defined.");
+                    }
+                    else if (property.Schema.StartsWith("AnonymousDataSchema"))
+                    {
+                        if (CompileAndSave)
+                        {
+                            //TODO: implement AnonymousDataSchemaRegistry !
+                        }
+                        else
+                        {
+                            propertyType = ScriptModule.GetType(property.Schema);
+                        }
 
-                Type propertyType = property.Type.MapToType();
+                        if (propertyType is null)
+                        {
+                            throw new InvalidOperationException($"Property data type schema is not found {property.Schema}.");
+                        }
+
+                        if (property.Type.IsArray)
+                        {
+                            propertyType = typeof(List<>).MakeGenericType([propertyType]);
+                        }
+                    }
+                    else if (!SchemaRegistry.TryGet(property.Schema, out propertyType))
+                    {
+                        throw new InvalidOperationException($"Property data type schema is not found {property.Schema}.");
+                    }
+                }
+                else // Simple type
+                {
+                    propertyType = property.Type.MapToType();
+                }
 
                 _ = BuildProperty(type, property.Name, propertyType);
             }
@@ -328,6 +362,7 @@ namespace DaJet.Scripting
             else if (node is UseStatement use) { Compile(in use, in IL); }
             else if (node is SelectStatement select) { Compile(in select, in IL); }
             else if (node is ReturnStatement _return) { Compile(in _return, in IL); }
+            else if (node is AssignmentOperator set) { Compile(in set, in IL); }
         }
         private void Compile(in PrintStatement statement, in ILGenerator IL)
         {
@@ -363,6 +398,45 @@ namespace DaJet.Scripting
             IL.Emit(OpCodes.Stfld, ScriptReturnValue); // _returnValue
 
             IL.Emit(OpCodes.Ret); //THINK: flag existence of the RETURN statement !?
+        }
+        private void Compile(in AssignmentOperator statement, in ILGenerator IL)
+        {
+            PropertyInfo target = null;
+
+            IL.Emit(OpCodes.Ldarg_0); // this ScriptProcessor
+            IL.Emit(OpCodes.Ldfld, ScriptDataField); // _data
+
+            if (statement.Target is VariableReference variable)
+            {
+                if (!ScriptData.TryGetValue(variable.Identifier, out target))
+                {
+                    throw new InvalidOperationException($"Script variable is not found {variable.Identifier}");
+                }
+            }
+            else if (statement.Target is MemberAccessExpression member)
+            {
+                List<string> members = member.GetAccessMembers(member.Identifier);
+
+                if (!ScriptData.TryGetValue(members[0], out target))
+                {
+                    throw new InvalidOperationException($"Script variable is not found {members[0]}");
+                }
+
+                IL.Emit(OpCodes.Call, target.GetGetMethod());
+
+                target = target.PropertyType.GetProperty(members[1]);
+
+                if (target is null)
+                {
+                    throw new InvalidOperationException($"Script variable {members[0]} member {members[1]} is not found.");
+                }
+            }
+
+            ExpressionCompiler expression = new(ScriptDataField, ScriptData);
+
+            Type value = expression.Evaluate(statement.Initializer, in IL);
+
+            IL.Emit(OpCodes.Call, target.GetSetMethod());
         }
         private void Compile(in UseStatement statement, in ILGenerator IL)
         {

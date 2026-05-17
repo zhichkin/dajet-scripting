@@ -46,7 +46,7 @@ namespace DaJet.Scripting
             else if (node is DeclareStatement declare) { Bind(in declare); }
             else if (node is VariableReference variable) { Bind(in variable); }
             else if (node is MemberAccessExpression member) { Bind(in member); }
-            else if (node is AssignmentStatement set) { Bind(in set); }
+            else if (node is AssignmentOperator set) { Bind(in set); }
 
             else if (node is UseStatement use) { Bind(in use); }
             
@@ -106,7 +106,7 @@ namespace DaJet.Scripting
             //else if (node is CreateTypeStatement udt) { Bind(in udt); }
             //else if (node is ApplySequenceStatement apply_sequence) { Bind(in apply_sequence); }
             //else if (node is RevokeSequenceStatement revoke_sequence) { Bind(in revoke_sequence); }
-            //else if (node is AssignmentStatement assignment) { Bind(in assignment); }
+            //else if (node is AssignmentOperator assignment) { Bind(in assign); }
             //else if (node is CaseStatement case_statement) { Bind(in case_statement); }
             //else if (node is IfStatement if_statement) { Bind(in if_statement); }
             //else if (node is TryStatement try_statement) { Bind(in try_statement); }
@@ -185,7 +185,7 @@ namespace DaJet.Scripting
                 RegisterBindingError(node.Token, node.Identifier);
             }
         }
-        private void Bind(in AssignmentStatement node)
+        private void Bind(in AssignmentOperator node)
         {
             if (node.Target is not null)
             {
@@ -210,28 +210,42 @@ namespace DaJet.Scripting
 
                     if (property is null)
                     {
-                        //binding.Properties.Add(new DefineProperty()
-                        //{
-                        //    Name = memberName //TODO: define data type
-                        //});
+                        DataType type = DataMapper.InferType(node.Initializer);
+
+                        if (type.IsObject || type.IsArray)
+                        {
+                            if (node.Initializer is VariableReference variable)
+                            {
+                                if (variable.Binding is DeclareStatement source)
+                                {
+                                    if (string.IsNullOrEmpty(source.Schema))
+                                    {
+                                        binding.Properties.Add(new DefineProperty()
+                                        {
+                                            Name = memberName,
+                                            Schema = $"AnonymousDataSchema.{source.Identifier.TrimStart('@')}",
+                                            Type = source.Type
+                                        });
+                                    }
+                                    else
+                                    {
+                                        binding.Properties.Add(new DefineProperty()
+                                        {
+                                            Name = memberName,
+                                            Schema = source.Schema,
+                                            Type = source.Type
+                                        });
+                                    }
+                                }
+                            }
+                            else if (node.Initializer is MemberAccessExpression memberAccess)
+                            {
+                                //TODO:
+                            }
+                        }
                     }
                 }
             }
-
-            //if (into.Value is VariableReference variable &&
-            //    variable.Binding is DeclareStatement declare)
-            //{
-            //    if (declare.Binding is DefineStatement binding)
-            //    {
-            //        foreach (DefineProperty property in schema.Properties)
-            //        {
-            //            if (binding.GetPropertyByName(property.Name) is null)
-            //            {
-            //                binding.Properties.Add(property); // extend anonymous schema
-            //            }
-            //        }
-            //    }
-            //}
         }
 
         #region "ARITHMETIC AND LOGICAL OPERATORS"

@@ -55,7 +55,7 @@ namespace DaJet.Host
             MetadataProvider.Add("MS_UNF", DataSourceType.SqlServer, in MS_UNF);
             MetadataProvider.Add("MS_TEST", DataSourceType.SqlServer, in MS_TEST);
 
-            CompileAndRun("mapping\\complex-object.djs");
+            CompileAndRun("mapping\\complex-object.djs"); // select\\join\\product_prices.djs
 
             //ExecuteRunner();
         }

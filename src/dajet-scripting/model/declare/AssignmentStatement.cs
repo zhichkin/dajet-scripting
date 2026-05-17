@@ -1,8 +1,8 @@
 ﻿namespace DaJet.Scripting.Model
 {
-    public sealed class AssignmentStatement : SyntaxNode
+    public sealed class AssignmentOperator : SyntaxNode
     {
-        public AssignmentStatement() { Token = Token.SET; }
+        public AssignmentOperator() { Token = Token.SET; }
         public SyntaxNode Target { get; set; } // VariableReference, MemberAccessExpression
         public SyntaxNode Initializer { get; set; } // expression, SELECT
         public override string ToString()
