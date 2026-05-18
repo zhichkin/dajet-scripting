@@ -16,7 +16,8 @@ DEFINE ОбъектДанных
   Таблица         array OF ЗаписьДанных
 )
 
-DECLARE @Код string = '000000001'
+DECLARE @Код     string = '000000001'
+DECLARE @message string
 
 --DECLARE @Таблица array  -- should be declared first
 --DECLARE @Данные  object -- to make assignment work
@@ -39,3 +40,9 @@ USE 'MS_TEST'
 END
 
 SET @Данные.Таблица = @Таблица
+RETURN JSON(@Данные)
+--RETURN JSON(@Данные.Таблица)
+
+--SET @message = JSON(@Данные)
+--SET @message = JSON(@Данные.Таблица)
+--RETURN @message

@@ -9,6 +9,7 @@ namespace DaJet.Scripting
         {
             List<KeyValuePair<string, UdfFunction>> list =
             [
+                new KeyValuePair<string, UdfFunction>(nameof(JSON), new JSON()),
                 new KeyValuePair<string, UdfFunction>(nameof(TYPEOF), new TYPEOF()),
                 new KeyValuePair<string, UdfFunction>(nameof(UUIDOF), new UUIDOF())
             ];

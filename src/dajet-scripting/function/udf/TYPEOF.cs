@@ -1,11 +1,42 @@
 ﻿using DaJet.Scripting.Model;
 using DaJet.TypeSystem;
+using System.Reflection;
+using System.Reflection.Emit;
 
 namespace DaJet.Scripting
 {
     public sealed class TYPEOF : UdfFunction
     {
-        public override DataType GetReturnType(in FunctionExpression node) { return DataType.Integer(); }
+        public override DataType GetReturnType(in FunctionExpression node)
+        {
+            return DataType.Integer();
+        }
+
+        private static readonly PropertyInfo EntityTypeCode = typeof(Entity)
+            .GetProperty(nameof(Entity.TypeCode), BindingFlags.Instance | BindingFlags.Public);
+
+        internal override Type Evaluate(in ExpressionCompiler context, in FunctionExpression node, in ILGenerator IL)
+        {
+            SyntaxNode parameter = node.Parameters[0];
+
+            if (parameter is VariableReference variable)
+            {
+                if (variable.Binding is DeclareStatement declare && declare.Type.IsEntity)
+                {
+                    _ = context.Evaluate(in variable, in IL); // push entity value onto stack
+                }
+            }
+            else if (parameter is MemberAccessExpression member)
+            {
+                _ = context.Evaluate(in member, in IL); // push entity value onto stack
+            }
+
+            IL.Emit(OpCodes.Stloc_1); ///<see cref="MsDataMapper.MapInput"/>
+            IL.Emit(OpCodes.Ldloca_S, 1); // load address of local variable onto stack
+            IL.Emit(OpCodes.Call, EntityTypeCode.GetGetMethod());
+
+            return typeof(int);
+        }
 
         //public FunctionDescriptor Transpile(in ISqlTranspiler transpiler, in FunctionExpression node, in StringBuilder script)
         //{
@@ -62,7 +93,7 @@ namespace DaJet.Scripting
 
         //    return descriptor;
         //}
-        
+
         //private FunctionDescriptor Transpile(in ColumnReference column, in StringBuilder script)
         //{
         //    if (column.Mapping is null || column.Mapping.Count == 0)
@@ -74,7 +105,7 @@ namespace DaJet.Scripting
         //    {
         //        return TranspileEntityProperty(in column, in script);
         //    }
-            
+
         //    return TranspileUnionProperty(in column, in script);
         //}
         //private FunctionDescriptor TranspileEntityProperty(in ColumnReference column, in StringBuilder script)

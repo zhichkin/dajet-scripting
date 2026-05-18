@@ -1,4 +1,5 @@
 <Solution>
+  <Project Path="benchmark/benchmark.csproj" Id="75739da3-42b5-4fc8-a0fd-de5eea6c54ff" />
   <Project Path="dajet-scripting/dajet-scripting.csproj" />
   <Project Path="dajet/dajet.csproj" Id="b26d4b8a-8e88-49f9-842b-4cc1292ba4af" />
 </Solution>

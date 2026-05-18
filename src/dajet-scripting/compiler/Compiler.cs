@@ -56,8 +56,7 @@ namespace DaJet.Scripting
         private FieldInfo ScriptProcessorsField;
         private MethodInfo ScriptProcessorsAdd;
         private MethodInfo ScriptProcessorsGetItem;
-        private Dictionary<string, PropertyInfo> ScriptData = new();
-        
+        private readonly Dictionary<string, PropertyInfo> ScriptData = new();
         private readonly Stack<MetadataProvider> ScriptUse = new();
         private Type BuildScriptProcessor(in Script source, in ModuleBuilder module)
         {
@@ -205,7 +204,7 @@ namespace DaJet.Scripting
         }
         private void InitializeScriptData()
         {
-
+            //TODO: separate method to initialize script data ?!
         }
         
         private PropertyInfo BuildProperty(TypeBuilder builder, string name, Type type)
@@ -258,6 +257,8 @@ namespace DaJet.Scripting
                         if (CompileAndSave)
                         {
                             //TODO: implement AnonymousDataSchemaRegistry !
+                            //propertyType = ScriptModule.GetType(property.Schema);
+                            propertyType = typeof(List<object>);
                         }
                         else
                         {
@@ -401,6 +402,8 @@ namespace DaJet.Scripting
         }
         private void Compile(in AssignmentOperator statement, in ILGenerator IL)
         {
+            //TODO: check data type compatibility of the target and it's initializer
+
             PropertyInfo target = null;
 
             IL.Emit(OpCodes.Ldarg_0); // this ScriptProcessor
@@ -508,6 +511,10 @@ namespace DaJet.Scripting
             {
                 if (ScriptData.TryGetValue(variable.Identifier, out PropertyInfo output))
                 {
+                    //NOTE: clear output list before execute
+                    //TODO: create special method "Setup" !?
+                    SelectProcessor_Execute(in type, in _data, in output);
+
                     SelectProcessor_Process(in type, in schema, in _data, in output);
                 }
             }
@@ -562,6 +569,47 @@ namespace DaJet.Scripting
             IL.Emit(OpCodes.Ret);
 
             return builder;
+        }
+        private void SelectProcessor_Execute(in TypeBuilder type, in FieldInfo data, in PropertyInfo output)
+        {
+            Type outputType = output.PropertyType;
+
+            bool isArray = outputType.IsGenericList();
+
+            if (!isArray) { return; }
+
+            MethodAttributes attributes = MethodAttributes.Public
+                | MethodAttributes.Virtual
+                | MethodAttributes.HideBySig;
+
+            MethodBuilder method = type.DefineMethod("Execute", attributes, typeof(void), Type.EmptyTypes);
+
+            ILGenerator IL = method.GetILGenerator();
+
+            MethodInfo ListClear = CompileAndSave
+                ? typeof(List<>).GetMethod(nameof(List<>.Clear), BindingFlags.Instance | BindingFlags.Public, Type.EmptyTypes)
+                : outputType.GetMethod(nameof(List<>.Clear), BindingFlags.Instance | BindingFlags.Public, Type.EmptyTypes);
+            
+            IL.Emit(OpCodes.Ldarg_0); // this SelectProcessor
+            IL.Emit(OpCodes.Ldfld, data); // _data
+            IL.Emit(OpCodes.Call, output.GetGetMethod());
+            
+            if (CompileAndSave) // Режим записи библиотеки на диск
+            {
+                IL.Emit(OpCodes.Callvirt, TypeBuilder.GetMethod(outputType, ListClear));
+            }
+            else
+            {
+                IL.Emit(OpCodes.Callvirt, ListClear);
+            }
+
+            MethodInfo ExecuteBase = typeof(SelectProcessor).GetMethod(nameof(SelectProcessor.Execute),
+                BindingFlags.Instance | BindingFlags.Public, Type.EmptyTypes);
+
+            IL.Emit(OpCodes.Ldarg_0); // this SelectProcessor
+            IL.Emit(OpCodes.Call, ExecuteBase);
+
+            IL.Emit(OpCodes.Ret);
         }
         private void SelectProcessor_Configure(in TypeBuilder type, in List<SyntaxNode> input, in FieldInfo data)
         {

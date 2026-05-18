@@ -1,11 +1,42 @@
 ﻿using DaJet.Scripting.Model;
 using DaJet.TypeSystem;
+using System.Reflection;
+using System.Reflection.Emit;
 
 namespace DaJet.Scripting
 {
     public sealed class UUIDOF : UdfFunction
     {
-        public override DataType GetReturnType(in FunctionExpression node) { return DataType.Uuid(); }
+        public override DataType GetReturnType(in FunctionExpression node)
+        {
+            return DataType.Uuid();
+        }
+
+        private static readonly PropertyInfo EntityIdentity = typeof(Entity)
+            .GetProperty(nameof(Entity.Identity), BindingFlags.Instance | BindingFlags.Public);
+
+        internal override Type Evaluate(in ExpressionCompiler context, in FunctionExpression node, in ILGenerator IL)
+        {
+            SyntaxNode parameter = node.Parameters[0];
+
+            if (parameter is VariableReference variable)
+            {
+                if (variable.Binding is DeclareStatement declare && declare.Type.IsEntity)
+                {
+                    _ = context.Evaluate(in variable, in IL); // push entity value onto stack
+                }
+            }
+            else if (parameter is MemberAccessExpression member)
+            {
+                _ = context.Evaluate(in member, in IL); // push entity value onto stack
+            }
+
+            IL.Emit(OpCodes.Stloc_1); ///<see cref="MsDataMapper.MapInput"/>
+            IL.Emit(OpCodes.Ldloca_S, 1); // load address of local variable onto stack
+            IL.Emit(OpCodes.Call, EntityIdentity.GetGetMethod());
+
+            return typeof(Guid);
+        }
 
         //public FunctionDescriptor Transpile(in ISqlTranspiler transpiler, in FunctionExpression node, in StringBuilder script)
         //{
@@ -69,7 +100,7 @@ namespace DaJet.Scripting
         //    {
         //        return TranspileEntityProperty(in column, in script);
         //    }
-            
+
         //    return TranspileUnionProperty(in column, in script);
         //}
         //private FunctionDescriptor TranspileEntityProperty(in ColumnReference column, in StringBuilder script)
@@ -121,7 +152,7 @@ namespace DaJet.Scripting
         //    column.Mapping.Add(map);
 
         //    script.Append(map.Name);
-            
+
         //    if (!string.IsNullOrEmpty(map.Alias))
         //    {
         //        script.Append(" AS ").Append(map.Alias);

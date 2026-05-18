@@ -18,6 +18,9 @@
   </ItemGroup>
 
   <ItemGroup>
+    <None Update="scripts\benchmark.djs">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
     <None Update="scripts\mapping\complex-object.djs">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
