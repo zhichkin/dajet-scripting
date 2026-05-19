@@ -13,7 +13,7 @@ namespace benchmark
     [MemoryDiagnoser]
     [MinColumn, MaxColumn]
     //[WarmupCount(1)]
-    //[IterationCount(1)]
+    //[IterationCount(10)]
     //[MinIterationCount(5)]
     //[MaxIterationCount(20)]
     public class SelectComplexObject

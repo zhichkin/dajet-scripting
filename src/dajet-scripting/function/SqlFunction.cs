@@ -11,7 +11,7 @@ namespace DaJet.Scripting
         {
             if (node.Token == Token.UDF)
             {
-                throw new InvalidOperationException($"Invalid function name: {node.Name}");
+                throw new InvalidOperationException($"Invalid SQL function name: {node.Name}");
             }
 
             script.Append(node.Name);

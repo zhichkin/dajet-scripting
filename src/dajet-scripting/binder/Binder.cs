@@ -208,9 +208,9 @@ namespace DaJet.Scripting
 
                     DefineProperty property = binding.GetPropertyByName(memberName);
 
-                    if (property is null)
+                    if (property is null) // Добавляем свойство в анонимную схему, если оно отсутствует
                     {
-                        DataType type = DataMapper.InferType(node.Initializer);
+                        DataType type = DataMapper.InferType(node.Initializer); // Выводим тип свойства
 
                         if (type.IsObject || type.IsArray)
                         {

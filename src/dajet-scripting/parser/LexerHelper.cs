@@ -76,7 +76,6 @@ namespace DaJet.Scripting
             { "NULL", Token.NULL },
             { "CREATE", Token.CREATE },
             { "TABLE", Token.TABLE },
-            { "COMPUTED", Token.COMPUTED },
             { "VARIABLE", Token.VARIABLE },
             { "TEMPORARY", Token.TEMPORARY },
             { "UPSERT", Token.UPSERT },

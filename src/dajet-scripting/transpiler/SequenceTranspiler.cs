@@ -1,7 +1,5 @@
 ﻿using DaJet.Scripting.Model;
 using DaJet.TypeSystem;
-using System;
-using System.Collections.Generic;
 using System.Text;
 
 namespace DaJet.Scripting
