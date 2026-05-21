@@ -4,7 +4,7 @@ using System.Text;
 
 namespace DaJet.Scripting
 {
-    //public sealed class PgSqlTranspiler : SqlTranspiler
+    //public sealed class PgSqlTranspiler : Transpiler
     //{
     //    public PgSqlTranspiler(ISchemaProvider schema) : base(schema) { }
 

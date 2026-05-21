@@ -3,13 +3,13 @@ using Microsoft.Data.SqlClient;
 
 namespace DaJet.Scripting
 {
-    public abstract class SelectProcessor : ProcessorBase
+    public abstract class MsSelectProcessor : ProcessorBase
     {
         protected readonly static byte[] TRUE = [0x01];
         protected readonly static byte[] FALSE = [0x00];
         
         protected readonly ScriptProcessor _script;
-        protected SelectProcessor(ScriptProcessor script)
+        protected MsSelectProcessor(ScriptProcessor script)
         {
             ArgumentNullException.ThrowIfNull(script, nameof(script));
 
@@ -19,7 +19,6 @@ namespace DaJet.Scripting
         }
         protected abstract void Configure(SqlCommand command); // input
         protected abstract void Process(SqlDataReader reader); // output
-        internal int YearOffset { get; set; }
         public string SqlCommand { get; set; }
         public override void Execute()
         {

@@ -10,7 +10,7 @@ using System.Text.Unicode;
 
 namespace DaJet.Scripting
 {
-    public sealed class JSON : UdfFunction
+    public sealed class JSON : DaJetFunction
     {
         public override DataType GetReturnType(in FunctionExpression node)
         {

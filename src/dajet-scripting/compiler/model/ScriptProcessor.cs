@@ -4,7 +4,7 @@ namespace DaJet.Scripting
 {
     public abstract class ScriptProcessor
     {
-        protected readonly Stack<MsDataSource> _sources = new();
+        protected readonly Stack<DataSource> _sources = new();
         protected readonly List<ProcessorBase> _processors = new();
         
         protected object _returnValue = null;
@@ -40,7 +40,7 @@ namespace DaJet.Scripting
             }
         }
         public object ReturnValue { get { return _returnValue; } }
-        protected void UseDataSource(string connectionString)
+        protected void UseMsDataSource(string connectionString)
         {
             // Read Committed
             // Repeatable Read
@@ -53,7 +53,7 @@ namespace DaJet.Scripting
         }
         protected void DisposeDataSource()
         {
-            if (_sources.TryPop(out MsDataSource source))
+            if (_sources.TryPop(out DataSource source))
             {
                 source.Dispose();
             }
@@ -61,6 +61,10 @@ namespace DaJet.Scripting
         internal MsDataSource GetMsDataSource()
         {
             return _sources.Peek() as MsDataSource;
+        }
+        internal PgDataSource GetPgDataSource()
+        {
+            return _sources.Peek() as PgDataSource;
         }
         protected void Synchronize()
         {

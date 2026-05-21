@@ -1,23 +1,17 @@
-﻿using Microsoft.Data.SqlClient;
+﻿using DaJet.Data.PostgreSql;
+using Npgsql;
 using System.Data;
 
 namespace DaJet.Data
 {
-    public abstract class DbDataSource : IDisposable
-    {
-        public void Dispose()
-        {
-            
-        }
-    }
-    public sealed class MsDataSource: IDisposable
+    public sealed class PgDataSource : DataSource
     {
         private bool _disposed;
-        private SqlConnection _connection;
-        private SqlTransaction _transaction;
-        public MsDataSource(string connectionString, string isolationLevel)
+        private NpgsqlConnection _connection;
+        private NpgsqlTransaction _transaction;
+        public PgDataSource(string connectionString, string isolationLevel)
         {
-            _connection = new SqlConnection(connectionString);
+            _connection = PgDataSourceFactory.CreateConnection(in connectionString);
 
             try
             {
@@ -33,9 +27,11 @@ namespace DaJet.Data
                 Dispose(); throw;
             }
         }
-        public SqlCommand CreateCommand()
+        public NpgsqlCommand CreateCommand()
         {
-            SqlCommand command = _connection.CreateCommand();
+            // ObjectDisposedException.ThrowIf(_disposed, typeof(MsDataContext));
+
+            NpgsqlCommand command = _connection.CreateCommand();
 
             command.Connection = _connection;
             command.Transaction = _transaction;
@@ -45,17 +41,23 @@ namespace DaJet.Data
         }
         public void TxBegin()
         {
+            // ObjectDisposedException.ThrowIf(_disposed, typeof(MsDataContext));
+
             _transaction = _connection.BeginTransaction();
         }
         public void TxCommit()
         {
+            // ObjectDisposedException.ThrowIf(_disposed, typeof(MsDataContext));
+
             _transaction?.Commit();
         }
         public void TxRollback()
         {
+            // ObjectDisposedException.ThrowIf(_disposed, typeof(MsDataContext));
+
             _transaction?.Rollback();
         }
-        public void Dispose()
+        public override void Dispose()
         {
             if (_disposed) { return; }
 
@@ -66,8 +68,6 @@ namespace DaJet.Data
             _connection = null;
 
             _disposed = true;
-
-            // ObjectDisposedException.ThrowIf(_disposed, typeof(MsDataContext));
         }
     }
 }

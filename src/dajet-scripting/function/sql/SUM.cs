@@ -10,7 +10,7 @@ namespace DaJet.Scripting
         {
             return DataType.Integer(); //TODO: infer parameter data type
         }
-        public override void Visit(in FunctionExpression node, in StringBuilder script, in IStatementTranspiler statement)
+        public override void Visit(in FunctionExpression node, in StringBuilder script, in SqlTranspiler statement)
         {
             script.Append(node.Name);
 

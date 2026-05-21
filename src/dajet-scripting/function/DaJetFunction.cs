@@ -4,12 +4,12 @@ using System.Reflection.Emit;
 
 namespace DaJet.Scripting
 {
-    public abstract class UdfFunction
+    public abstract class DaJetFunction
     {
         public abstract DataType GetReturnType(in FunctionExpression node);
         internal abstract Type Evaluate(in ExpressionCompiler context, in FunctionExpression node, in ILGenerator IL);
 
-        //public virtual void Visit(in FunctionExpression node, in StringBuilder script, in IStatementTranspiler statement)
+        //public virtual void Visit(in FunctionExpression node, in StringBuilder script, in SqlTranspiler statement)
         //{
         //    if (node.Token == Token.UDF)
         //    {

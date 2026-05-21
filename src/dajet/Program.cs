@@ -54,8 +54,28 @@ namespace DaJet.Host
 
             MetadataProvider.Add("MS_UNF", DataSourceType.SqlServer, in MS_UNF);
             MetadataProvider.Add("MS_TEST", DataSourceType.SqlServer, in MS_TEST);
-            
-            CompileAndRun("benchmark.djs");
+
+            string source;
+            string scriptPath = "benchmark.djs"; // "select\\join\\product_prices.djs"
+            string filePath = Path.Combine(AppContext.BaseDirectory, "scripts", scriptPath);
+
+            using (StreamReader reader = new(filePath, Encoding.UTF8))
+            {
+                source = reader.ReadToEnd();
+            }
+
+            Console.WriteLine(filePath);
+            Console.WriteLine(source);
+            Console.WriteLine("----");
+
+            //Transpile(in source);
+
+            CompileAndRun(in source);
+
+            //for (int i = 0; i < 1000; i++)
+            //{
+            //    ProfileCompiler(in source);
+            //}
 
             //ExecuteRunner();
         }
@@ -86,20 +106,8 @@ namespace DaJet.Host
 
             Console.WriteLine("Runners done");
         }
-        private static void CompileAndRun(in string scriptPath)
+        private static void Transpile(in string source)
         {
-            string source;
-            string filePath = Path.Combine(AppContext.BaseDirectory, "scripts", scriptPath);
-
-            using (StreamReader reader = new(filePath, Encoding.UTF8))
-            {
-                source = reader.ReadToEnd();
-            }
-
-            Console.WriteLine(filePath);
-            Console.WriteLine(source);
-            Console.WriteLine("----");
-
             Parser parser = new();
 
             if (!parser.TryParse(in source, out Script script, out string error))
@@ -130,9 +138,9 @@ namespace DaJet.Host
                 Console.WriteLine(string.Join('\n', errors)); return;
             }
 
-            SqlTranspiler transpiler = new("SqlServer", 2000);
+            Transpiler transpiler = new();
 
-            if (!transpiler.TryTranspile(script, out List<SqlStatement> statements, out errors))
+            if (!transpiler.TryTranspile(in script, out List<SqlStatement> statements, out errors))
             {
                 Console.WriteLine(string.Join('\n', errors)); return;
             }
@@ -145,10 +153,12 @@ namespace DaJet.Host
                     Console.WriteLine("----");
                 }
             }
-
+        }
+        private static void CompileAndRun(in string source)
+        {
             Compiler compiler = new();
 
-            ScriptProcessor processor = compiler.Compile(in script, in statements);
+            ScriptProcessor processor = compiler.Compile(in source);
 
             if (processor is not null)
             {
@@ -190,6 +200,12 @@ namespace DaJet.Host
         private static void ShowReturnValue(in object value)
         {
             Console.WriteLine($"RETURN = {value ?? "NULL"}");
+        }
+        private static void ProfileCompiler(in string source)
+        {
+            Compiler compiler = new();
+
+            ScriptProcessor processor = compiler.Compile(in source);
         }
     }
 }

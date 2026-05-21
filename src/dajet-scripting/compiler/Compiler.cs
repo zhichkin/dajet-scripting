@@ -10,14 +10,70 @@ namespace DaJet.Scripting
 {
     public sealed class Compiler
     {
-        private Type ScriptProcessorBase { get; } = typeof(ScriptProcessor);
-        private Type SelectProcessorBase { get; } = typeof(SelectProcessor);
-
-        private Dictionary<SyntaxNode, SqlStatement> _statements = new();
-
         private bool CompileAndSave = false;
-        public ScriptProcessor Compile(in Script script, in List<SqlStatement> statements)
+        private Type ScriptProcessorBase { get; } = typeof(ScriptProcessor);
+        private Type SelectProcessorBase { get; } = typeof(MsSelectProcessor);
+
+        private int _counter;
+        private Dictionary<SyntaxNode, SqlStatement> _statements = new();
+        private ModuleBuilder ScriptModule;
+        private TypeInfo NewScriptProcessor;
+        private ILGenerator Constructor;
+        private FieldInfo ScriptReturnValue;
+        private FieldInfo ScriptDataField;
+        private FieldInfo ScriptProcessorsField;
+        private MethodInfo ScriptProcessorsAdd;
+        private MethodInfo ScriptProcessorsGetItem;
+        private readonly Dictionary<string, PropertyInfo> ScriptData = new();
+        private readonly Stack<MetadataProvider> ScriptUse = new();
+
+        public ScriptProcessor Compile(in string source)
         {
+            Parser parser = new();
+
+            if (!parser.TryParse(in source, out Script script, out string error))
+            {
+                throw new InvalidOperationException(error);
+            }
+
+            List<DefineStatement> definitions = new();
+
+            foreach (SyntaxNode node in script.Statements)
+            {
+                if (node is DefineStatement definition)
+                {
+                    definitions.Add(definition);
+                }
+            }
+
+            if (!SchemaRegistry.TryRegister(in definitions, out error))
+            {
+                throw new InvalidOperationException(error);
+            }
+
+            Scripting.Binder binder = new();
+            //OneDbSchemaProvider schema = new();
+            CacheableSchemaProvider schema = new();
+
+            if (!binder.TryBind(in script, schema, out List<string> errors))
+            {
+                throw new InvalidOperationException(string.Join('\n', errors));
+            }
+
+            Transpiler transpiler = new();
+
+            if (!transpiler.TryTranspile(in script, out List<SqlStatement> statements, out errors))
+            {
+                throw new InvalidOperationException(string.Join('\n', errors));
+            }
+
+            return Compile(in script, in statements);
+        }
+        private ScriptProcessor Compile(in Script script, in List<SqlStatement> statements)
+        {
+            _counter = 0;
+            _statements.Clear();
+
             foreach (SqlStatement statement in statements)
             {
                 _statements.Add(statement.Node, statement);
@@ -48,16 +104,6 @@ namespace DaJet.Scripting
             return processor;
         }
 
-        private ModuleBuilder ScriptModule;
-        private TypeInfo NewScriptProcessor;
-        private ILGenerator Constructor;
-        private FieldInfo ScriptReturnValue;
-        private FieldInfo ScriptDataField;
-        private FieldInfo ScriptProcessorsField;
-        private MethodInfo ScriptProcessorsAdd;
-        private MethodInfo ScriptProcessorsGetItem;
-        private readonly Dictionary<string, PropertyInfo> ScriptData = new();
-        private readonly Stack<MetadataProvider> ScriptUse = new();
         private Type BuildScriptProcessor(in Script source, in ModuleBuilder module)
         {
             TypeBuilder script = module.DefineType("Script1", TypeAttributes.Public, ScriptProcessorBase);
@@ -333,7 +379,6 @@ namespace DaJet.Scripting
             return BuildProperty(script, propertyName, propertyType);
         }
 
-        private int _counter;
         private void ScriptProcessor_Execute(in Script source, in TypeBuilder script)
         {
             _counter = 0;
@@ -356,7 +401,6 @@ namespace DaJet.Scripting
                 IL.Emit(OpCodes.Ret);
             }
         }
-
         private void Compile(in SyntaxNode node, in ILGenerator IL)
         {
             if (node is PrintStatement print) { Compile(in print, in IL); }
@@ -449,8 +493,21 @@ namespace DaJet.Scripting
 
             IL.Emit(OpCodes.Ldarg_0); // this ScriptProcessor
             IL.Emit(OpCodes.Ldstr, provider.ConnectionString);
-            IL.Emit(OpCodes.Call, typeof(ScriptProcessor).GetMethod("UseDataSource",
-                BindingFlags.Instance | BindingFlags.NonPublic, [typeof(string)]));
+
+            if (provider.DataSource == DataSourceType.SqlServer)
+            {
+                IL.Emit(OpCodes.Call, typeof(ScriptProcessor).GetMethod("UseMsDataSource",
+                    BindingFlags.Instance | BindingFlags.NonPublic, [typeof(string)]));
+            }
+            else if (provider.DataSource == DataSourceType.PostgreSql)
+            {
+                IL.Emit(OpCodes.Call, typeof(ScriptProcessor).GetMethod("UsePgDataSource",
+                    BindingFlags.Instance | BindingFlags.NonPublic, [typeof(string)]));
+            }
+            else
+            {
+                throw new InvalidOperationException($"Unsupported data source: {provider.DataSource}");
+            }
             
             _ = IL.BeginExceptionBlock();
 
@@ -492,7 +549,7 @@ namespace DaJet.Scripting
                 FieldAttributes.Private | FieldAttributes.InitOnly);
 
             //MetadataProvider use = ScriptUse.Peek();
-            MethodInfo set_SqlCommand = typeof(SelectProcessor)
+            MethodInfo set_SqlCommand = typeof(MsSelectProcessor)
                 .GetProperty("SqlCommand", BindingFlags.Instance | BindingFlags.Public)
                 .GetSetMethod();
             
@@ -540,6 +597,7 @@ namespace DaJet.Scripting
             //IL.Emit(OpCodes.Isinst, processor); !?
             IL.Emit(OpCodes.Callvirt, execute);
         }
+        
         private ConstructorInfo BuildSelectProcessorConstructor(in TypeBuilder type, in FieldInfo data, in MethodInfo initializer)
         {
             ConstructorInfo ctor = SelectProcessorBase.GetConstructor(
@@ -603,7 +661,7 @@ namespace DaJet.Scripting
                 IL.Emit(OpCodes.Callvirt, ListClear);
             }
 
-            MethodInfo ExecuteBase = typeof(SelectProcessor).GetMethod(nameof(SelectProcessor.Execute),
+            MethodInfo ExecuteBase = typeof(MsSelectProcessor).GetMethod(nameof(MsSelectProcessor.Execute),
                 BindingFlags.Instance | BindingFlags.Public, Type.EmptyTypes);
 
             IL.Emit(OpCodes.Ldarg_0); // this SelectProcessor
@@ -622,6 +680,7 @@ namespace DaJet.Scripting
             ILGenerator IL = method.GetILGenerator();
 
             MetadataProvider provider = ScriptUse.Peek();
+
             if (provider.DataSource == DataSourceType.SqlServer)
             {
                 MsDataMapper.YearOffset = provider.GetYearOffset();

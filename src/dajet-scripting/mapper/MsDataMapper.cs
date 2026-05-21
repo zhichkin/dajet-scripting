@@ -74,10 +74,10 @@ namespace DaJet.Scripting
         
         static MsDataMapper()
         {
-            TRUE = typeof(SelectProcessor).GetField(nameof(TRUE),
+            TRUE = typeof(MsSelectProcessor).GetField(nameof(TRUE),
                 BindingFlags.Static | BindingFlags.NonPublic);
             
-            FALSE = typeof(SelectProcessor).GetField(nameof(FALSE),
+            FALSE = typeof(MsSelectProcessor).GetField(nameof(FALSE),
                 BindingFlags.Static | BindingFlags.NonPublic);
 
             GetParameters = typeof(SqlCommand)

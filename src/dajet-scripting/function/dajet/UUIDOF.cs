@@ -5,7 +5,7 @@ using System.Reflection.Emit;
 
 namespace DaJet.Scripting
 {
-    public sealed class UUIDOF : UdfFunction
+    public sealed class UUIDOF : DaJetFunction
     {
         public override DataType GetReturnType(in FunctionExpression node)
         {

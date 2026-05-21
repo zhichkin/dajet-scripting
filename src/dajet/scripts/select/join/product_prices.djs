@@ -1,5 +1,5 @@
 
-DECLARE @Период     datetime = '2026-05-14T00:00:00'
+DECLARE @Период     datetime = '2026-01-01T00:00:00'
 DECLARE @Поставщик  object
 DECLARE @Контрагент entity
 DECLARE @Таблица    array

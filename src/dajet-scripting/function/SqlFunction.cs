@@ -7,7 +7,7 @@ namespace DaJet.Scripting
     public abstract class SqlFunction
     {
         public abstract DataType GetReturnType(in FunctionExpression node);
-        public virtual void Visit(in FunctionExpression node, in StringBuilder script, in IStatementTranspiler statement)
+        public virtual void Visit(in FunctionExpression node, in StringBuilder script, in SqlTranspiler statement)
         {
             if (node.Token == Token.UDF)
             {

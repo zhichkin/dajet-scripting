@@ -1,44 +1,46 @@
-﻿using DaJet.Scripting.Model;
+﻿using DaJet.Metadata;
+using DaJet.Scripting.Model;
 using DaJet.TypeSystem;
 using System.Text;
 
 namespace DaJet.Scripting
 {
-    public class SelectTranspiler : IStatementTranspiler
+    public abstract class SelectTranspiler : SqlTranspiler
     {
-        private SqlStatement _statement;
-        public int YearOffset { get; set; }
-        
-        void IStatementTranspiler.Visit(in SyntaxNode expression, in StringBuilder script)
-        {
-            Visit(in expression, in script);
-        }
-        bool IStatementTranspiler.TryTranspile(in SyntaxNode node, out SqlStatement statement, out string error)
-        {
-            if (node is not SelectStatement select)
-            {
-                throw new ArgumentOutOfRangeException(nameof(node));
-            }
-
-            return TryTranspile(in select, out statement, out error);
-        }
-
         private static readonly BooleanClauseTransformer _transformer = new();
-        public bool TryTranspile(in SelectStatement node, out SqlStatement statement, out string error)
+        
+        protected int YearOffset;
+        protected SqlStatement _statement;
+        protected MetadataProvider _provider;
+        public override bool TryTranspile(in MetadataProvider provider, in SyntaxNode node, out SqlStatement statement, out string error)
         {
             error = null;
-
-            StringBuilder script = new();
-
-            _statement = new SqlStatement(node);
-
+            statement = null;
+            
+            if (node is not SelectStatement select)
+            {
+                error = $"Invalid parameter type [node]: SelectStatement expected";
+                return false;
+            }
+            
             try
             {
-                Visit(in node, in script);
+                YearOffset = provider.GetYearOffset();
+
+                _provider = provider;
+
+                StringBuilder script = new();
+
+                _statement = new SqlStatement(node)
+                {
+                    Dialect = _provider.DataSource
+                };
+
+                Visit(in select, in script);
 
                 _statement.Sql = script.ToString();
                 
-                if (node.GetIntoClause() is IntoClause into)
+                if (select.GetIntoClause() is IntoClause into)
                 {
                     if (into.Value is VariableReference variable)
                     {
@@ -56,12 +58,13 @@ namespace DaJet.Scripting
             }
 
             statement = _statement;
-            
+
+            _provider = null;
             _statement = null;
 
             return string.IsNullOrEmpty(error);
         }
-        private void Visit(in SyntaxNode node, in StringBuilder script)
+        public override void Visit(in SyntaxNode node, in StringBuilder script)
         {
             if (node is GroupOperator group) { Visit(in group, in script); }
             else if (node is UnaryOperator unary) { Visit(in unary, in script); }
@@ -706,8 +709,6 @@ namespace DaJet.Scripting
             script.Append(parameter);
 
             _statement.Input.Add(node);
-
-            //script.Append(node.GetDbParameterName());
         }
 
         //protected virtual void Visit(in EnumValue node, in StringBuilder script)
@@ -721,7 +722,7 @@ namespace DaJet.Scripting
             {
                 function.Visit(in node, in script, this);
             }
-            else if (UdfFunctions.TryGet(node.Name, out UdfFunction udf))
+            else if (DaJetFunctions.Contains(node.Name))
             {
                 int count = _statement.Input.Count; //FIXME: create RegisterInputParameter !?
 

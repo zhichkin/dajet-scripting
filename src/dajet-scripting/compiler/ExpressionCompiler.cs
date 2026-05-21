@@ -170,7 +170,7 @@ namespace DaJet.Scripting
         }
         internal Type Evaluate(in FunctionExpression node, in ILGenerator IL)
         {
-            if (!UdfFunctions.TryGet(node.Name, out UdfFunction function))
+            if (!DaJetFunctions.TryGet(node.Name, out DaJetFunction function))
             {
                 throw new InvalidOperationException($"Unknown function name: {node.Name}");
             }
