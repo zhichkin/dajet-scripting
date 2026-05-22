@@ -3,7 +3,7 @@ using DaJet.TypeSystem;
 
 namespace DaJet.Scripting
 {
-    internal sealed class CacheableSchemaProvider : ISchemaProvider
+    public sealed class CacheableSchemaProvider : ISchemaProvider
     {
         private static readonly Dictionary<string, EntityDefinition> _cache = new();
         public EntityDefinition GetSchema(in string domain, in string identifier)

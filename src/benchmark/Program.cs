@@ -7,7 +7,7 @@ namespace benchmark
     {
         public static void Main(string[] args)
         {
-            Summary summary = BenchmarkRunner.Run<SelectComplexObject>();
+            Summary summary = BenchmarkRunner.Run<SelectProcessorBenchmarks>();
         }
     }
 }

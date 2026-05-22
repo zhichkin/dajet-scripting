@@ -3,11 +3,11 @@
     public sealed class UseStatement : SyntaxNode
     {
         public UseStatement() { Token = Token.USE; }
-        public string Uri { get; set; } // uri template string
+        public string Source { get; set; }
         public StatementBlock Statements { get; set; } = new();
         public override string ToString()
         {
-            return $"{Uri}";
+            return $"{Source}";
         }
     }
 }

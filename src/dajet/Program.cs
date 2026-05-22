@@ -3,6 +3,7 @@ using DaJet.Json;
 using DaJet.Metadata;
 using DaJet.Scripting;
 using DaJet.Scripting.Model;
+using DaJet.TypeSystem;
 using System.Reflection;
 using System.Text;
 using System.Text.Encodings.Web;
@@ -54,9 +55,10 @@ namespace DaJet.Host
 
             MetadataProvider.Add("MS_UNF", DataSourceType.SqlServer, in MS_UNF);
             MetadataProvider.Add("MS_TEST", DataSourceType.SqlServer, in MS_TEST);
+            MetadataProvider.Add("PG_TEST", DataSourceType.PostgreSql, in PG_TEST);
 
             string source;
-            string scriptPath = "benchmark.djs"; // "select\\join\\product_prices.djs"
+            string scriptPath = "simple.djs"; // "benchmark.djs" "select\\join\\product_prices.djs"
             string filePath = Path.Combine(AppContext.BaseDirectory, "scripts", scriptPath);
 
             using (StreamReader reader = new(filePath, Encoding.UTF8))
@@ -70,7 +72,9 @@ namespace DaJet.Host
 
             //Transpile(in source);
 
-            CompileAndRun(in source);
+            ExecuteQuery(in source);
+
+            //CompileAndRun(in source);
 
             //for (int i = 0; i < 1000; i++)
             //{
@@ -206,6 +210,24 @@ namespace DaJet.Host
             Compiler compiler = new();
 
             ScriptProcessor processor = compiler.Compile(in source);
+        }
+
+        private static void ExecuteQuery(in string source)
+        {
+            QueryProcessor query = new(in source);
+
+            List<DataObject> table = query.Execute();
+
+            foreach (DataObject record in table)
+            {
+                for (int i = 0; i < record.Count(); i++)
+                {
+                    string name = record.GetName(i);
+                    object value = record.GetValue(i);
+
+                    Console.WriteLine($"{name} = {value}");
+                }
+            }
         }
     }
 }

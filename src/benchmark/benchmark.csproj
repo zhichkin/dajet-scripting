@@ -12,11 +12,19 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\dajet-compiler\dajet-compiler.csproj" />
+    <ProjectReference Include="..\dajet-query\dajet-query.csproj" />
     <ProjectReference Include="..\dajet-scripting\dajet-scripting.csproj" />
   </ItemGroup>
 
   <ItemGroup>
+    <None Update="scripts\ms_simple.djs">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
     <None Update="scripts\select-complex-object.djs">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Update="scripts\pg_simple.djs">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
   </ItemGroup>

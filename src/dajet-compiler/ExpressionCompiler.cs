@@ -175,7 +175,7 @@ namespace DaJet.Scripting
                 throw new InvalidOperationException($"Unknown function name: {node.Name}");
             }
 
-            return function.Evaluate(this, in node, in IL);
+            return FunctionCompiler.Evaluate(this, in node, in IL);
         }
         internal Type Evaluate(in GroupOperator node, in ILGenerator IL)
         {

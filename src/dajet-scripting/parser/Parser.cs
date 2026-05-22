@@ -650,10 +650,10 @@ namespace DaJet.Scripting
 
             if (!Match(Token.String))
             {
-                throw new FormatException("[USE] uri expected");
+                throw new FormatException("[USE] data source identifier expected");
             }
 
-            statement.Uri = Previous().Value;
+            statement.Source = Previous().Value;
 
             statement.Statements = statement_block(Token.END);
 

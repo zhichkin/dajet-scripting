@@ -42,7 +42,7 @@ namespace DaJet.Scripting
         }
         private void Visit(in UseStatement node)
         {
-            MetadataProvider provider = MetadataProvider.Get(node.Uri);
+            MetadataProvider provider = MetadataProvider.Get(node.Source);
 
             _providers.Push(provider);
 

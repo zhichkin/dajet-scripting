@@ -33,7 +33,8 @@ namespace DaJet.Scripting
 
                 _statement = new SqlStatement(node)
                 {
-                    Dialect = _provider.DataSource
+                    Dialect = _provider.DataSource,
+                    YearOffset = YearOffset
                 };
 
                 Visit(in select, in script);

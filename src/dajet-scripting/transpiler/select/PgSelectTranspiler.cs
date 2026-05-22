@@ -226,7 +226,7 @@ namespace DaJet.Scripting
         }
         protected override void Visit(in VariableReference node, in StringBuilder script)
         {
-            int count = _statement.Input.Count; //FIXME: create RegisterInputParameter !?
+            int count = _statement.Input.Count + 1; //FIXME: create RegisterInputParameter !?
 
             string parameter;
 

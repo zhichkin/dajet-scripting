@@ -2,7 +2,7 @@
 
 namespace DaJet.Scripting
 {
-    internal static class DaJetFunctions
+    public static class DaJetFunctions
     {
         private static readonly FrozenDictionary<string, DaJetFunction> _functions = CreateFunctionLookup();
         private static FrozenDictionary<string, DaJetFunction> CreateFunctionLookup()
@@ -15,11 +15,11 @@ namespace DaJet.Scripting
             ];
             return FrozenDictionary.ToFrozenDictionary(list);
         }
-        internal static bool Contains(string name)
+        public static bool Contains(string name)
         {
             return _functions.ContainsKey(name);
         }
-        internal static bool TryGet(string name, out DaJetFunction function)
+        public static bool TryGet(string name, out DaJetFunction function)
         {
             return _functions.TryGetValue(name, out function);
         }

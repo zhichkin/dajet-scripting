@@ -487,7 +487,7 @@ namespace DaJet.Scripting
         }
         private void Compile(in UseStatement statement, in ILGenerator IL)
         {
-            MetadataProvider provider = MetadataProvider.Get(statement.Uri);
+            MetadataProvider provider = MetadataProvider.Get(statement.Source);
             
             ScriptUse.Push(provider);
 

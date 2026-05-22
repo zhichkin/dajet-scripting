@@ -474,7 +474,7 @@ namespace DaJet.Scripting
                 {
                     if (scope.Owner is UseStatement use)
                     {
-                        EntityDefinition entity = _schema.GetSchema(use.Uri, node.Identifier);
+                        EntityDefinition entity = _schema.GetSchema(use.Source, node.Identifier);
 
                         if (entity is not null)
                         {
