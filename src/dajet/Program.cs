@@ -52,6 +52,7 @@ namespace DaJet.Host
         {
             JsonOptions.Converters.Add(new DataTypeJsonConverter());
             JsonOptions.Converters.Add(new JsonStringEnumConverter());
+            JsonOptions.Converters.Add(new DataObjectJsonConverter());
 
             MetadataProvider.Add("MS_UNF", DataSourceType.SqlServer, in MS_UNF);
             MetadataProvider.Add("MS_TEST", DataSourceType.SqlServer, in MS_TEST);
@@ -218,16 +219,9 @@ namespace DaJet.Host
 
             List<DataObject> table = query.Execute();
 
-            foreach (DataObject record in table)
-            {
-                for (int i = 0; i < record.Count(); i++)
-                {
-                    string name = record.GetName(i);
-                    object value = record.GetValue(i);
+            string json = JsonSerializer.Serialize(table, JsonOptions);
 
-                    Console.WriteLine($"{name} = {value}");
-                }
-            }
+            Console.WriteLine(json);
         }
     }
 }

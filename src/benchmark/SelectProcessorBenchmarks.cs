@@ -13,8 +13,8 @@ namespace benchmark
     [MemoryDiagnoser]
     [MinColumn, MaxColumn]
     //[WarmupCount(1)]
-    //[IterationCount(10)]
-    //[MinIterationCount(5)]
+    [IterationCount(100)]
+    //[MinIterationCount(1000)]
     //[MaxIterationCount(20)]
     public class SelectProcessorBenchmarks
     {
