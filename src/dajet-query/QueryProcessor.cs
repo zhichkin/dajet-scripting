@@ -1,9 +1,9 @@
-﻿using DaJet.Metadata;
-using DaJet.Scripting;
+﻿using DaJet.Data;
+using DaJet.Metadata;
 using DaJet.Scripting.Model;
 using DaJet.TypeSystem;
 
-namespace DaJet.Data
+namespace DaJet.Scripting
 {
     public sealed class QueryProcessor
     {

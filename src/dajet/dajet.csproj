@@ -9,7 +9,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\dajet-compiler\dajet-compiler.csproj" />
-    <ProjectReference Include="..\dajet-query\dajet-query.csproj" />
+    <ProjectReference Include="..\dajet-query\dajet-interpreter.csproj" />
     <ProjectReference Include="..\dajet-scripting\dajet-scripting.csproj" />
   </ItemGroup>
 

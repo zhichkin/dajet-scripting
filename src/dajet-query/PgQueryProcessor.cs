@@ -1,17 +1,13 @@
 ﻿using DaJet.Data.PostgreSql;
-using DaJet.Scripting;
 using DaJet.Scripting.Model;
 using DaJet.TypeSystem;
-using Microsoft.Data.SqlClient;
 using Npgsql;
 using NpgsqlTypes;
 using System.Buffers;
-using System.Data;
 using System.Data.Common;
 using System.Text;
-using static Npgsql.Replication.PgOutput.Messages.RelationMessage;
 
-namespace DaJet.Data
+namespace DaJet.Scripting
 {
     public sealed class PgQueryProcessor
     {
