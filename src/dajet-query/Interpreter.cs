@@ -1,36 +1,35 @@
-﻿using DaJet.Metadata;
+﻿using DaJet.Data;
+using DaJet.Metadata;
 using DaJet.Scripting.Model;
+using DaJet.TypeSystem;
 
 namespace DaJet.Scripting
 {
     public sealed class Interpreter
     {
         private Script _script;
+        private ExpressionInterpreter _expression;
         private Dictionary<SyntaxNode, SqlStatement> _statements = new();
+        
         private object _returnValue = null;
-        private Dictionary<string, object> _data = new();
-        private Stack<MetadataProvider> _sources = new();
-        public object Execute(in string source)
+        private readonly Dictionary<string, object> _data = new();
+        private readonly Stack<DataSourceScope> _sources = new();
+        private readonly List<ProcessorBase> _processors = new();
+        public Interpreter(in string source)
         {
-            object value = null;
-
             try
             {
                 Prepare(in source);
-
-                Execute();
-
-                value = _returnValue;
             }
-            finally
+            catch
             {
-                Dispose();
+                Dispose(); throw;
             }
-
-            return value;
         }
         private void Prepare(in string source)
         {
+            _expression = new ExpressionInterpreter(in _data);
+
             Parser parser = new();
 
             if (!parser.TryParse(in source, out _script, out string error))
@@ -59,63 +58,163 @@ namespace DaJet.Scripting
                 _statements.Add(statement.Node, statement);
             }
         }
-        private void Execute()
+        public object Execute()
         {
-            foreach (SyntaxNode node in _script.Statements)
+            object value = null;
+
+            try
             {
-                Execute(in node);
+                foreach (SyntaxNode node in _script.Statements)
+                {
+                    ExitCode code = Execute(in node);
+
+                    if (code == ExitCode.Return)
+                    {
+                        value = _returnValue; break;
+                    }
+                    else if (code == ExitCode.Cancel)
+                    {
+                        break;
+                    }
+                }
             }
+            finally
+            {
+                Dispose();
+            }
+
+            return value;
         }
         private void Dispose()
         {
-            _script = null;
-            _statements = null;
             _returnValue = null;
         }
         
-        private void Execute(in SyntaxNode node)
+        private ExitCode Execute(in SyntaxNode node)
         {
-            if (node is PrintStatement print) { Execute(in print); }
-            else if (node is UseStatement use) { Execute(in use); }
-            else if (node is SelectStatement select) { Execute(in select); }
-            else if (node is ReturnStatement _return) { Execute(in _return); }
-            else if (node is AssignmentOperator assign) { Execute(in assign); }
+            if (node is StatementBlock block) { return Execute(in block); }
+            else if (node is DeclareStatement declare) { return Execute(in declare); }
+            else if (node is PrintStatement print) { return Execute(in print); }
+            else if (node is UseStatement use) { return Execute(in use); }
+            else if (node is SelectStatement select) { return Execute(in select); }
+            else if (node is ReturnStatement _return) { return Execute(in _return); }
+            else if (node is AssignmentOperator assign) { return Execute(in assign); }
+            
+            return ExitCode.Success;
         }
-        private void Execute(in PrintStatement statement)
+        private ExitCode Execute(in StatementBlock block)
         {
-            ExpressionInterpreter expression = new(in _data);
+            foreach (SyntaxNode node in block.Statements)
+            {
+                ExitCode code = Execute(in node);
 
-            object value = expression.Evaluate(statement.Expression);
+                if (code != ExitCode.Success)
+                {
+                    return code;
+                }
+            }
+
+            return ExitCode.Success;
+        }
+        private ExitCode Execute(in DeclareStatement statement)
+        {
+            string name = statement.Identifier;
+
+            object value = _expression.Evaluate(statement.Initializer);
+
+            if (value is null)
+            {
+                DataType type = statement.Type;
+
+                //TODO: initialize with default value
+            }
+
+            _data.Add(name, value);
+
+            return ExitCode.Success;
+        }
+        private ExitCode Execute(in PrintStatement statement)
+        {
+            object value = _expression.Evaluate(statement.Expression);
 
             if (value is not null)
             {
                 Console.WriteLine(value.ToString());
             }
+
+            return ExitCode.Success;
         }
-        private void Execute(in ReturnStatement statement)
+        private ExitCode Execute(in ReturnStatement statement)
         {
-            
+            _returnValue = _expression.Evaluate(statement.Expression);
+
+            return ExitCode.Return;
         }
-        private void Execute(in UseStatement statement)
+        private ExitCode Execute(in UseStatement statement)
         {
             MetadataProvider provider = MetadataProvider.Get(statement.Source);
 
-            _sources.Push(provider);
+            string connectionString = provider.ConnectionString;
 
-            foreach (SyntaxNode node in statement.Statements.Statements)
+            DataSourceScope use;
+
+            if (provider.DataSource == DataSourceType.SqlServer)
             {
-                Execute(in node);
+                use = new MsDataSourceScope(connectionString, "READCOMMITTED");
+            }
+            else if (provider.DataSource == DataSourceType.PostgreSql)
+            {
+                use = new PgDataSourceScope(connectionString, "READCOMMITTED");
+            }
+            else
+            {
+                throw new InvalidOperationException($"Unsupported data source: {provider.DataSource}");
             }
 
-            _ = _sources.Pop();
-        }
-        private void Execute(in SelectStatement statement)
-        {
+            _sources.Push(use);
 
-        }
-        private void Execute(in AssignmentOperator statement)
-        {
+            ExitCode code = ExitCode.Success;
 
+            try
+            {
+                code = Execute(statement.Statements);
+            }
+            finally
+            {
+                _ = _sources.Pop();
+            }
+
+            return code;
+        }
+        private ExitCode Execute(in SelectStatement statement)
+        {
+            DataSourceScope use = _sources.Peek();
+
+            if (!_statements.TryGetValue(statement, out SqlStatement sql))
+            {
+                throw new InvalidOperationException();
+            }
+
+            ProcessorBase processor; //TODO: use _processors collection
+
+            if (use.Type == DataSourceType.SqlServer)
+            {
+                processor = new MsSelectProcessor(in _sources, in sql, in _data);
+            }
+            else
+            {
+                processor = new PgSelectProcessor(in _sources, in sql, in _data);
+            }
+
+            processor.Process();
+
+            return ExitCode.Success;
+        }
+        private ExitCode Execute(in AssignmentOperator statement)
+        {
+            //TODO:
+
+            return ExitCode.Success;
         }
     }
 }

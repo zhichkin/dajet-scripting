@@ -1,17 +1,19 @@
 ﻿using DaJet.Scripting.Model;
+using DaJet.TypeSystem;
+using System.Data;
 
 namespace DaJet.Scripting
 {
-    internal sealed class ExpressionInterpreter
+    public sealed class ExpressionInterpreter
     {
         private readonly Dictionary<string, object> _data;
-        internal ExpressionInterpreter(in Dictionary<string, object> data)
+        public ExpressionInterpreter(in Dictionary<string, object> data)
         {
             ArgumentNullException.ThrowIfNull(data, nameof(data));
 
             _data = data;
         }
-        internal object Evaluate(in SyntaxNode expression)
+        public object Evaluate(in SyntaxNode expression)
         {
             if (expression is null) { return null; }
             else if (expression is ScalarExpression scalar) { return Evaluate(in scalar); }
@@ -27,19 +29,59 @@ namespace DaJet.Scripting
 
             return null; // unsupported expression type
         }
-        internal object Evaluate(in ScalarExpression node)
+        private object Evaluate(in ScalarExpression node)
+        {
+            string literal = scalar.Literal;
+
+                        if (type.IsBoolean)
+                        {
+                            command.Parameters.AddWithValue(name, literal == "TRUE" ? TRUE : FALSE);
+                        }
+                        else if (type.IsDecimal)
+                        {
+                            command.Parameters.AddWithValue(name, decimal.Parse(literal));
+                        }
+                        else if (type.IsDateTime)
+                        {
+                            DateTime value = DateTime.Parse(literal).AddYears(_yearOffset);
+
+                            command.Parameters.AddWithValue(name, value).SqlDbType = SqlDbType.DateTime2;
+                        }
+                        else if (type.IsString)
+                        {
+                            command.Parameters.AddWithValue(name, literal);
+                        }
+                        else if (type.IsUuid)
+                        {
+                            command.Parameters.AddWithValue(name, new Guid(literal));
+                        }
+                    }
+                }
+            }
+
+            return null;
+        }
+        private object Evaluate(in VariableReference node)
+        {
+            if (node is VariableReference variable)
+            {
+                if (variable.Binding is DeclareStatement declare)
+                {
+                    DataType type = declare.Type;
+
+                    if (declare.Initializer is ScalarExpression scalar)
+                    {
+                    }
+                }
+            }
+            
+            return null;
+        }
+        private object Evaluate(in MemberAccessExpression node)
         {
             return null;
         }
-        internal object Evaluate(in VariableReference node)
-        {
-            return null;
-        }
-        internal object Evaluate(in MemberAccessExpression node)
-        {
-            return null;
-        }
-        internal object Evaluate(in FunctionExpression node)
+        private object Evaluate(in FunctionExpression node)
         {
             return null;
         }

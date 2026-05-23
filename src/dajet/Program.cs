@@ -215,13 +215,15 @@ namespace DaJet.Host
 
         private static void ExecuteQuery(in string source)
         {
-            QueryProcessor query = new(in source);
+            //Interpreter interpreter = new(in source);
 
-            List<DataObject> table = query.Execute();
+            //object value = interpreter.Execute();
 
-            string json = JsonSerializer.Serialize(table, JsonOptions);
+            //List<DataObject> table = query.Execute();
 
-            Console.WriteLine(json);
+            //string json = JsonSerializer.Serialize(table, JsonOptions);
+
+            //Console.WriteLine(json);
         }
     }
 }

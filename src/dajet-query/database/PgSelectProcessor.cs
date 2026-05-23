@@ -1,4 +1,5 @@
-﻿using DaJet.Data.PostgreSql;
+﻿using DaJet.Data;
+using DaJet.Data.PostgreSql;
 using DaJet.Scripting.Model;
 using DaJet.TypeSystem;
 using Npgsql;
@@ -9,24 +10,35 @@ using System.Text;
 
 namespace DaJet.Scripting
 {
-    public sealed class PgQueryProcessor
+    public sealed class PgSelectProcessor : ProcessorBase
     {
-        private readonly int _yearOffset;
-        private readonly string _connectionString;
-        private readonly SqlStatement _statement;
-        private readonly EntityDefinition _schema;
-        public PgQueryProcessor(in string connectionString, in SqlStatement statement)
-        {
-            _statement = statement;
-            _yearOffset = statement.YearOffset;
-            _connectionString = connectionString;
+        private readonly PgDataSourceScope _dataSource;
+        private readonly Dictionary<string, object> _data;
 
+        private readonly int _yearOffset;
+        private readonly string _commandText;
+        private readonly EntityDefinition _output;
+        public PgSelectProcessor(in Stack<DataSourceScope> sources, in SqlStatement statement, in Dictionary<string, object> data)
+        {
             if (statement.Node is not SelectStatement select)
             {
                 throw new InvalidOperationException();
             }
 
-            _schema = DataMapper.InferEntity(in select);
+            if (sources.Peek() is not PgDataSourceScope use)
+            {
+                throw new InvalidOperationException();
+            }
+
+            _data = data;
+            _dataSource = use;
+            _yearOffset = statement.YearOffset;
+            _commandText = statement.Sql;
+            _output = DataMapper.InferEntity(in select);
+        }
+        public override void Process()
+        {
+
         }
         public List<DataObject> Execute()
         {

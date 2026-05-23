@@ -2,9 +2,10 @@
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
-    <RootNamespace>dajet_query</RootNamespace>
+    <RootNamespace>DaJet.Scripting</RootNamespace>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>disable</Nullable>
+    <AssemblyName>DaJet.Scripting.Interpreter</AssemblyName>
   </PropertyGroup>
 
   <ItemGroup>
