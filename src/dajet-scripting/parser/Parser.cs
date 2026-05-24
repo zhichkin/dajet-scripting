@@ -2416,9 +2416,9 @@ namespace DaJet.Scripting
                     scalar.Token = Token.DateTime;
                 }
             }
-            else if (scalar.Token == Token.Number && !scalar.Literal.Contains('.'))
+            else if (scalar.Token == Token.Number)
             {
-                scalar.Token = Token.Integer;
+                scalar.Token = scalar.Literal.Contains('.') ? Token.Decimal : Token.Integer;
             }
 
             return scalar;

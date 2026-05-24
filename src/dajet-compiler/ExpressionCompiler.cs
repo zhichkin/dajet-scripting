@@ -60,7 +60,7 @@ namespace DaJet.Scripting
 
                 type = typeof(int);
             }
-            else if (node.Token == Token.Number || node.Token == Token.Decimal)
+            else if (node.Token == Token.Decimal)
             {
                 ConstructorInfo DecimalCtor = typeof(decimal).GetConstructor(
                     BindingFlags.Instance | BindingFlags.Public,

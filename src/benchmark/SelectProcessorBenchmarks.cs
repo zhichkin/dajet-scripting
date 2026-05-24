@@ -96,24 +96,24 @@ namespace benchmark
             return _processor.ReturnValue;
         }
 
-        [Benchmark(Description = "MS Query")]
-        public List<DataObject> MS_Query()
+        [Benchmark(Description = "MS Interpreter")]
+        public object MS_Interpreter()
         {
-            QueryProcessor query = new(in _ms_script);
+            Interpreter executor = new(in _ms_script);
 
-            List<DataObject> table = query.Execute();
+            object value = executor.Execute();
 
-            return table;
+            return value;
         }
 
-        [Benchmark(Description = "PG Query")]
-        public List<DataObject> PG_Query()
-        {
-            QueryProcessor query = new(in _pg_script);
+        //[Benchmark(Description = "PG Query")]
+        //public object PG_Query()
+        //{
+        //    Interpreter executor = new(in _pg_script);
 
-            List<DataObject> table = query.Execute();
+        //    object value = executor.Execute();
 
-            return table;
-        }
+        //    return value;
+        //}
     }
 }

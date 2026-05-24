@@ -1,6 +1,5 @@
 ﻿using DaJet.Scripting.Model;
-using DaJet.TypeSystem;
-using System.Data;
+using System.Globalization;
 
 namespace DaJet.Scripting
 {
@@ -31,59 +30,73 @@ namespace DaJet.Scripting
         }
         private object Evaluate(in ScalarExpression node)
         {
-            string literal = scalar.Literal;
+            string literal = node.Literal;
 
-                        if (type.IsBoolean)
-                        {
-                            command.Parameters.AddWithValue(name, literal == "TRUE" ? TRUE : FALSE);
-                        }
-                        else if (type.IsDecimal)
-                        {
-                            command.Parameters.AddWithValue(name, decimal.Parse(literal));
-                        }
-                        else if (type.IsDateTime)
-                        {
-                            DateTime value = DateTime.Parse(literal).AddYears(_yearOffset);
-
-                            command.Parameters.AddWithValue(name, value).SqlDbType = SqlDbType.DateTime2;
-                        }
-                        else if (type.IsString)
-                        {
-                            command.Parameters.AddWithValue(name, literal);
-                        }
-                        else if (type.IsUuid)
-                        {
-                            command.Parameters.AddWithValue(name, new Guid(literal));
-                        }
-                    }
-                }
+            if (node.Token == Token.Boolean)
+            {
+                return node.Literal == "TRUE";
+            }
+            else if (node.Token == Token.Integer)
+            {
+                return int.Parse(node.Literal);
+            }
+            else if (node.Token == Token.Decimal)
+            {
+                return decimal.Parse(node.Literal, CultureInfo.InvariantCulture);
+            }
+            else if (node.Token == Token.DateTime)
+            {
+                return DateTime.Parse(node.Literal);
+            }
+            else if (node.Token == Token.String)
+            {
+                return node.Literal;
+            }
+            else if (node.Token == Token.Binary)
+            {
+                return Convert.FromHexString(node.Literal);
+            }
+            else if (node.Token == Token.Uuid)
+            {
+                return new Guid(node.Literal);
             }
 
             return null;
         }
         private object Evaluate(in VariableReference node)
         {
-            if (node is VariableReference variable)
+            if (_data.TryGetValue(node.Identifier, out object value))
             {
-                if (variable.Binding is DeclareStatement declare)
-                {
-                    DataType type = declare.Type;
-
-                    if (declare.Initializer is ScalarExpression scalar)
-                    {
-                    }
-                }
+                return value;
             }
             
             return null;
         }
         private object Evaluate(in MemberAccessExpression node)
         {
+            List<string> members = node.GetAccessMembers(node.Identifier);
+
+            if (_data.TryGetValue(members[0], out object value))
+            {
+                if (value is Dictionary<string, object> _object)
+                {
+                    if (_object.TryGetValue(members[1], out value))
+                    {
+                        return value;
+                    }
+                }
+            }
+
             return null;
         }
         private object Evaluate(in FunctionExpression node)
         {
-            return null;
+            if (!DaJetFunctions.TryGet(node.Name, out DaJetFunction function))
+            {
+                throw new InvalidOperationException($"Unknown function name: {node.Name}");
+            }
+
+            return FunctionInterpreter.Evaluate(this, in node);
         }
     }
 }

@@ -52,14 +52,14 @@ namespace DaJet.Host
         {
             JsonOptions.Converters.Add(new DataTypeJsonConverter());
             JsonOptions.Converters.Add(new JsonStringEnumConverter());
-            JsonOptions.Converters.Add(new DataObjectJsonConverter());
+            JsonOptions.Converters.Add(new DictionaryJsonConverter());
 
             MetadataProvider.Add("MS_UNF", DataSourceType.SqlServer, in MS_UNF);
             MetadataProvider.Add("MS_TEST", DataSourceType.SqlServer, in MS_TEST);
             MetadataProvider.Add("PG_TEST", DataSourceType.PostgreSql, in PG_TEST);
 
             string source;
-            string scriptPath = "simple.djs"; // "benchmark.djs" "select\\join\\product_prices.djs"
+            string scriptPath = "select\\join\\product_prices.djs"; // "benchmark.djs" "select\\join\\product_prices.djs"
             string filePath = Path.Combine(AppContext.BaseDirectory, "scripts", scriptPath);
 
             using (StreamReader reader = new(filePath, Encoding.UTF8))
@@ -215,15 +215,26 @@ namespace DaJet.Host
 
         private static void ExecuteQuery(in string source)
         {
-            //Interpreter interpreter = new(in source);
+            Interpreter interpreter = new(in source);
 
-            //object value = interpreter.Execute();
+            object value = interpreter.Execute();
 
-            //List<DataObject> table = query.Execute();
+            string json;
 
-            //string json = JsonSerializer.Serialize(table, JsonOptions);
+            if (value is null)
+            {
+                json = "Value is NULL";
+            }
+            else if (value is string text)
+            {
+                json = text;
+            }
+            else
+            {
+                json = JsonSerializer.Serialize(value, value.GetType(), JsonOptions);
+            }
 
-            //Console.WriteLine(json);
+            Console.WriteLine(json);
         }
     }
 }

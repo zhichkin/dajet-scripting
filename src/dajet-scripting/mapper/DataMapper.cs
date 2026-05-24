@@ -284,7 +284,7 @@ namespace DaJet.Scripting
             {
                 property.Type = DataType.Integer();
             }
-            else if (node.Token == Token.Number)
+            else if (node.Token == Token.Decimal)
             {
                 property.Type = DataType.Decimal();
             }

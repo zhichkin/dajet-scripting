@@ -22,4 +22,4 @@ USE 'MS_TEST'
 
 END
 
-RETURN @Таблица
+RETURN @Таблица --@Изменения

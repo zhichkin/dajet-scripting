@@ -181,8 +181,10 @@ namespace DaJet.Scripting
             }
             finally
             {
-                _ = _sources.Pop();
+                use.Dispose();
             }
+
+            _ = _sources.Pop();
 
             return code;
         }
@@ -199,11 +201,11 @@ namespace DaJet.Scripting
 
             if (use.Type == DataSourceType.SqlServer)
             {
-                processor = new MsSelectProcessor(in _sources, in sql, in _data);
+                processor = new MsSelectProcessor(in _sources, in sql, in _expression, in _data);
             }
             else
             {
-                processor = new PgSelectProcessor(in _sources, in sql, in _data);
+                processor = new PgSelectProcessor(in _sources, in sql, in _expression, in _data);
             }
 
             processor.Process();

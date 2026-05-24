@@ -23,3 +23,5 @@ USE 'MS_TEST'
       WHERE T0.Код = @Код
 
 END -- MS_TEST
+
+RETURN @Запись

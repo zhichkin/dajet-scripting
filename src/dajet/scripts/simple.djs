@@ -3,7 +3,7 @@ DECLARE @Таблица array
 
 DECLARE @Код string  = '000000001'
 
-USE 'PG_TEST'
+USE 'MS_TEST'
 
   SELECT Ссылка, Код, Наименование
     INTO @Таблица
@@ -12,4 +12,4 @@ USE 'PG_TEST'
 
 END
 
-RETURN JSON(@Таблица)
+RETURN @Таблица --JSON(@Таблица)
