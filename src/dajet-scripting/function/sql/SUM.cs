@@ -8,7 +8,11 @@ namespace DaJet.Scripting
     {
         public override DataType GetReturnType(in FunctionExpression node)
         {
-            return DataType.Integer(); //TODO: infer parameter data type
+            SyntaxNode parameter = node.Parameters[0];
+
+            DataType type = DataMapper.InferType(parameter);
+
+            return type;
         }
         public override void Visit(in FunctionExpression node, in StringBuilder script, in SqlTranspiler statement)
         {
