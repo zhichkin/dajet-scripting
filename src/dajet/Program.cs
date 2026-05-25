@@ -61,7 +61,7 @@ namespace DaJet.Host
             MetadataProvider.Add("PG_TEST", DataSourceType.PostgreSql, in PG_TEST);
 
             string source; // parameters.djs
-            string scriptPath = "functions\\sum_остатки.djs"; // select\\join\\product_prices.djs select_join_null.djs
+            string scriptPath = "functions\\sum_обороты.djs"; // select\\join\\product_prices.djs select_join_null.djs
             string filePath = Path.Combine(AppContext.BaseDirectory, "scripts", scriptPath);
 
             using (StreamReader reader = new(filePath, Encoding.UTF8))

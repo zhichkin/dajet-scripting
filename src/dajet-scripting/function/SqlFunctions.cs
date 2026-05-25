@@ -9,7 +9,11 @@ namespace DaJet.Scripting
         {
             List<KeyValuePair<Token, SqlFunction>> list =
             [
-                new KeyValuePair<Token, SqlFunction>(Token.SUM, new SUM())
+                new KeyValuePair<Token, SqlFunction>(Token.SUM, new SUM()),
+                new KeyValuePair<Token, SqlFunction>(Token.MIN, new MIN()),
+                new KeyValuePair<Token, SqlFunction>(Token.MAX, new MAX()),
+                new KeyValuePair<Token, SqlFunction>(Token.AVG, new AVG()),
+                new KeyValuePair<Token, SqlFunction>(Token.COUNT, new COUNT())
             ];
             return FrozenDictionary.ToFrozenDictionary(list);
         }
