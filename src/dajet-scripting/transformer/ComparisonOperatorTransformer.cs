@@ -541,12 +541,17 @@ namespace DaJet.Scripting
         #region "<union type> == <union type>"
         private bool IsUnionNode(in SyntaxNode node)
         {
-            if (!DataMapper.TryInfer(in node, out PropertyDefinition property, out string error))
+            if (!DataMapper.TryInfer(in node, out PropertyDefinition source, out string error))
             {
                 throw new InvalidCastException($"Failed to infer data type from {node.GetType()} expression: {error}");
             }
 
-            return property.Type.IsUnion;
+            if (string.IsNullOrEmpty(source.Name))
+            {
+                return false; // Константа, функция, параметр или выражение
+            }
+
+            return source.Type.IsUnion; // Источник данных - колонка таблицы СУБД
         }
         private bool IsUnionComparison(in SyntaxNode left, in SyntaxNode right)
         {

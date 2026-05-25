@@ -14,14 +14,16 @@ namespace DaJet.Scripting
 
         private readonly MsDataSourceScope _dataSource;
         private readonly Dictionary<string, object> _data;
+        private readonly ExpressionInterpreter _expression;
 
+        private readonly byte[] _buffer = new byte[16];
         private readonly int _yearOffset;
         private readonly string _commandText;
         private readonly List<SyntaxNode> _input;
         private readonly bool _outputIsObject;
         private readonly string _outputVariable;
         private readonly EntityDefinition _outputSchema;
-        private readonly ExpressionInterpreter _expression;
+        private readonly Dictionary<ColumnDefinition, int> _ordinals = new();
         public MsSelectProcessor(in Stack<DataSourceScope> sources, in SqlStatement statement, in ExpressionInterpreter expression, in Dictionary<string, object> data)
         {
             if (statement.Node is not SelectStatement select)
@@ -41,6 +43,8 @@ namespace DaJet.Scripting
             _yearOffset = statement.YearOffset;
             _commandText = statement.Sql;
             _outputSchema = DataMapper.InferEntity(in select);
+
+            PrepareOutputColumnOrdinals();
 
             if (select.GetIntoClause() is IntoClause into)
             {
@@ -63,6 +67,29 @@ namespace DaJet.Scripting
                             //TODO: scalar values
                         }
                     }
+                }
+            }
+        }
+        private void PrepareOutputColumnOrdinals()
+        {
+            int ordinal = 0; // column ordinals of SqlDataReader
+
+            ColumnDefinition column;
+            List<ColumnDefinition> columns;
+            PropertyDefinition property;
+            List<PropertyDefinition> properties = _outputSchema.Properties;
+
+            for (int p = 0; p < properties.Count; p++)
+            {
+                property = properties[p];
+
+                columns = property.Columns;
+
+                for (int c = 0; c < columns.Count; c++)
+                {
+                    column = columns[c];
+
+                    _ordinals.Add(column, ordinal++);
                 }
             }
         }
@@ -139,9 +166,22 @@ namespace DaJet.Scripting
                 {
                     command.Parameters.AddWithValue(name, boolean ? TRUE : FALSE);
                 }
-                else if (value is int integer)
+                else if (value is int int32)
                 {
-                    command.Parameters.AddWithValue(name, DbUtilities.GetByteArray(integer));
+                    if (input is FunctionExpression function && function.Name == nameof(TYPEOF))
+                    {
+                        Span<byte> buffer = _buffer.AsSpan(0, 4);
+                        BinaryPrimitives.WriteInt32BigEndian(buffer, int32);
+                        command.Parameters.AddWithValue(name, buffer.ToArray());
+                    }
+                    else
+                    {
+                        command.Parameters.AddWithValue(name, int32);
+                    }
+                }
+                else if (value is long int64)
+                {
+                    command.Parameters.AddWithValue(name, int64);
                 }
                 else if (value is DateTime dateTime)
                 {
@@ -165,155 +205,249 @@ namespace DaJet.Scripting
 
         private void ProcessOutput(in SqlDataReader reader, in Dictionary<string, object> record)
         {
-            int ordinal = 0;
-            int columns = 0;
-
             foreach (PropertyDefinition property in _outputSchema.Properties)
             {
-                columns = property.Columns.Count;
-
                 DataType type = property.Type;
 
-                if (type.IsUnion) { record.Add(property.Name, GetUnion(in reader, ordinal, in property, _yearOffset)); }
-                else if (type.IsBoolean) { record.Add(property.Name, GetBoolean(in reader, ordinal)); }
-                else if (type.IsDecimal) { record.Add(property.Name, GetDecimal(in reader, ordinal)); }
-                else if (type.IsDateTime) { record.Add(property.Name, GetDateTime(in reader, ordinal, _yearOffset)); }
-                else if (type.IsString) { record.Add(property.Name, GetString(in reader, ordinal)); }
-                else if (type.IsBinary) { record.Add(property.Name, GetBinary(in reader, ordinal)); }
-                else if (type.IsUuid) { record.Add(property.Name, GetUuid(in reader, ordinal)); }
+                if (type.IsUnion) { record.Add(property.Name, GetUnion(in reader, in property)); }
+                else if (type.IsBoolean) { record.Add(property.Name, GetBoolean(in reader, in property)); }
+                else if (type.IsDecimal) { record.Add(property.Name, GetDecimal(in reader, in property)); }
+                else if (type.IsDateTime) { record.Add(property.Name, GetDateTime(in reader, in property)); }
+                else if (type.IsString) { record.Add(property.Name, GetString(in reader, in property)); }
+                else if (type.IsBinary) { record.Add(property.Name, GetBinary(in reader, in property)); }
+                else if (type.IsUuid) { record.Add(property.Name, GetUuid(in reader, in property)); }
                 else if (type.IsEntity)
                 {
-                    record.Add(property.Name, GetEntity(in reader, ordinal, type.TypeCode));
+                    record.Add(property.Name, GetEntity(in reader, in property));
                 }
                 else if (type.IsInteger)
                 {
                     if (type.Size == 4)
                     {
-                        record.Add(property.Name, GetInt32(in reader, ordinal));
+                        record.Add(property.Name, GetInt32(in reader, in property));
                     }
                     else
                     {
-                        record.Add(property.Name, GetInt64(in reader, ordinal));
+                        record.Add(property.Name, GetInt64(in reader, in property));
                     }
                 }
-                else
-                {
-                    record.Add(property.Name, null);
-                }
-
-                ordinal += columns;
             }
         }
-        private static bool GetBoolean(in SqlDataReader reader, int ordinal)
+        private bool GetBoolean(in SqlDataReader reader, in PropertyDefinition output)
         {
+            ColumnDefinition column = output.GetColumnByPurpose(ColumnPurpose.Value); // single value column
+
+            column ??= output.GetColumnByPurpose(ColumnPurpose.Boolean); // union type column
+
+            if (column is null)
+            {
+                return false;
+            }
+
+            int ordinal = _ordinals[column];
+
             if (reader.IsDBNull(ordinal))
             {
                 return false;
             }
 
-            bool value = (((byte[])reader.GetValue(ordinal))[0] == 1);
+            _ = reader.GetBytes(ordinal, 0L, _buffer, 0, 1);
+
+            bool value = (_buffer[0] == 1);
+
+            if (column.Name == "_Folder" || column.Name == "_folder") // ЭтоГруппа
+            {
+                value = !value; // invert - exceptional 1C case
+            }
 
             return value;
-
-            //TODO:
-            //if (column.Name == "_Folder" || column.Name == "_folder")
-            //{
-            //    return !value; // invert - exceptional 1C case
-            //}
-            //else
-            //{
-            //    return value;
-            //}
         }
-        private static decimal GetDecimal(in SqlDataReader reader, int ordinal)
+        private decimal GetDecimal(in SqlDataReader reader, in PropertyDefinition output)
         {
+            ColumnDefinition column = output.GetColumnByPurpose(ColumnPurpose.Value); // single value column
+
+            column ??= output.GetColumnByPurpose(ColumnPurpose.Numeric); // union type column
+
+            if (column is null)
+            {
+                return 0M;
+            }
+
+            int ordinal = _ordinals[column];
+
             return reader.IsDBNull(ordinal) ? 0M : reader.GetDecimal(ordinal);
         }
-        private static int GetInt32(in SqlDataReader reader, int ordinal)
+        private int GetInt32(in SqlDataReader reader, in PropertyDefinition output)
         {
+            ColumnDefinition column = output.GetColumnByPurpose(ColumnPurpose.Value);
+
+            if (column is null)
+            {
+                return 0;
+            }
+
+            int ordinal = _ordinals[column];
+
             return reader.IsDBNull(ordinal) ? 0 : reader.GetInt32(ordinal);
         }
-        private static long GetInt64(in SqlDataReader reader, int ordinal)
+        private long GetInt64(in SqlDataReader reader, in PropertyDefinition output)
         {
+            ColumnDefinition column = output.GetColumnByPurpose(ColumnPurpose.Value);
+
+            if (column is null)
+            {
+                return 0L;
+            }
+
+            int ordinal = _ordinals[column];
+
             return reader.IsDBNull(ordinal) ? 0L : reader.GetInt64(ordinal);
         }
-        private static DateTime GetDateTime(in SqlDataReader reader, int ordinal, int yearOffset)
+        private DateTime GetDateTime(in SqlDataReader reader, in PropertyDefinition output)
         {
-            return reader.IsDBNull(0) ? DateTime.MinValue : reader.GetDateTime(ordinal).AddYears(-yearOffset);
+            ColumnDefinition column = output.GetColumnByPurpose(ColumnPurpose.Value); // single value column
+
+            column ??= output.GetColumnByPurpose(ColumnPurpose.DateTime); // union type column
+
+            if (column is null)
+            {
+                return DateTime.MinValue;
+            }
+
+            int ordinal = _ordinals[column];
+
+            return reader.IsDBNull(ordinal) ? DateTime.MinValue : reader.GetDateTime(ordinal).AddYears(-_yearOffset);
         }
-        private static string GetString(in SqlDataReader reader, int ordinal)
+        private string GetString(in SqlDataReader reader, in PropertyDefinition output)
         {
+            ColumnDefinition column = output.GetColumnByPurpose(ColumnPurpose.Value); // single value column
+
+            column ??= output.GetColumnByPurpose(ColumnPurpose.String); // union type column
+
+            if (column is null)
+            {
+                return string.Empty;
+            }
+
+            int ordinal = _ordinals[column];
+
             return reader.IsDBNull(ordinal) ? string.Empty : reader.GetString(ordinal);
         }
-        private static byte[] GetBinary(in SqlDataReader reader, int ordinal)
+        private byte[] GetBinary(in SqlDataReader reader, in PropertyDefinition output)
         {
+            ColumnDefinition column = output.GetColumnByPurpose(ColumnPurpose.Value);
+
+            if (column is null)
+            {
+                return Array.Empty<byte>();
+            }
+
+            int ordinal = _ordinals[column];
+
             return reader.IsDBNull(ordinal) ? Array.Empty<byte>() : (byte[])reader.GetValue(ordinal);
         }
-        private static Guid GetUuid(in SqlDataReader reader, int ordinal)
+        private Guid GetUuid(in SqlDataReader reader, in PropertyDefinition output)
         {
-            if (reader.IsDBNull(ordinal))
+            ColumnDefinition column = output.GetColumnByPurpose(ColumnPurpose.Value);
+
+            if (column is null)
             {
                 return Guid.Empty;
             }
 
-            byte[] value = new byte[16];
+            int ordinal = _ordinals[column];
 
-            _ = reader.GetBytes(ordinal, 0L, value, 0, 16);
+            _ = reader.GetBytes(ordinal, 0L, _buffer, 0, 16);
 
-            return new Guid(value);
+            return new Guid(_buffer);
         }
-        private static Entity GetEntity(in SqlDataReader reader, int ordinal, int typeCode)
+        private Entity GetEntity(in SqlDataReader reader, in PropertyDefinition output)
         {
-            if (reader.IsDBNull(ordinal))
+            int ordinal;
+            int typeCode;
+            Guid identity;
+
+            ColumnDefinition column = output.GetColumnByPurpose(ColumnPurpose.Value);
+
+            // single value column
+
+            if (column is not null)
             {
-                return Entity.Undefined;
-            }
+                ordinal = _ordinals[column];
 
-            byte[] value = new byte[16];
-
-            _ = reader.GetBytes(ordinal, 0L, value, 0, 16);
-
-            Guid identity = new(value);
-
-            return new Entity(typeCode, identity);
-        }
-        private static object GetUnion(in SqlDataReader reader, int ordinal, in PropertyDefinition property, int yearOffset)
-        {
-            int typeCode = 0;
-
-            ColumnDefinition column = property.GetColumnByPurpose(ColumnPurpose.Tag);
-
-            if (column is null) // IsReferenceOnlyUnion
-            {
                 if (reader.IsDBNull(ordinal))
                 {
                     return Entity.Undefined;
                 }
 
-                column = property.GetColumnByPurpose(ColumnPurpose.TypeCode);
+                _ = reader.GetBytes(ordinal, 0L, _buffer, 0, 16);
 
-                if (column is null)
-                {
-                    return GetEntity(in reader, ordinal, property.Type.TypeCode);
-                }
+                identity = new Guid(_buffer);
+                typeCode = output.Type.TypeCode;
 
-                byte[] buffer = new byte[4];
-
-                _ = reader.GetBytes(ordinal, 0L, buffer, 0, 4);
-                
-                typeCode = BinaryPrimitives.ReadInt32BigEndian(buffer);
-
-                return GetEntity(in reader, ++ordinal, typeCode);
+                return new Entity(typeCode, identity);
             }
 
-            // _TYPE binary(1) - may be generated by query engine if value is not stored in the database
-            // TAG value is generated by query engine in case data type addition operation takes place !
+            // union type value
+
+            column = output.GetColumnByPurpose(ColumnPurpose.TypeCode);
+
+            if (column is not null)
+            {
+                ordinal = _ordinals[column];
+
+                if (reader.IsDBNull(ordinal))
+                {
+                    return Entity.Undefined;
+                }
+
+                _ = reader.GetBytes(ordinal, 0L, _buffer, 0, 4);
+
+                typeCode = BinaryPrimitives.ReadInt32BigEndian(_buffer.AsSpan(0, 4));
+            }
+            else
+            {
+                typeCode = output.Type.TypeCode;
+            }
+
+            column = output.GetColumnByPurpose(ColumnPurpose.Identity);
+
+            if (column is null)
+            {
+                return Entity.Undefined;
+            }
+
+            ordinal = _ordinals[column];
+
+            _ = reader.GetBytes(ordinal, 0L, _buffer, 0, 16);
+
+            identity = new Guid(_buffer);
+
+            return new Entity(typeCode, identity);
+        }
+        private object GetUnion(in SqlDataReader reader, in PropertyDefinition output)
+        {
+            // _TYPE binary(1) may be generated by query engine if value is not stored in the database.
+            // TAG value is generated by query engine in case data type addition operation takes place.
+            // Type extension operations, resulting from CASE and UNION, are not implemented by DaJet.
+
+            ColumnDefinition column = output.GetColumnByPurpose(ColumnPurpose.Tag);
+
+            if (column is null) // IsReferenceOnlyUnion
+            {
+                return GetEntity(in reader, in output);
+            }
+
+            int ordinal = _ordinals[column];
+
             if (reader.IsDBNull(ordinal))
             {
                 return Union.Undefined;
             }
 
-            byte tag = ((byte[])reader.GetValue(ordinal))[0];
+            _ = reader.GetBytes(ordinal, 0L, _buffer, 0, 1);
+
+            byte tag = _buffer[0];
 
             if (tag == 1) // Неопределено
             {
@@ -321,66 +455,26 @@ namespace DaJet.Scripting
             }
             else if (tag == 2) // Булево
             {
-                ordinal += GetOrdinal(in property, ColumnPurpose.Boolean);
-                return new Union.CaseBoolean(GetBoolean(in reader, ordinal));
+                return new Union.CaseBoolean(GetBoolean(in reader, in output));
             }
             else if (tag == 3) // Число
             {
-                ordinal += GetOrdinal(in property, ColumnPurpose.Numeric);
-                return new Union.CaseDecimal(GetDecimal(in reader, ordinal));
+                return new Union.CaseDecimal(GetDecimal(in reader, in output));
             }
             else if (tag == 4) // Дата
             {
-                ordinal += GetOrdinal(in property, ColumnPurpose.DateTime);
-                return new Union.CaseDateTime(GetDateTime(in reader, ordinal, yearOffset));
+                return new Union.CaseDateTime(GetDateTime(in reader, in output));
             }
             else if (tag == 5) // Строка
             {
-                ordinal += GetOrdinal(in property, ColumnPurpose.String);
-                return new Union.CaseString(GetString(in reader, ordinal));
+                return new Union.CaseString(GetString(in reader, in output));
             }
             else if (tag == 8) // Ссылка
             {
-                column = property.GetColumnByPurpose(ColumnPurpose.TypeCode);
-
-                if (column is null)
-                {
-                    ordinal += GetOrdinal(in property, ColumnPurpose.Identity);
-                    return new Union.CaseEntity(GetEntity(in reader, ordinal, property.Type.TypeCode));
-                }
-
-                ordinal += GetOrdinal(in property, ColumnPurpose.TypeCode);
-
-                byte[] buffer = new byte[4];
-                _ = reader.GetBytes(ordinal, 0L, buffer, 0, 4);
-                typeCode = BinaryPrimitives.ReadInt32BigEndian(buffer);
-
-                return new Union.CaseEntity(GetEntity(in reader, ++ordinal, typeCode));
+                return new Union.CaseEntity(GetEntity(in reader, in output));
             }
             
             throw new InvalidOperationException($"Invalid union tag value: [{tag}]");
-        }
-
-        private static int GetOrdinal(in PropertyDefinition property, in ColumnPurpose purpose)
-        {
-            List<ColumnDefinition> columns = property.Columns;
-
-            if (columns is null || columns.Count == 0)
-            {
-                return -1;
-            }
-
-            for (int ordinal = 0; ordinal < columns.Count; ordinal++)
-            {
-                ColumnDefinition columnDefinition = columns[ordinal];
-
-                if (columnDefinition.Purpose == purpose)
-                {
-                    return ordinal;
-                }
-            }
-
-            return -1;
         }
     }
 }

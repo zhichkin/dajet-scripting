@@ -128,7 +128,7 @@ namespace DaJet.Scripting
                         });
                     }
 
-                    continue; //TODO: fix it by refactoring
+                    continue; //FIXME: refactor this ugly if ... continue
                 }
 
                 // Схема данных (колонки таблицы СУБД)
@@ -372,14 +372,19 @@ namespace DaJet.Scripting
         {
             if (node.Token == Token.UDF)
             {
-                //if (!UDF.TryGet(function.Name, out IUserDefinedFunction udf))
+                throw new InvalidCastException($"Failed to infer function return type {node.Name}");
+
+                //if (!DaJetFunctions.TryGet(node.Name, out DaJetFunction udf))
                 //{
-                //    throw new InvalidOperationException($"Invalid function name: {function.Name}");
+                    
                 //}
 
                 //Type returnType = udf.GetReturnType(in function);
-                
-                throw new InvalidCastException($"Failed to infer function return type {node.Name}");
+
+                //return new PropertyDefinition()
+                //{
+                //    Type = udf.GetReturnType(in node)
+                //};
             }
 
             if (!SqlFunctions.TryGet(node.Token, out SqlFunction function))

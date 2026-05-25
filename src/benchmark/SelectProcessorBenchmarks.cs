@@ -4,7 +4,6 @@ using BenchmarkDotNet.Jobs;
 using DaJet.Data;
 using DaJet.Metadata;
 using DaJet.Scripting;
-using DaJet.TypeSystem;
 using System.Text;
 
 namespace benchmark
@@ -106,14 +105,14 @@ namespace benchmark
             return value;
         }
 
-        //[Benchmark(Description = "PG Query")]
-        //public object PG_Query()
-        //{
-        //    Interpreter executor = new(in _pg_script);
+        [Benchmark(Description = "PG Interpreter")]
+        public object PG_Interpreter()
+        {
+            Interpreter executor = new(in _pg_script);
 
-        //    object value = executor.Execute();
+            object value = executor.Execute();
 
-        //    return value;
-        //}
+            return value;
+        }
     }
 }

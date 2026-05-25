@@ -12,4 +12,4 @@ USE 'PG_TEST'
 
 END
 
---RETURN JSON(@Таблица)
+RETURN JSON(@Таблица)

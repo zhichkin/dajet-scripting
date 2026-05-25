@@ -39,6 +39,7 @@ namespace DaJet.Host
     internal class Program
     {
         private static readonly string MS_UNF = "Data Source=ZHICHKIN;Initial Catalog=unf;Integrated Security=True;Encrypt=False;";
+        private static readonly string PG_UNF = "Host=127.0.0.1;Port=5432;Database=unf;Username=postgres;Password=postgres;";
         private static readonly string MS_TEST = "Data Source=ZHICHKIN;Initial Catalog=dajet-metadata;Integrated Security=True;Encrypt=False;";
         private static readonly string PG_TEST = "Host=localhost;Port=5432;Database=dajet-metadata;Username=postgres;Password=postgres;";
 
@@ -55,11 +56,12 @@ namespace DaJet.Host
             JsonOptions.Converters.Add(new DictionaryJsonConverter());
 
             MetadataProvider.Add("MS_UNF", DataSourceType.SqlServer, in MS_UNF);
+            MetadataProvider.Add("PG_UNF", DataSourceType.PostgreSql, in PG_UNF);
             MetadataProvider.Add("MS_TEST", DataSourceType.SqlServer, in MS_TEST);
             MetadataProvider.Add("PG_TEST", DataSourceType.PostgreSql, in PG_TEST);
 
             string source;
-            string scriptPath = "select\\join\\product_prices.djs"; // "benchmark.djs" "select\\join\\product_prices.djs"
+            string scriptPath = "parameters.djs"; // select\\join\\product_prices.djs select_join_null.djs
             string filePath = Path.Combine(AppContext.BaseDirectory, "scripts", scriptPath);
 
             using (StreamReader reader = new(filePath, Encoding.UTF8))
@@ -213,11 +215,37 @@ namespace DaJet.Host
             ScriptProcessor processor = compiler.Compile(in source);
         }
 
+        private static Dictionary<string, object> GetParametersFromJson()
+        {
+            string filePath = Path.Combine(AppContext.BaseDirectory, "scripts", "parameters.json");
+
+            using (StreamReader reader = new(filePath, Encoding.UTF8))
+            {
+                string json = reader.ReadToEnd();
+
+                return JsonSerializer.Deserialize<Dictionary<string, object>>(json, JsonOptions);
+            }
+        }
         private static void ExecuteQuery(in string source)
         {
+            Dictionary<string, object> parameters = new()
+            {
+                { "Булево", true },
+                { "ЦелоеЧисло", 12345 },
+                { "БольшоеЧисло", 12345L },
+                { "ДесятичноеЧисло", 12.34M },
+                { "ДатаВремя", DateTime.Now },
+                { "Строка", "000000002" },
+                { "ДвоичноеЧисло", Convert.FromBase64String("DEADBEEF") },
+                { "Идентификатор", new Guid("41F517C5-BC81-45E6-A9E8-7A2C8F573117") },
+                { "ПустаяСсылка", Entity.Undefined }
+            };
+
+            parameters = GetParametersFromJson();
+
             Interpreter interpreter = new(in source);
 
-            object value = interpreter.Execute();
+            object value = interpreter.Execute(in parameters);
 
             string json;
 

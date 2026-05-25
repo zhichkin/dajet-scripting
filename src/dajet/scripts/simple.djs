@@ -12,4 +12,4 @@ USE 'MS_TEST'
 
 END
 
-RETURN @Таблица --JSON(@Таблица)
+RETURN JSON(@Таблица)

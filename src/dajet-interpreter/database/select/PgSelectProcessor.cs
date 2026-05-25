@@ -2,7 +2,10 @@
 using DaJet.Scripting.Model;
 using DaJet.TypeSystem;
 using Npgsql;
-using System.Data.Common;
+using NpgsqlTypes;
+using System.Buffers;
+using System.Buffers.Binary;
+using System.Text;
 
 namespace DaJet.Scripting
 {
@@ -10,10 +13,16 @@ namespace DaJet.Scripting
     {
         private readonly PgDataSourceScope _dataSource;
         private readonly Dictionary<string, object> _data;
+        private readonly ExpressionInterpreter _expression;
 
+        private readonly byte[] _buffer = new byte[16];
         private readonly int _yearOffset;
         private readonly string _commandText;
-        private readonly EntityDefinition _output;
+        private readonly List<SyntaxNode> _input;
+        private readonly bool _outputIsObject;
+        private readonly string _outputVariable;
+        private readonly EntityDefinition _outputSchema;
+        private readonly Dictionary<ColumnDefinition, int> _ordinals = new();
         public PgSelectProcessor(in Stack<DataSourceScope> sources, in SqlStatement statement, in ExpressionInterpreter expression, in Dictionary<string, object> data)
         {
             if (statement.Node is not SelectStatement select)
@@ -28,487 +37,540 @@ namespace DaJet.Scripting
 
             _data = data;
             _dataSource = use;
+            _expression = expression;
+            _input = statement.Input;
             _yearOffset = statement.YearOffset;
             _commandText = statement.Sql;
-            _output = DataMapper.InferEntity(in select);
+            _outputSchema = DataMapper.InferEntity(in select);
+
+            PrepareOutputColumnOrdinals();
+
+            if (select.GetIntoClause() is IntoClause into)
+            {
+                _outputVariable = into.Value?.Identifier;
+
+                if (into.Value is VariableReference variable)
+                {
+                    if (variable.Binding is DeclareStatement declare)
+                    {
+                        if (declare.Type.IsObject)
+                        {
+                            _outputIsObject = true;
+                        }
+                        else if (declare.Type.IsArray)
+                        {
+                            _outputIsObject = false;
+                        }
+                        else
+                        {
+                            //TODO: scalar values
+                        }
+                    }
+                }
+            }
+        }
+        private void PrepareOutputColumnOrdinals()
+        {
+            int ordinal = 0; // column ordinals of SqlDataReader
+
+            ColumnDefinition column;
+            List<ColumnDefinition> columns;
+            PropertyDefinition property;
+            List<PropertyDefinition> properties = _outputSchema.Properties;
+
+            for (int p = 0; p < properties.Count; p++)
+            {
+                property = properties[p];
+
+                columns = property.Columns;
+
+                for (int c = 0; c < columns.Count; c++)
+                {
+                    column = columns[c];
+
+                    _ordinals.Add(column, ordinal++);
+                }
+            }
         }
         public override void Process()
         {
+            List<Dictionary<string, object>> table = new();
 
-        }
-        public void Execute()
-        {
-            //List<DataObject> table = new();
+            int outputCount = _outputSchema.Properties.Count;
 
-            //using (NpgsqlConnection connection = PgDataSourceFactory.CreateConnection(_connectionString))
-            //{
-            //    connection.Open();
-
-            //    using (NpgsqlCommand command = connection.CreateCommand())
-            //    {
-            //        command.CommandText = _statement.Sql;
-
-            //        ProcessInput(in command);
-
-            //        using (NpgsqlDataReader reader = command.ExecuteReader())
-            //        {
-            //            while (reader.Read())
-            //            {
-            //                DataObject record = new(_schema.Properties.Count);
-
-            //                ProcessOutput(in reader, in record);
-
-            //                table.Add(record);
-            //            }
-
-            //            reader.Close();
-            //        }
-            //    }
-            //}
-
-            //return table;
-        }
-        
-        private void ProcessInput(in NpgsqlCommand command)
-        {
-            //command.Parameters.Clear();
-
-            //foreach (SyntaxNode input in _statement.Input)
-            //{
-            //    string name = string.Format("${0}", _statement.Input.IndexOf(input) + 1);
-
-            //    if (input is VariableReference variable)
-            //    {
-            //        if (variable.Binding is DeclareStatement declare)
-            //        {
-            //            DataType type = declare.Type;
-
-            //            if (declare.Initializer is ScalarExpression scalar)
-            //            {
-            //                string literal = scalar.Literal;
-
-            //                if (type.IsBoolean)
-            //                {
-            //                    command.Parameters.AddWithValue(name, literal == "TRUE");
-            //                }
-            //                else if (type.IsDecimal)
-            //                {
-            //                    command.Parameters.AddWithValue(name, decimal.Parse(literal));
-            //                }
-            //                else if (type.IsDateTime)
-            //                {
-            //                    command.Parameters.AddWithValue(name, DateTime.Parse(literal).AddYears(_yearOffset));
-            //                }
-            //                else if (type.IsString)
-            //                {
-            //                    command.Parameters.Add(new NpgsqlParameter<string>()
-            //                    {
-            //                        TypedValue = literal,
-            //                        NpgsqlDbType = NpgsqlDbType.Varchar
-            //                    });
-            //                }
-            //                else if (type.IsUuid)
-            //                {
-            //                    command.Parameters.AddWithValue(name, new Guid(literal));
-            //                }
-            //            }
-            //        }
-            //    }
-            //}
-        }
-        public void ConfigureParameters(in DbCommand command, in Dictionary<string, object> parameters, int yearOffset)
-        {
-            if (command is not NpgsqlCommand cmd)
+            using (NpgsqlCommand command = _dataSource.CreateCommand())
             {
-                throw new InvalidOperationException($"{nameof(command)} is not type of {typeof(NpgsqlCommand)}");
+                command.CommandText = _commandText;
+
+                ProcessInput(in command);
+
+                using (NpgsqlDataReader reader = command.ExecuteReader())
+                {
+                    while (reader.Read())
+                    {
+                        Dictionary<string, object> record = new(outputCount);
+
+                        ProcessOutput(in reader, in record);
+
+                        table.Add(record);
+                    }
+
+                    reader.Close();
+                }
             }
 
-            cmd.Parameters.Clear();
-
-            foreach (var parameter in parameters)
+            SetOutputValue(in table);
+        }
+        private void SetOutputValue(in List<Dictionary<string, object>> table)
+        {
+            if (_outputVariable is not null)
             {
-                string name = parameter.Key.StartsWith('@') ? parameter.Key[1..] : parameter.Key;
+                object value;
 
-                if (parameter.Value is null)
+                if (_outputIsObject)
                 {
-                    cmd.Parameters.AddWithValue(name, DBNull.Value);
+                    value = table.Count > 0 ? table[0] : null;
                 }
-                else if (parameter.Value is Entity entity)
+                else
                 {
-                    cmd.Parameters.AddWithValue(name, entity.Identity.ToByteArray());
+                    value = table;
                 }
-                else if (parameter.Value is DateTime dateTime)
+
+                if (_data.ContainsKey(_outputVariable))
                 {
-                    cmd.Parameters.AddWithValue(name, dateTime.AddYears(yearOffset));
+                    _data[_outputVariable] = value;
                 }
-                else if (parameter.Value is Guid uuid)
+                else
                 {
-                    cmd.Parameters.AddWithValue(name, uuid.ToByteArray());
+                    _data.Add(_outputVariable, value);
                 }
-                else // bool, int, decimal, string, byte[]
+            }
+        }
+
+        private void ProcessInput(in NpgsqlCommand command)
+        {
+            command.Parameters.Clear();
+
+            foreach (SyntaxNode input in _input)
+            {
+                object value = _expression.Evaluate(in input);
+
+                if (value is null)
                 {
-                    cmd.Parameters.AddWithValue(name, parameter.Value);
+                    command.Parameters.Add(new NpgsqlParameter<DBNull>()
+                    {
+                        TypedValue = DBNull.Value
+                    });
+                }
+                else if (value is bool boolean)
+                {
+                    command.Parameters.Add(new NpgsqlParameter<bool>()
+                    {
+                        TypedValue = boolean,
+                        NpgsqlDbType = NpgsqlDbType.Boolean
+                    });
+                }
+                else if (value is decimal numeric)
+                {
+                    command.Parameters.Add(new NpgsqlParameter<decimal>()
+                    {
+                        TypedValue = numeric,
+                        NpgsqlDbType = NpgsqlDbType.Numeric
+                    });
+                }
+                else if (value is int integer)
+                {
+                    if (input is FunctionExpression function && function.Name == nameof(TYPEOF))
+                    {
+                        Span<byte> buffer = _buffer.AsSpan(0, 4);
+                        BinaryPrimitives.WriteInt32BigEndian(buffer, integer);
+                        command.Parameters.Add(new NpgsqlParameter<byte[]>()
+                        {
+                            TypedValue = buffer.ToArray(),
+                            NpgsqlDbType = NpgsqlDbType.Bytea
+                        });
+                    }
+                    else
+                    {
+                        command.Parameters.Add(new NpgsqlParameter<int>()
+                        {
+                            TypedValue = integer,
+                            NpgsqlDbType = NpgsqlDbType.Integer
+                        });
+                    }
+                }
+                else if (value is long bigint)
+                {
+                    command.Parameters.Add(new NpgsqlParameter<long>()
+                    {
+                        TypedValue = bigint,
+                        NpgsqlDbType = NpgsqlDbType.Bigint
+                    });
+                }
+                else if (value is DateTime dateTime)
+                {
+                    command.Parameters.Add(new NpgsqlParameter<DateTime>()
+                    {
+                        TypedValue = dateTime.AddYears(_yearOffset),
+                        NpgsqlDbType = NpgsqlDbType.Timestamp
+                    });
+                }
+                else if (value is string text)
+                {
+                    command.Parameters.Add(new NpgsqlParameter<string>()
+                    {
+                        TypedValue = text,
+                        NpgsqlDbType = NpgsqlDbType.Varchar
+                    });
+                }
+                else if (value is byte[] binary)
+                {
+                    command.Parameters.Add(new NpgsqlParameter<byte[]>()
+                    {
+                        TypedValue = binary,
+                        NpgsqlDbType = NpgsqlDbType.Bytea
+                    });
+                }
+                else if (value is Guid uuid)
+                {
+                    command.Parameters.Add(new NpgsqlParameter<byte[]>()
+                    {
+                        TypedValue = uuid.ToByteArray(),
+                        NpgsqlDbType = NpgsqlDbType.Bytea
+                    });
+                }
+                else if (value is Entity entity)
+                {
+                    command.Parameters.Add(new NpgsqlParameter<byte[]>()
+                    {
+                        TypedValue = entity.Identity.ToByteArray(),
+                        NpgsqlDbType = NpgsqlDbType.Bytea
+                    });
+                }
+                else
+                {
+                    throw new InvalidOperationException($"Unsupported parameter type [{value.GetType()}] = [{value}]");
                 }
             }
         }
 
         private void ProcessOutput(in NpgsqlDataReader reader, in Dictionary<string, object> record)
         {
-            //int ordinal = 0;
+            foreach (PropertyDefinition property in _outputSchema.Properties)
+            {
+                DataType type = property.Type;
 
-            //foreach (PropertyDefinition property in _schema.Properties)
-            //{
-            //    DataType type = property.Type;
-
-            //    if (type.IsUnion)
-            //    {
-
-            //    }
-            //    else if (type.IsReferenceOnlyUnion)
-            //    {
-
-            //    }
-            //    else if (type.IsBoolean)
-            //    {
-
-            //    }
-            //    else if (type.IsDecimal)
-            //    {
-
-            //    }
-            //    else if (type.IsDateTime)
-            //    {
-
-            //    }
-            //    else if (type.IsString)
-            //    {
-            //        record.SetValue(property.Name, GetString(in reader, ordinal));
-            //    }
-
-            //    ordinal += property.Columns.Count;
-            //}
+                if (type.IsUnion) { record.Add(property.Name, GetUnion(in reader, in property)); }
+                else if (type.IsBoolean) { record.Add(property.Name, GetBoolean(in reader, in property)); }
+                else if (type.IsDecimal) { record.Add(property.Name, GetDecimal(in reader, in property)); }
+                else if (type.IsDateTime) { record.Add(property.Name, GetDateTime(in reader, in property)); }
+                else if (type.IsString) { record.Add(property.Name, GetString(in reader, in property)); }
+                else if (type.IsBinary) { record.Add(property.Name, GetBinary(in reader, in property)); }
+                else if (type.IsUuid) { record.Add(property.Name, GetUuid(in reader, in property)); }
+                else if (type.IsEntity)
+                {
+                    record.Add(property.Name, GetEntity(in reader, in property));
+                }
+                else if (type.IsInteger)
+                {
+                    if (type.Size == 4)
+                    {
+                        record.Add(property.Name, GetInt32(in reader, in property));
+                    }
+                    else
+                    {
+                        record.Add(property.Name, GetInt64(in reader, in property));
+                    }
+                }
+            }
         }
-        //public static object GetValue(in NpgsqlDataReader reader)
-        //{
-        //    if (Columns.Count == 0)
-        //    {
-        //        return null;
-        //    }
-        //    else if (Columns.Count == 1)
-        //    {
-        //        return GetSingleValue(in reader);
-        //    }
-        //    else
-        //    {
-        //        return GetMultipleValue(in reader);
-        //    }
-        //}
-        //private static object GetSingleValue(in NpgsqlDataReader reader)
-        //{
-        //    if (DataType.IsBoolean) { return GetBoolean(in reader); }
-        //    else if (DataType.IsNumeric) { return GetDecimal(in reader); }
-        //    else if (DataType.IsDateTime) { return GetDateTime(in reader); }
-        //    else if (DataType.IsString) { return GetString(in reader); }
-        //    else if (DataType.IsBinary) { return GetBinary(in reader); }
-        //    else if (DataType.IsUuid) { return GetUuid(in reader); }
-        //    else if (DataType.IsEntity) { return GetEntity(in reader); }
-        //    else if (DataType.IsVersion) { return GetVersion(in reader); }
-        //    else if (DataType.IsInteger) { return GetInteger(in reader); }
+        private bool GetBoolean(in NpgsqlDataReader reader, in PropertyDefinition output)
+        {
+            ColumnDefinition column = output.GetColumnByPurpose(ColumnPurpose.Value); // single value column
 
-        //    throw new NotSupportedException($"Unsupported: {DataType}");
-        //}
-        //private static object GetMultipleValue(in NpgsqlDataReader reader)
-        //{
-        //    int ordinal = GetOrdinal(in reader, UnionTag.Tag, out _);
+            column ??= output.GetColumnByPurpose(ColumnPurpose.Boolean); // union type column
 
-        //    if (ordinal == -1) // Union value without _TYPE discriminator field
-        //    {
-        //        return GetEntity(in reader);
-        //    }
+            if (column is null)
+            {
+                return false;
+            }
 
-        //    if (reader.IsDBNull(ordinal))
-        //    {
-        //        return Union.Undefined;
-        //    }
+            int ordinal = _ordinals[column];
 
-        //    // _TYPE binary(1) - may be generated by query engine if value is not stored in the database
-        //    // TAG value is generated by query engine in case data type addition operation takes place !
-        //    byte tag = ((byte[])reader.GetValue(ordinal))[0];
+            bool value = reader.IsDBNull(ordinal) ? false : reader.GetBoolean(ordinal);
 
-        //    object value;
+            if (column.Name == "_folder" || column.Name == "_Folder") // ЭтоГруппа
+            {
+                value = !value; // invert - exceptional 1C case
+            }
 
-        //    if (tag == 1) // Неопределено
-        //    {
-        //        return Union.Undefined;
-        //    }
-        //    else if (tag == 2) // Булево
-        //    {
-        //        value = GetBoolean(in reader);
-        //        return (value == null ? Union.Undefined : new Union.CaseBoolean((bool)value));
-        //    }
-        //    else if (tag == 3) // Число
-        //    {
-        //        value = GetDecimal(in reader);
-        //        return (value == null ? Union.Undefined : new Union.CaseDecimal((decimal)value));
-        //    }
-        //    else if (tag == 4) // Дата
-        //    {
-        //        value = GetDateTime(in reader);
-        //        return (value == null ? Union.Undefined : new Union.CaseDateTime((DateTime)value));
-        //    }
-        //    else if (tag == 5) // Строка
-        //    {
-        //        value = GetString(in reader);
-        //        return (value == null ? Union.Undefined : new Union.CaseString((string)value));
-        //    }
-        //    else if (tag == 8) // Ссылка
-        //    {
-        //        value = GetEntity(in reader);
-        //        return (value == null ? Union.Undefined : new Union.CaseEntity((Entity)value));
-        //    }
+            return value;
+        }
+        private decimal GetDecimal(in NpgsqlDataReader reader, in PropertyDefinition output)
+        {
+            ColumnDefinition column = output.GetColumnByPurpose(ColumnPurpose.Value); // single value column
 
-        //    throw new InvalidOperationException($"Invalid union tag value: [{tag}]");
-        //}
-        //private static object GetBoolean(in NpgsqlDataReader reader)
-        //{
-        //    int ordinal = GetOrdinal(in reader, UnionTag.Boolean, out ColumnMapper column);
+            column ??= output.GetColumnByPurpose(ColumnPurpose.Numeric); // union type column
 
-        //    if (reader.IsDBNull(ordinal))
-        //    {
-        //        return null;
-        //    }
+            if (column is null)
+            {
+                return 0M;
+            }
 
-        //    bool value;
+            int ordinal = _ordinals[column];
 
-        //    if (reader.GetFieldType(ordinal) == typeof(bool))
-        //    {
-        //        value = reader.GetBoolean(ordinal); // PostgreSql
-        //    }
-        //    else
-        //    {
-        //        value = (((byte[])reader.GetValue(ordinal))[0] == 1); // SqlServer
-        //    }
+            return reader.IsDBNull(ordinal) ? 0M : reader.GetDecimal(ordinal);
+        }
+        private int GetInt32(in NpgsqlDataReader reader, in PropertyDefinition output)
+        {
+            ColumnDefinition column = output.GetColumnByPurpose(ColumnPurpose.Value);
 
-        //    //TODO: убрать этот костыль в класс DataMapper _Folder
-        //    if (column.Name == "_Folder" || column.Name == "_folder")
-        //    {
-        //        return !value; // invert - exceptional 1C case
-        //    }
-        //    else
-        //    {
-        //        return value;
-        //    }
-        //}
-        //private static object GetDecimal(in NpgsqlDataReader reader)
-        //{
-        //    int ordinal = GetOrdinal(in reader, UnionTag.Numeric, out ColumnMapper column);
+            if (column is null)
+            {
+                return 0;
+            }
 
-        //    if (reader.IsDBNull(ordinal))
-        //    {
-        //        return null;
-        //    }
+            int ordinal = _ordinals[column];
 
-        //    Type type = reader.GetFieldType(ordinal);
+            return reader.IsDBNull(ordinal) ? 0 : reader.GetInt32(ordinal);
+        }
+        private long GetInt64(in NpgsqlDataReader reader, in PropertyDefinition output)
+        {
+            ColumnDefinition column = output.GetColumnByPurpose(ColumnPurpose.Value);
 
-        //    if (type == typeof(int))
-        //    {
-        //        return new decimal(reader.GetInt32(ordinal));
-        //    }
-        //    else if (type == typeof(long))
-        //    {
-        //        return new decimal(reader.GetInt64(ordinal));
-        //    }
-        //    else if (type == typeof(byte))
-        //    {
-        //        return new decimal(reader.GetByte(ordinal));
-        //    }
-        //    else if (type == typeof(byte[])) // binary(4) TRef
-        //    {
-        //        byte[] value = (byte[])reader.GetValue(ordinal);
-        //        return Convert.ToDecimal(DbUtilities.GetInt32(value));
-        //    }
-        //    else
-        //    {
-        //        return reader.GetDecimal(ordinal);
-        //    }
-        //}
-        //private static object GetInt32(in NpgsqlDataReader reader)
-        //{
-        //    int ordinal = GetOrdinal(in reader, UnionTag.Integer, out _);
+            if (column is null)
+            {
+                return 0L;
+            }
 
-        //    if (reader.IsDBNull(ordinal))
-        //    {
-        //        return null;
-        //    }
+            int ordinal = _ordinals[column];
 
-        //    Type type = reader.GetFieldType(ordinal);
+            return reader.IsDBNull(ordinal) ? 0L : reader.GetInt64(ordinal);
+        }
+        private DateTime GetDateTime(in NpgsqlDataReader reader, in PropertyDefinition output)
+        {
+            ColumnDefinition column = output.GetColumnByPurpose(ColumnPurpose.Value); // single value column
 
-        //    if (type == typeof(byte[]))
-        //    {
-        //        //TODO: cast binary(4) to int at database level ?
-        //        //NOTE: the value can be stored as unsigned big-endian !!!
-        //        return DbUtilities.GetInt32((byte[])reader.GetValue(ordinal));
-        //    }
-        //    else if (type == typeof(long))
-        //    {
-        //        return reader.GetInt64(ordinal);
-        //    }
-        //    else
-        //    {
-        //        return reader.GetInt32(ordinal);
-        //    }
-        //}
-        //private static object GetInt64(in NpgsqlDataReader reader)
-        //{
-        //    int ordinal = GetOrdinal(in reader, UnionTag.Version, out _);
+            column ??= output.GetColumnByPurpose(ColumnPurpose.DateTime); // union type column
 
-        //    if (reader.IsDBNull(ordinal))
-        //    {
-        //        return null;
-        //    }
+            if (column is null)
+            {
+                return DateTime.MinValue;
+            }
 
-        //    if (reader.GetFieldType(ordinal) == typeof(byte[]))
-        //    {
-        //        //TODO: cast binary(8) to bigint at database level ?
-        //        //NOTE: SQL Server rowversion is unsigned big-endian value !!!
-        //        return DbUtilities.GetInt64((byte[])reader.GetValue(ordinal));
-        //    }
-        //    else
-        //    {
-        //        return reader.GetInt64(ordinal);
-        //    }
-        //}
-        //private static object GetDateTime(in NpgsqlDataReader reader)
-        //{
-        //    int ordinal = GetOrdinal(in reader, UnionTag.DateTime, out _);
+            int ordinal = _ordinals[column];
 
-        //    if (reader.IsDBNull(ordinal))
-        //    {
-        //        return null;
-        //    }
+            return reader.IsDBNull(ordinal) ? DateTime.MinValue : reader.GetDateTime(ordinal).AddYears(-_yearOffset);
+        }
+        private string GetString(in NpgsqlDataReader reader, in PropertyDefinition output)
+        {
+            ColumnDefinition column = output.GetColumnByPurpose(ColumnPurpose.Value); // single value column
 
-        //    return reader.GetDateTime(ordinal).AddYears(-_yearOffset);
-        //}
-        //private static string GetString(in NpgsqlDataReader reader, int ordinal)
-        //{
-        //    if (reader.IsDBNull(ordinal)) { return string.Empty; }
+            column ??= output.GetColumnByPurpose(ColumnPurpose.String); // union type column
 
-        //    string typeName = reader.GetPostgresType(ordinal).Name;
+            if (column is null)
+            {
+                return string.Empty;
+            }
 
-        //    if (typeName == "mchar" || typeName == "mvarchar")
-        //    {
+            int ordinal = _ordinals[column];
 
-        //        int size = 1024;
-        //        long length;
-        //        long offset = 0;
-        //        string text = string.Empty;
+            if (reader.IsDBNull(ordinal))
+            {
+                return string.Empty;
+            }
 
-        //        byte[] buffer = ArrayPool<byte>.Shared.Rent(size);
+            string typeName = reader.GetPostgresType(ordinal).Name;
 
-        //        do
-        //        {
-        //            length = reader.GetBytes(ordinal, offset, buffer, 0, size);
+            if (typeName == "mchar" || typeName == "mvarchar")
+            {
+                int size = 1024; // max 1C string value length
+                long length;
+                long offset = 0;
+                string text = string.Empty;
 
-        //            offset += length;
+                byte[] buffer = ArrayPool<byte>.Shared.Rent(size);
 
-        //            if (length > 0)
-        //            {
-        //                text += Encoding.Unicode.GetString(buffer, 0, (int)length);
-        //            }
-        //        }
-        //        while (length > 0);
+                do
+                {
+                    length = reader.GetBytes(ordinal, offset, buffer, 0, size);
 
-        //        ArrayPool<byte>.Shared.Return(buffer);
+                    offset += length;
 
-        //        return text;
-        //    }
-            
-        //    return reader.GetString(ordinal);
-        //}
-        //private static object GetBinary(in NpgsqlDataReader reader)
-        //{
-        //    int ordinal = GetOrdinal(in reader, UnionTag.Binary, out _);
+                    if (length > 0)
+                    {
+                        text += Encoding.Unicode.GetString(buffer, 0, (int)length);
+                    }
+                }
+                while (length > 0);
 
-        //    if (reader.IsDBNull(ordinal)) { return null; }
+                ArrayPool<byte>.Shared.Return(buffer);
 
-        //    if (reader is not NpgsqlDataReader postgres)
-        //    {
-        //        return ((byte[])reader.GetValue(ordinal));
-        //    }
+                return text;
+            }
 
-        //    string typeName = postgres.GetPostgresType(ordinal).Name;
+            return reader.GetString(ordinal);
+        }
+        private byte[] GetBinary(in NpgsqlDataReader reader, in PropertyDefinition output)
+        {
+            ColumnDefinition column = output.GetColumnByPurpose(ColumnPurpose.Value);
 
-        //    if (typeName == "integer") //TODO: поле _version в PostgreSQL
-        //    {
-        //        return BitConverter.GetBytes(reader.GetInt32(ordinal));
-        //    }
-        //    else
-        //    {
-        //        return ((byte[])reader.GetValue(ordinal));
-        //    }
-        //}
-        //private static object GetUuid(in NpgsqlDataReader reader)
-        //{
-        //    int ordinal = GetOrdinal(in reader, UnionTag.Uuid, out _);
+            if (column is null)
+            {
+                return Array.Empty<byte>();
+            }
 
-        //    if (reader.IsDBNull(ordinal))
-        //    {
-        //        return null;
-        //    }
+            int ordinal = _ordinals[column];
 
-        //    Type type = reader.GetFieldType(ordinal);
+            if (reader.IsDBNull(ordinal))
+            {
+                return Array.Empty<byte>();
+            }
 
-        //    if (type == typeof(byte[]))
-        //    {
-        //        byte[] buffer = new byte[16];
+            string typeName = reader.GetPostgresType(ordinal).Name;
 
-        //        _ = reader.GetBytes(ordinal, 0, buffer, 0, 16);
+            if (typeName == "integer") // Поле _version для 1С PostgreSQL
+            {
+                int value = reader.GetInt32(ordinal);
+                
+                Span<byte> buffer = _buffer.AsSpan(0, 4);
 
-        //        return new Guid(buffer);
-        //    }
-        //    else if (type == typeof(Guid))
-        //    {
-        //        return reader.GetGuid(ordinal);
-        //    }
+                BinaryPrimitives.WriteInt32BigEndian(buffer, value);
 
-        //    throw new InvalidOperationException("Invalid UUID value");
-        //}
-        //private static object GetEntity(in NpgsqlDataReader reader)
-        //{
-        //    int ordinal = GetOrdinal(in reader, UnionTag.Entity, out _);
+                return buffer.ToArray();
+            }
 
-        //    if (ordinal == -1)
-        //    {
-        //        throw new InvalidOperationException("Entity column mapping is not found");
-        //    }
+            return ((byte[])reader.GetValue(ordinal));
+        }
+        private Guid GetUuid(in NpgsqlDataReader reader, in PropertyDefinition output)
+        {
+            ColumnDefinition column = output.GetColumnByPurpose(ColumnPurpose.Value);
 
-        //    if (reader.IsDBNull(ordinal))
-        //    {
-        //        return null;
-        //    }
+            if (column is null)
+            {
+                return Guid.Empty;
+            }
 
-        //    Guid identity = new((byte[])reader.GetValue(ordinal)); // binary(16)
+            int ordinal = _ordinals[column];
 
-        //    if (Columns.Count == 1) // single reference type value - RRef
-        //    {
-        //        return new Entity(DataType.TypeCode, identity);
-        //    }
+            _ = reader.GetBytes(ordinal, 0L, _buffer, 0, 16);
 
-        //    ordinal = GetOrdinal(in reader, UnionTag.TypeCode, out _);
+            return new Guid(_buffer);
+        }
+        private Entity GetEntity(in NpgsqlDataReader reader, in PropertyDefinition output)
+        {
+            int ordinal;
+            int typeCode;
+            Guid identity;
 
-        //    if (ordinal == -1) // union having single reference type
-        //    {
-        //        return new Entity(DataType.TypeCode, identity);
-        //    }
+            ColumnDefinition column = output.GetColumnByPurpose(ColumnPurpose.Value);
 
-        //    if (reader.IsDBNull(ordinal))
-        //    {
-        //        return null;
-        //    }
+            // single value column
 
-        //    int typeCode = DbUtilities.GetInt32((byte[])reader.GetValue(ordinal)); // binary(4)
+            if (column is not null)
+            {
+                ordinal = _ordinals[column];
 
-        //    return new Entity(typeCode, identity);
-        //}
+                if (reader.IsDBNull(ordinal))
+                {
+                    return Entity.Undefined;
+                }
+
+                _ = reader.GetBytes(ordinal, 0L, _buffer, 0, 16);
+
+                identity = new Guid(_buffer);
+                typeCode = output.Type.TypeCode;
+
+                return new Entity(typeCode, identity);
+            }
+
+            // union type value
+
+            column = output.GetColumnByPurpose(ColumnPurpose.TypeCode);
+
+            if (column is not null)
+            {
+                ordinal = _ordinals[column];
+
+                if (reader.IsDBNull(ordinal))
+                {
+                    return Entity.Undefined;
+                }
+
+                _ = reader.GetBytes(ordinal, 0L, _buffer, 0, 4);
+
+                typeCode = BinaryPrimitives.ReadInt32BigEndian(_buffer.AsSpan(0, 4));
+            }
+            else
+            {
+                typeCode = output.Type.TypeCode;
+            }
+
+            column = output.GetColumnByPurpose(ColumnPurpose.Identity);
+
+            if (column is null)
+            {
+                return Entity.Undefined;
+            }
+
+            ordinal = _ordinals[column];
+
+            _ = reader.GetBytes(ordinal, 0L, _buffer, 0, 16);
+
+            identity = new Guid(_buffer);
+
+            return new Entity(typeCode, identity);
+        }
+        private object GetUnion(in NpgsqlDataReader reader, in PropertyDefinition output)
+        {
+            // _TYPE binary(1) may be generated by query engine if value is not stored in the database.
+            // TAG value is generated by query engine in case data type addition operation takes place.
+            // Type extension operations, resulting from CASE and UNION, are not implemented by DaJet.
+
+            ColumnDefinition column = output.GetColumnByPurpose(ColumnPurpose.Tag);
+
+            if (column is null) // IsReferenceOnlyUnion
+            {
+                return GetEntity(in reader, in output);
+            }
+
+            int ordinal = _ordinals[column];
+
+            if (reader.IsDBNull(ordinal))
+            {
+                return Union.Undefined;
+            }
+
+            _ = reader.GetBytes(ordinal, 0L, _buffer, 0, 1);
+
+            byte tag = _buffer[0];
+
+            if (tag == 1) // Неопределено
+            {
+                return Union.Undefined;
+            }
+            else if (tag == 2) // Булево
+            {
+                return new Union.CaseBoolean(GetBoolean(in reader, in output));
+            }
+            else if (tag == 3) // Число
+            {
+                return new Union.CaseDecimal(GetDecimal(in reader, in output));
+            }
+            else if (tag == 4) // Дата
+            {
+                return new Union.CaseDateTime(GetDateTime(in reader, in output));
+            }
+            else if (tag == 5) // Строка
+            {
+                return new Union.CaseString(GetString(in reader, in output));
+            }
+            else if (tag == 8) // Ссылка
+            {
+                return new Union.CaseEntity(GetEntity(in reader, in output));
+            }
+
+            throw new InvalidOperationException($"Invalid union tag value: [{tag}]");
+        }
     }
 }

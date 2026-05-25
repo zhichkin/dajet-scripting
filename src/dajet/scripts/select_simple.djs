@@ -1,13 +1,13 @@
 
-DECLARE @Идентификатор   uuid = '643c6b9d-cacf-4048-11f1-3ce5697125ea'
+DECLARE @Идентификатор   uuid = '643c6b9d-cacf-4048-11f1-3ce54d7b5bf7'
 DECLARE @Ссылка          entity
-DECLARE @Код             string  = '000000007'
+DECLARE @Код             string  = '000000005'
 DECLARE @ЦелоеЧисло      integer = 12345
 DECLARE @ДесятичноеЧисло decimal = 12.34
 DECLARE @ПометкаУдаления boolean = FALSE
 DECLARE @ПустойИдентификатор uuid
 DECLARE @ПустаяСсылка        entity
-DECLARE @ДатаВремя           datetime = '0001-01-01T00:00:00'
+DECLARE @ДатаВремя           datetime = '2026-04-12T00:00:00'
 DECLARE @Запись object
 DECLARE @Список array
 
@@ -31,9 +31,10 @@ USE 'MS_TEST'
    WHERE Код = @Код
      AND @ЦелоеЧисло = 12345
      AND @ДесятичноеЧисло = 12.34
-     AND ПометкаУдаления = @ПометкаУдаления
-     AND @ДатаВремя = '0001-01-01T00:00:00'
      AND Ссылка = @Идентификатор
+     AND ПометкаУдаления = @ПометкаУдаления
+     AND @ДатаВремя = '2026-04-12T00:00:00'
+     AND СоставнойТип = @ДатаВремя
 END
 
 RETURN @Список

@@ -10,7 +10,9 @@ namespace DaJet.Scripting
         private Script _script;
         private ExpressionInterpreter _expression;
         private Dictionary<SyntaxNode, SqlStatement> _statements = new();
-        
+
+        private Dictionary<string, object> _parameters = new(); // input parameters
+
         private object _returnValue = null;
         private readonly Dictionary<string, object> _data = new();
         private readonly Stack<DataSourceScope> _sources = new();
@@ -38,7 +40,6 @@ namespace DaJet.Scripting
             }
 
             Binder binder = new();
-            //OneDbSchemaProvider schema = new();
             CacheableSchemaProvider schema = new();
 
             if (!binder.TryBind(in _script, schema, out List<string> errors))
@@ -85,6 +86,14 @@ namespace DaJet.Scripting
 
             return value;
         }
+        public object Execute(in Dictionary<string, object> parameters)
+        {
+            ArgumentNullException.ThrowIfNull(parameters, nameof(parameters));
+
+            _parameters = parameters;
+
+            return Execute();
+        }
         private void Dispose()
         {
             _returnValue = null;
@@ -119,14 +128,31 @@ namespace DaJet.Scripting
         private ExitCode Execute(in DeclareStatement statement)
         {
             string name = statement.Identifier;
+            
+            object value = null;
 
-            object value = _expression.Evaluate(statement.Initializer);
+            string parameterName = name.TrimStart('@');
 
-            if (value is null)
+            if (!_parameters.TryGetValue(parameterName, out value))
+            {
+                value = _expression.Evaluate(statement.Initializer);
+            }
+
+            if (value is null) // set default value
             {
                 DataType type = statement.Type;
 
-                //TODO: initialize with default value
+                if (type.IsBoolean) { value = false; }
+                else if (type.IsDecimal) { value = 0M; }
+                else if (type.IsInteger) { value = type.Size == 4 ? 0 : 0L; }
+                else if (type.IsDateTime) { value = DateTime.MinValue; }
+                else if (type.IsString) { value = string.Empty; }
+                else if (type.IsBinary) { value = Array.Empty<byte>(); }
+                else if (type.IsUuid) { value = Guid.Empty; }
+                else if (type.IsEntity) { value = Entity.Undefined; }
+                else if (type.IsUnion) { value = Union.Undefined; }
+                else if (type.IsObject) { value = new Dictionary<string, object>(); }
+                else if (type.IsArray) { value = new List<Dictionary<string, object>>(); }
             }
 
             _data.Add(name, value);

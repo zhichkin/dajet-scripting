@@ -22,6 +22,6 @@ USE 'MS_TEST'
   LEFT JOIN РегистрНакопления.РегистрНакопления1 AS T2 ON 1 = 0
       WHERE T0.Код = @Код
 
-END -- MS_TEST
+END -- USE
 
 RETURN @Запись

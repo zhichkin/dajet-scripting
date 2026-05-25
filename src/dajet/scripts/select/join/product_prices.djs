@@ -4,7 +4,7 @@ DECLARE @Поставщик  object
 DECLARE @Контрагент entity
 DECLARE @Таблица    array
 
-USE 'MS_TEST'
+USE 'MS_TEST' -- 'PG_TEST'
   
   SELECT TOP 1 Ссылка, Наименование
     INTO @Поставщик
