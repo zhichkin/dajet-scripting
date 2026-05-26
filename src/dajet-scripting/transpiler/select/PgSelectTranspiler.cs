@@ -285,11 +285,13 @@ namespace DaJet.Scripting
         }
         protected override void Visit(in FunctionExpression node, in StringBuilder script)
         {
-            if (SqlFunctions.TryGet(node.Token, out SqlFunction function))
+            if (PgSqlFunctions.TryGet(node.Token, out Function function))
+            {
+                function.Transpile(this, in node, in script);
+            }
+            else if (SqlFunctions.TryGet(node.Token, out _))
             {
                 base.Visit(in node, in script);
-
-                //function.Visit(in node, in script, this);
             }
             else if (DaJetFunctions.Contains(node.Name))
             {
@@ -307,127 +309,10 @@ namespace DaJet.Scripting
             }
         }
 
-        //protected override void Visit(in FunctionExpression node, in StringBuilder script)
-        //{
-        //    if (node.Token == TokenType.UDF)
+        //    if (name == "NEWUUID")
         //    {
-        //        if (UDF.TryGet(node.Name, out IUserDefinedFunction transpiler))
-        //        {
-        //            FunctionDescriptor function = transpiler.Transpile(this, in node, in script);
-
-            //            if (function is not null)
-            //            {
-            //                Functions.Add(function);
-            //            }
-            //        }
-            //        else
-            //        {
-            //            throw new InvalidOperationException($"Invalid function name: {node.Name}");
-            //        }
-
-            //        return;
-            //    }
-
-            //    string name = node.Name.ToUpperInvariant();
-
-            //    string pg_name = null;
-
-            //    if (name == "NEWUUID")
-            //    {
-            //        script.Append($"CAST(E'\\\\x{ParserHelper.GetUuidHexLiteral(Guid.NewGuid())}' AS bytea)"); return;
-            //    }
-            //    else if (name == "ISNULL")
-            //    {
-            //        node.Name = "COALESCE";
-            //    }
-            //    else if (name == "DATALENGTH")
-            //    {
-            //        node.Name = "OCTET_LENGTH";
-            //        script.Append(node.Name).Append('(');
-            //        script.Append("CAST(");
-            //        Visit(node.Parameters[0], in script);
-            //        script.Append(" AS text)");
-            //        script.Append(')');
-            //        return; //TODO: OCTET_LENGTH - what if data type of column is bytea ?
-            //    }
-            //    else if (name == "NOW") // timestamp without time zone
-            //    {
-            //        script.Append("NOW()::timestamp"); return;
-            //    }
-            //    else if (name == "UTC") // timestamp without time zone
-            //    {
-            //        script.Append("NOW() AT TIME ZONE 'UTC'"); return;
-            //    }
-            //    else if (name == "VECTOR")
-            //    {
-            //        if (node.Parameters is not null && node.Parameters.Count > 0 && node.Parameters[0] is ScalarExpression scalar)
-            //        {
-            //            //script.Append($"CAST(nextval('{scalar.Literal.ToLower()}') AS numeric(19, 0))");
-            //            script.Append($"nextval('{scalar.Literal.ToLower()}')");
-            //        }
-            //        return;
-            //    }
-            //    else if (name == "CHARLENGTH") { pg_name = "LENGTH"; }
-
-            //    if (pg_name is not null)
-            //    {
-            //        script.Append(pg_name);
-            //    }
-            //    else
-            //    {
-            //        script.Append(node.Name);
-            //    }
-
-            //    if (node.Token != TokenType.EXISTS)
-            //    {
-            //        script.Append('('); //NOTE: EXISTS function has one parameter - TableExpression
-            //    }
-
-            //    if (node.Token == TokenType.COUNT &&
-            //        node.Modifier == TokenType.DISTINCT)
-            //    {
-            //        script.Append("DISTINCT ");
-            //    }
-
-            //    SyntaxNode expression;
-
-            //    for (int i = 0; i < node.Parameters.Count; i++)
-            //    {
-            //        expression = node.Parameters[i];
-            //        if (i > 0) { script.Append(", "); }
-
-            //        if (name == "SUBSTRING" && i == 0)
-            //        {
-            //            script.Append("CAST(");
-            //            Visit(in expression, in script);
-            //            script.Append(" AS varchar)");
-            //        }
-            //        else if (name == "STRING_AGG" || name == "REPLACE"
-            //            || name == "CONCAT" || name == "CONCAT_WS"
-            //            || name == "LOWER" || name == "UPPER"
-            //            || name == "LTRIM" || name == "RTRIM")
-            //        {
-            //            script.Append("CAST(");
-            //            Visit(in expression, in script);
-            //            script.Append(" AS text)");
-            //        }
-            //        else
-            //        {
-            //            Visit(in expression, in script);
-            //        }
-            //    }
-
-            //    if (node.Token != TokenType.EXISTS)
-            //    {
-            //        script.Append(')'); //NOTE: EXISTS function has one parameter - TableExpression
-            //    }
-
-            //    if (node.Over is not null)
-            //    {
-            //        script.Append(' ');
-            //        Visit(node.Over, in script);
-            //    }
-            //}
+        //        script.Append($"CAST(E'\\\\x{ParserHelper.GetUuidHexLiteral(Guid.NewGuid())}' AS bytea)"); return;
+        //    }
 
         protected override void Visit(in TableVariableExpression node, in StringBuilder script)
         {

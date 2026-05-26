@@ -4,7 +4,7 @@ using System.Text;
 
 namespace DaJet.Scripting
 {
-    internal sealed class AVG : SqlFunction
+    internal sealed class ANALYTIC : Function
     {
         public override DataType GetReturnType(in FunctionExpression node)
         {
@@ -14,17 +14,19 @@ namespace DaJet.Scripting
 
             return type;
         }
-        public override void Visit(in FunctionExpression node, in StringBuilder script, in SqlTranspiler statement)
+        public override void Transpile(in SqlTranspiler statement, in FunctionExpression node, in StringBuilder script)
         {
-            script.Append(node.Name);
+            // LAG | LEAD | LAST_VALUE | FIRST_VALUE
 
-            script.Append('(');
+            script.Append(node.Name).Append('(');
 
             SyntaxNode parameter;
 
-            for (int i = 0; i < node.Parameters.Count; i++)
+            List<SyntaxNode> parameters = node.Parameters;
+
+            for (int i = 0; i < parameters.Count; i++)
             {
-                parameter = node.Parameters[i];
+                parameter = parameters[i];
 
                 if (i > 0) { script.Append(", "); }
 

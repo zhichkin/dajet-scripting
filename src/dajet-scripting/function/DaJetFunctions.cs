@@ -4,14 +4,14 @@ namespace DaJet.Scripting
 {
     public static class DaJetFunctions
     {
-        private static readonly FrozenDictionary<string, DaJetFunction> _functions = CreateFunctionLookup();
-        private static FrozenDictionary<string, DaJetFunction> CreateFunctionLookup()
+        private static readonly FrozenDictionary<string, Function> _functions = CreateFunctionLookup();
+        private static FrozenDictionary<string, Function> CreateFunctionLookup()
         {
-            List<KeyValuePair<string, DaJetFunction>> list =
+            List<KeyValuePair<string, Function>> list =
             [
-                new KeyValuePair<string, DaJetFunction>(nameof(JSON), new JSON()),
-                new KeyValuePair<string, DaJetFunction>(nameof(TYPEOF), new TYPEOF()),
-                new KeyValuePair<string, DaJetFunction>(nameof(UUIDOF), new UUIDOF())
+                new KeyValuePair<string, Function>(nameof(JSON), new JSON()),
+                new KeyValuePair<string, Function>(nameof(TYPEOF), new TYPEOF()),
+                new KeyValuePair<string, Function>(nameof(UUIDOF), new UUIDOF())
             ];
             return FrozenDictionary.ToFrozenDictionary(list);
         }
@@ -19,7 +19,7 @@ namespace DaJet.Scripting
         {
             return _functions.ContainsKey(name);
         }
-        public static bool TryGet(string name, out DaJetFunction function)
+        public static bool TryGet(string name, out Function function)
         {
             return _functions.TryGetValue(name, out function);
         }

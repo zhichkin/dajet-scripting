@@ -3,7 +3,7 @@ using DaJet.TypeSystem;
 
 namespace DaJet.Scripting
 {
-    public sealed class TYPEOF : DaJetFunction
+    public sealed class TYPEOF : Function
     {
         public override DataType GetReturnType(in FunctionExpression node)
         {

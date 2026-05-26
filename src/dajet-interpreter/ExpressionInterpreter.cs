@@ -91,7 +91,7 @@ namespace DaJet.Scripting
         }
         private object Evaluate(in FunctionExpression node)
         {
-            if (!DaJetFunctions.TryGet(node.Name, out DaJetFunction function))
+            if (!DaJetFunctions.TryGet(node.Name, out Function function))
             {
                 throw new InvalidOperationException($"Unknown function name: {node.Name}");
             }

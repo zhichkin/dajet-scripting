@@ -357,6 +357,11 @@ namespace DaJet.Scripting
 
             int ordinal = _ordinals[column];
 
+            if (column.Type.IsUuid)
+            {
+                return reader.GetGuid(ordinal); // NEWUUID function in SELECT clause
+            }
+
             _ = reader.GetBytes(ordinal, 0L, _buffer, 0, 16);
 
             return new Guid(_buffer);

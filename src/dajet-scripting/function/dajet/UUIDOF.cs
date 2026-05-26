@@ -3,7 +3,7 @@ using DaJet.TypeSystem;
 
 namespace DaJet.Scripting
 {
-    public sealed class UUIDOF : DaJetFunction
+    public sealed class UUIDOF : Function
     {
         public override DataType GetReturnType(in FunctionExpression node)
         {

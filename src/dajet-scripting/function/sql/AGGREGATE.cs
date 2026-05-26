@@ -4,7 +4,7 @@ using System.Text;
 
 namespace DaJet.Scripting
 {
-    internal sealed class MIN : SqlFunction
+    internal sealed class AGGREGATE : Function
     {
         public override DataType GetReturnType(in FunctionExpression node)
         {
@@ -14,20 +14,20 @@ namespace DaJet.Scripting
 
             return type;
         }
-        public override void Visit(in FunctionExpression node, in StringBuilder script, in SqlTranspiler statement)
+        public override void Transpile(in SqlTranspiler statement, in FunctionExpression node, in StringBuilder script)
         {
-            script.Append(node.Name);
+            // AVG | MIN | MAX | SUM
 
-            script.Append('(');
+            script.Append(node.Name).Append('(');
 
-            SyntaxNode parameter;
+            SyntaxNode parameter = node.Parameters[0];
 
-            for (int i = 0; i < node.Parameters.Count; i++)
+            if (parameter is StarExpression)
             {
-                parameter = node.Parameters[i];
-
-                if (i > 0) { script.Append(", "); }
-
+                script.Append('*');
+            }
+            else
+            {
                 statement.Visit(in parameter, in script);
             }
 

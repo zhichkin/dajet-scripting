@@ -372,69 +372,18 @@ namespace DaJet.Scripting
         {
             if (node.Token == Token.UDF)
             {
-                throw new InvalidCastException($"Failed to infer function return type {node.Name}");
-
-                //if (!DaJetFunctions.TryGet(node.Name, out DaJetFunction udf))
-                //{
-                    
-                //}
-
-                //Type returnType = udf.GetReturnType(in function);
-
-                //return new PropertyDefinition()
-                //{
-                //    Type = udf.GetReturnType(in node)
-                //};
+                throw new InvalidCastException($"DaJet functions are not implemented for SELECT clause");
             }
 
-            if (!SqlFunctions.TryGet(node.Token, out SqlFunction function))
+            if (!SqlFunctions.TryGet(node.Token, out Function function))
             {
-                throw new InvalidCastException($"Unknown function name: {node.Name}");
+                throw new InvalidCastException($"Unknown SQL function name: {node.Name}");
             }
 
             return new PropertyDefinition()
             {
                 Type = function.GetReturnType(in node)
             };
-            
-            //string name = function.Name.ToUpperInvariant();
-
-            //if (name == "COUNT")
-            //{
-            //    union.IsInteger = true; return;
-            //}
-            //else if (name == "ROW_NUMBER")
-            //{
-            //    //TODO: IsVersion is int64 (bigint) hack
-            //    //NOTE: the function does not have any parameters
-            //    union.IsVersion = true; return;
-            //}
-            //else if (name == "DATALENGTH" || name == "OCTET_LENGTH" || name == "CHARLENGTH")
-            //{
-            //    //TODO: IsInteger is int32 (int) hack
-            //    //NOTE: the function have one parameter, but we ignore it
-            //    union.IsInteger = true; return;
-            //}
-            //else if (name == "SUBSTRING" || name == "STRING_AGG"
-            //    || name == "CONCAT" || name == "CONCAT_WS" || name == "REPLACE"
-            //    || name == "LOWER" || name == "UPPER" || name == "LTRIM" || name == "RTRIM")
-            //{
-            //    union.IsString = true; return;
-            //}
-            //else if (name == "NOW" || name == "UTC")
-            //{
-            //    union.IsDateTime = true; return;
-            //}
-            //else if (name == "VECTOR")
-            //{
-            //    //union.IsNumeric = true; return;
-            //    //TODO: IsVersion is int64 (bigint) hack
-            //    union.IsVersion = true; return;
-            //}
-            //else if (name == "NEWUUID")
-            //{
-            //    union.IsUuid = true; return;
-            //}
         }
         private static PropertyDefinition Infer(in PropertyDefinition property)
         {

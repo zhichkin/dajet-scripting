@@ -9,7 +9,6 @@ namespace DaJet.Scripting
     {
         private static readonly BooleanClauseTransformer _transformer = new();
         
-        protected int YearOffset;
         protected SqlStatement _statement;
         protected MetadataProvider _provider;
         public override bool TryTranspile(in MetadataProvider provider, in SyntaxNode node, out SqlStatement statement, out string error)
@@ -85,7 +84,8 @@ namespace DaJet.Scripting
             else if (node is ColumnReference column) { Visit(in column, in script); }
             else if (node is FunctionExpression function) { Visit(in function, in script); }
             else if (node is OverClause over) { Visit(in over, in script); }
-            else if (node is TemporaryTableExpression temporary_table) { Visit(in temporary_table, in script); }
+            //else if (node is StarExpression star) { Visit(in star, in script); }
+            //else if (node is TemporaryTableExpression temporary_table) { Visit(in temporary_table, in script); }
         }
 
         protected virtual void Visit(in SelectStatement node, in StringBuilder script)
@@ -150,7 +150,11 @@ namespace DaJet.Scripting
                 script.Append(" AS ").Append(node.Alias);
             }
         }
-        
+
+        protected virtual void Visit(in StarExpression node, in StringBuilder script)
+        {
+            script.Append('*');
+        }
         protected virtual void Visit(in ColumnExpression node, in StringBuilder script)
         {
             if (node.Expression is ColumnReference column)
@@ -719,9 +723,9 @@ namespace DaJet.Scripting
 
         protected virtual void Visit(in FunctionExpression node, in StringBuilder script)
         {
-            if (SqlFunctions.TryGet(node.Token, out SqlFunction function))
+            if (SqlFunctions.TryGet(node.Token, out Function function))
             {
-                function.Visit(in node, in script, this);
+                function.Transpile(this, in node, in script);
             }
             else if (DaJetFunctions.Contains(node.Name))
             {
@@ -738,28 +742,7 @@ namespace DaJet.Scripting
                 throw new InvalidOperationException($"Unknown function name: {node.Name}");
             }
 
-            //else if (name == "NOW")
-            //{
-            //    if (YearOffset == 0)
-            //    {
-            //        script.Append("GETDATE()");
-            //    }
-            //    else
-            //    {
-            //        script.Append("DATEADD(year, " + YearOffset.ToString() + ", GETDATE())");
-            //    }
-            //}
-            //else if (name == "UTC")
-            //{
-            //    if (YearOffset == 0)
-            //    {
-            //        script.Append("GETUTCDATE()");
-            //    }
-            //    else
-            //    {
-            //        script.Append("DATEADD(year, " + YearOffset.ToString() + ", GETUTCDATE())");
-            //    }
-            //}
+            
             //else if (name == "VECTOR")
             //{
             //    if (node.Parameters is not null && node.Parameters.Count > 0 && node.Parameters[0] is ScalarExpression scalar)

@@ -4,28 +4,15 @@ using System.Text;
 
 namespace DaJet.Scripting
 {
-    internal sealed class COUNT : Function
+    internal sealed class ROW_NUMBER : Function
     {
         public override DataType GetReturnType(in FunctionExpression node)
         {
-            return DataType.Integer();
+            return DataType.Integer(8);
         }
         public override void Transpile(in SqlTranspiler statement, in FunctionExpression node, in StringBuilder script)
         {
-            script.Append(node.Name).Append('(');
-
-            SyntaxNode parameter = node.Parameters[0];
-
-            if (parameter is StarExpression)
-            {
-                script.Append('*');
-            }
-            else
-            {
-                statement.Visit(in parameter, in script);
-            }
-
-            script.Append(')');
+            script.Append("ROW_NUMBER()");
 
             if (node.Over is not null)
             {

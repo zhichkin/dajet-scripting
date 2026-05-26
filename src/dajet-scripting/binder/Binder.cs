@@ -79,7 +79,7 @@ namespace DaJet.Scripting
             else if (node is OrderClause order_by) { Bind(in order_by); }
             else if (node is OrderExpression order_expression) { Bind(in order_expression); }
 
-            //else if (node is StarExpression star) { Bind(in star); }
+            else if (node is StarExpression star) { Bind(in star); }
             else if (node is ColumnExpression column) { Bind(in column); }
             else if (node is ColumnReference reference) { Bind(in reference); }
 
@@ -618,7 +618,10 @@ namespace DaJet.Scripting
         #endregion
 
         #region "COLUMN BINDING"
-        private void Bind(in StarExpression node) { /* TODO: implement transformer into column expressions */ }
+        private void Bind(in StarExpression node)
+        {
+            /* TODO: implement transformer into column expressions */
+        }
         private void Bind(in ColumnExpression node)
         {
             Bind(node.Expression);

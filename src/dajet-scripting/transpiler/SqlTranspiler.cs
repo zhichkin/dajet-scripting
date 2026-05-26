@@ -6,6 +6,7 @@ namespace DaJet.Scripting
 {
     public abstract class SqlTranspiler
     {
+        public virtual int YearOffset { get; protected set; }
         public abstract void Visit(in SyntaxNode expression, in StringBuilder script);
         public abstract bool TryTranspile(in MetadataProvider provider, in SyntaxNode node, out SqlStatement statement, out string error);
     }

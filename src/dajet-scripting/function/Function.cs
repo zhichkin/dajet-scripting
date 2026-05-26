@@ -4,10 +4,10 @@ using System.Text;
 
 namespace DaJet.Scripting
 {
-    public abstract class SqlFunction
+    public abstract class Function
     {
         public abstract DataType GetReturnType(in FunctionExpression node);
-        public virtual void Visit(in FunctionExpression node, in StringBuilder script, in SqlTranspiler statement)
+        public virtual void Transpile(in SqlTranspiler statement, in FunctionExpression node, in StringBuilder script)
         {
             if (node.Token == Token.UDF)
             {
@@ -49,5 +49,8 @@ namespace DaJet.Scripting
                 statement.Visit(node.Over, in script);
             }
         }
+        
+        //public abstract object Compile(in FunctionExpression node);
+        //public abstract object Evaluate(in FunctionExpression node);
     }
 }

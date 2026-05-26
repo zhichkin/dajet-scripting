@@ -4,35 +4,30 @@ using System.Text;
 
 namespace DaJet.Scripting
 {
-    internal sealed class COUNT : Function
+    internal sealed class DATALENGTH : Function
     {
         public override DataType GetReturnType(in FunctionExpression node)
         {
+            SyntaxNode expression = node.Parameters[0];
+
+            DataType type = DataMapper.InferType(in expression);
+
+            if ((type.IsBinary || type.IsString) && type.Size == 0)
+            {
+                return DataType.Integer(8); // varbinary(max), nvarchar(max) or varchar(max)
+            }
+
             return DataType.Integer();
         }
         public override void Transpile(in SqlTranspiler statement, in FunctionExpression node, in StringBuilder script)
         {
             script.Append(node.Name).Append('(');
 
-            SyntaxNode parameter = node.Parameters[0];
+            SyntaxNode expression = node.Parameters[0];
 
-            if (parameter is StarExpression)
-            {
-                script.Append('*');
-            }
-            else
-            {
-                statement.Visit(in parameter, in script);
-            }
+            statement.Visit(in expression, in script);
 
             script.Append(')');
-
-            if (node.Over is not null)
-            {
-                script.Append(' ');
-
-                statement.Visit(node.Over, in script);
-            }
         }
     }
 }

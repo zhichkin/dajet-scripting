@@ -4,7 +4,7 @@ using System.Text;
 
 namespace DaJet.Scripting
 {
-    internal sealed class MAX : SqlFunction
+    internal sealed class PG_ISNULL : Function
     {
         public override DataType GetReturnType(in FunctionExpression node)
         {
@@ -14,11 +14,9 @@ namespace DaJet.Scripting
 
             return type;
         }
-        public override void Visit(in FunctionExpression node, in StringBuilder script, in SqlTranspiler statement)
+        public override void Transpile(in SqlTranspiler statement, in FunctionExpression node, in StringBuilder script)
         {
-            script.Append(node.Name);
-
-            script.Append('(');
+            script.Append("COALESCE").Append('(');
 
             SyntaxNode parameter;
 
@@ -32,13 +30,6 @@ namespace DaJet.Scripting
             }
 
             script.Append(')');
-
-            if (node.Over is not null)
-            {
-                script.Append(' ');
-
-                statement.Visit(node.Over, in script);
-            }
         }
     }
 }

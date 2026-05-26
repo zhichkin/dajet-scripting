@@ -97,6 +97,16 @@ namespace DaJet.Scripting
         private void Dispose()
         {
             _returnValue = null;
+            _parameters.Clear();
+
+            _data.Clear();
+
+            foreach (DataSourceScope source in _sources)
+            {
+                source.Dispose();
+            }
+
+            _sources.Clear();
         }
         
         private ExitCode Execute(in SyntaxNode node)

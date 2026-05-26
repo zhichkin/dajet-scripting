@@ -11,8 +11,9 @@
     <Description>DaJet Script - SQL-like language for data integration and stream processing</Description>
     <Copyright>Zhichkin © 2020</Copyright>
     <PackageProjectUrl>https://zhichkin.github.io/</PackageProjectUrl>
-    <RepositoryUrl>https://github.com/zhichkin/dajet/tree/main/src/dajet-scripting</RepositoryUrl>
+    <RepositoryUrl>https://github.com/zhichkin/dajet-scripting</RepositoryUrl>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <Title>DaJet.Scripting</Title>
   </PropertyGroup>
 
   <ItemGroup>
