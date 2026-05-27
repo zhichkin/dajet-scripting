@@ -243,6 +243,13 @@ namespace DaJet.Host
 
             parameters = GetParametersFromJson();
 
+            //Parser parser = new();
+            //if (!parser.TryParse(in source, out Script script, out string error))
+            //{
+            //    Console.WriteLine(error); return;
+            //}
+            //Interpreter interpreter = new(in script);
+
             Interpreter interpreter = new(in source);
 
             object value = interpreter.Execute(in parameters);

@@ -28,16 +28,24 @@ namespace DaJet.Scripting
                 Dispose(); throw;
             }
         }
-        private void Prepare(in string source)
+        public Interpreter(in Script script)
+        {
+            ArgumentNullException.ThrowIfNull(script, nameof(script));
+
+            _script = script;
+
+            try
+            {
+                Prepare();
+            }
+            catch
+            {
+                Dispose(); throw;
+            }
+        }
+        private void Prepare()
         {
             _expression = new ExpressionInterpreter(in _data);
-
-            Parser parser = new();
-
-            if (!parser.TryParse(in source, out _script, out string error))
-            {
-                throw new InvalidOperationException(error);
-            }
 
             Binder binder = new();
             CacheableSchemaProvider schema = new();
@@ -58,6 +66,17 @@ namespace DaJet.Scripting
             {
                 _statements.Add(statement.Node, statement);
             }
+        }
+        private void Prepare(in string source)
+        {
+            Parser parser = new();
+
+            if (!parser.TryParse(in source, out _script, out string error))
+            {
+                throw new InvalidOperationException(error);
+            }
+
+            Prepare();
         }
         public object Execute()
         {
