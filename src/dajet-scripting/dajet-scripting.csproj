@@ -6,7 +6,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>disable</Nullable>
     <AssemblyName>DaJet.Scripting</AssemblyName>
-    <Version>2.0.0</Version>
+    <Version>2.0.1</Version>
     <Authors>Zhichkin</Authors>
     <Description>DaJet Script - SQL-like language for data integration and stream processing</Description>
     <Copyright>Zhichkin © 2020</Copyright>
@@ -17,7 +17,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="DaJet.Metadata" Version="5.0.13" />
+    <PackageReference Include="DaJet.Metadata" Version="5.0.14" />
   </ItemGroup>
 
   <ItemGroup>
