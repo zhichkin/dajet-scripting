@@ -22,7 +22,7 @@
 Этот пакет имеет следующие зависимости:
 - DaJet.Interpreter
   - DaJet.Scripting
-    - DaJet.Metadata
+    - [DaJet.Metadata](https://github.com/zhichkin/dajet-metadata)
       - DaJet.FileLogger
       - DaJet.TypeSystem
       - DaJet.Data
