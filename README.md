@@ -5,7 +5,7 @@
 На данный момент DaJet Script 2.0 уже используется, и вполне успешно, в новых проектах [DaJet MCP Server](https://github.com/zhichkin/dajet-mcp-server) и [DaJet Http Server](https://github.com/zhichkin/dajet-http-server), а также [DaJet Studio](https://github.com/zhichkin/dajet-studio).
 
 В текущей версии поддерживаются следующие команды:
-- DECLARE
+- DECLARE | PRIVATE
 - USE
 - SELECT
 - PRINT
@@ -36,7 +36,7 @@
 
 ```SQL
 DECLARE @КодТовара string -- Входящий параметр скрипта
-DECLARE @Результат array  -- Результат выполнения скрипта
+PRIVATE @Результат array  -- Результат выполнения скрипта
 
 USE 'MS_TEST'
   SELECT Ссылка, Код, Наименование
