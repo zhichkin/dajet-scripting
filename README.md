@@ -17,7 +17,7 @@
 Для выполнения скриптов необходимо подключить в свой проект NuGet-пакет **DaJet.Interpreter**.
 
 ```
-> dotnet add package DaJet.Interpreter --version 1.0.3
+> dotnet add package DaJet.Interpreter --version 1.0.4
 ```
 
 Этот пакет имеет следующие зависимости:
