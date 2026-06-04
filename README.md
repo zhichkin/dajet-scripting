@@ -5,7 +5,7 @@
 На данный момент DaJet Script 2.0 уже используется, и вполне успешно, в новых проектах [DaJet MCP Server](https://github.com/zhichkin/dajet-mcp-server) и [DaJet Http Server](https://github.com/zhichkin/dajet-http-server), а также [DaJet Studio](https://github.com/zhichkin/dajet-studio).
 
 В текущей версии поддерживаются следующие команды:
-- DECLARE | PRIVATE
+- DECLARE или PRIVATE
 - USE
 - SELECT
 - PRINT
