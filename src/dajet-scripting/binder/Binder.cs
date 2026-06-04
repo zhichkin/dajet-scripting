@@ -41,8 +41,6 @@ namespace DaJet.Scripting
 
             if (node is Script script) { Bind(in script); } // ? EXECUTE вложенный скрипт
 
-            else if (node is StatementBlock statement_block) { Bind(in statement_block); } // ?
-
             else if (node is DeclareStatement declare) { Bind(in declare); }
             else if (node is VariableReference variable) { Bind(in variable); }
             else if (node is MemberAccessExpression member) { Bind(in member); }
@@ -112,13 +110,13 @@ namespace DaJet.Scripting
             //else if (node is TryStatement try_statement) { Bind(in try_statement); }
             //else if (node is WhileStatement while_statement) { Bind(in while_statement); }
             //else if (node is SleepStatement sleep_statement) { Bind(in sleep_statement); }
-            //else if (node is ReturnStatement return_statement) { Bind(in return_statement); }
             //else if (node is ThrowStatement throw_statement) { Bind(in throw_statement); }
-            //else if (node is PrintStatement print) { Bind(in print); }
             //else if (node is ProcessStatement process) { Bind(in process); }
             //else if (node is ExecuteStatement execute) { Bind(in execute); } // nothing to bind
             //else if (node is WaitStatement wait) { Bind(in wait); }
             //else if (node is ModifyStatement modify) { Bind(in modify); } // nothing to bind
+            else if (node is PrintStatement print) { Bind(in print); }
+            else if (node is ReturnStatement return_statement) { Bind(in return_statement); }
         }
 
         private void Bind(in Script node)
@@ -140,15 +138,6 @@ namespace DaJet.Scripting
             }
 
             _scope = _scope.CloseScope();
-        }
-        private void Bind(in StatementBlock node)
-        {
-            if (node is null) { return; }
-
-            foreach (SyntaxNode statement in node.Statements)
-            {
-                Bind(in statement);
-            }
         }
         
         private void Bind(in DeclareStatement node)
@@ -283,7 +272,7 @@ namespace DaJet.Scripting
         {
             _scope = _scope.OpenScope(node);
 
-            foreach (SyntaxNode statement in node.Statements.Statements)
+            foreach (SyntaxNode statement in node.Statements)
             {
                 Bind(in statement);
             }
@@ -348,7 +337,7 @@ namespace DaJet.Scripting
                     
                     schema.Identifier = declare.Identifier;
 
-                    declare.Binding = schema; //entity;
+                    declare.Binding = schema;
                 }
             }
         }
@@ -809,7 +798,7 @@ namespace DaJet.Scripting
                 }
             }
         }
-        
+
         //private void BindColumn(in OutputClause output, in string identifier, in ColumnReference column)
         //{
         //    if (output is null) { return; }
@@ -847,5 +836,14 @@ namespace DaJet.Scripting
         //}
 
         #endregion
+
+        private void Bind(in PrintStatement node)
+        {
+            Bind(node.Expression);
+        }
+        private void Bind(in ReturnStatement node)
+        {
+            Bind(node.Expression);
+        }
     }
 }

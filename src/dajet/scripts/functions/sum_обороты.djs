@@ -1,7 +1,7 @@
 
-DECLARE @Таблица array
-
 DECLARE @Код string  = '000000001'
+
+PRIVATE @Таблица array
 
 USE 'MS_TEST'
 

@@ -46,7 +46,7 @@ namespace DaJet.Scripting
 
             _providers.Push(provider);
 
-            foreach (SyntaxNode statement in node.Statements.Statements)
+            foreach (SyntaxNode statement in node.Statements)
             {
                 Visit(in statement);
             }

@@ -2,6 +2,7 @@
 using System.Collections;
 using System.Reflection;
 using System.Text.Json.Serialization;
+using System.Xml.Linq;
 
 namespace DaJet.Scripting
 {
@@ -43,12 +44,23 @@ namespace DaJet.Scripting
 
                 object value = property.GetValue(parent);
 
-                if (value == null)
+                if (value is null)
                 {
                     continue;
                 }
 
-                if (propertyType.IsSyntaxNode())
+                if (value is StatementBlock statements)
+                {
+                    visitor.SayHello(statements);
+
+                    for (int i = 0; i < statements.Count; i++)
+                    {
+                        VisitNode(statements[i], in visitor);
+                    }
+
+                    visitor.SayGoodbye(statements);
+                }
+                else if (propertyType.IsSyntaxNode())
                 {
                     VisitNode((value as SyntaxNode), in visitor);
                 }

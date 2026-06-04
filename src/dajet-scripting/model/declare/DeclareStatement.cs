@@ -7,6 +7,7 @@ namespace DaJet.Scripting.Model
         // DECLARE @variable string = 'string value'
         // DECLARE @variable object OF Справочник.Номенклатура
         public DeclareStatement() { Token = Token.DECLARE; }
+        public bool IsPrivate { get; set; } // @variable visibility scope
         public string Identifier { get; set; } // @variable
         public DataType Type { get; set; } // DataType
         public string Schema { get; set; } // [optional] keyword OF is used to define data schema of object or array types

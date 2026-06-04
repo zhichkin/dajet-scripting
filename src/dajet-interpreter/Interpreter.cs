@@ -17,11 +17,13 @@ namespace DaJet.Scripting
         private readonly Dictionary<string, object> _data = new();
         private readonly Stack<DataSourceScope> _sources = new();
         private readonly List<ProcessorBase> _processors = new();
-        public Interpreter(in string source)
+        public Interpreter(in string script)
         {
+            ArgumentNullException.ThrowIfNullOrWhiteSpace(script, nameof(script));
+
             try
             {
-                Prepare(in source);
+                Prepare(in script);
             }
             catch
             {
@@ -67,11 +69,11 @@ namespace DaJet.Scripting
                 _statements.Add(statement.Node, statement);
             }
         }
-        private void Prepare(in string source)
+        private void Prepare(in string script)
         {
             Parser parser = new();
 
-            if (!parser.TryParse(in source, out _script, out string error))
+            if (!parser.TryParse(in script, out _script, out string error))
             {
                 throw new InvalidOperationException(error);
             }
@@ -130,8 +132,7 @@ namespace DaJet.Scripting
         
         private ExitCode Execute(in SyntaxNode node)
         {
-            if (node is StatementBlock block) { return Execute(in block); }
-            else if (node is DeclareStatement declare) { return Execute(in declare); }
+            if (node is DeclareStatement declare) { return Execute(in declare); }
             else if (node is PrintStatement print) { return Execute(in print); }
             else if (node is UseStatement use) { return Execute(in use); }
             else if (node is SelectStatement select) { return Execute(in select); }
@@ -140,9 +141,9 @@ namespace DaJet.Scripting
             
             return ExitCode.Success;
         }
-        private ExitCode Execute(in StatementBlock block)
+        private ExitCode Execute(in StatementBlock statements)
         {
-            foreach (SyntaxNode node in block.Statements)
+            foreach (SyntaxNode node in statements)
             {
                 ExitCode code = Execute(in node);
 
@@ -160,11 +161,18 @@ namespace DaJet.Scripting
             
             object value = null;
 
-            string parameterName = name.TrimStart('@');
-
-            if (!_parameters.TryGetValue(parameterName, out value))
+            if (statement.IsPrivate)
             {
                 value = _expression.Evaluate(statement.Initializer);
+            }
+            else // apply parameter value if provided
+            {
+                string parameterName = name.TrimStart('@');
+
+                if (!_parameters.TryGetValue(parameterName, out value))
+                {
+                    value = _expression.Evaluate(statement.Initializer); // parameter is not provided
+                }
             }
 
             if (value is null) // set default value

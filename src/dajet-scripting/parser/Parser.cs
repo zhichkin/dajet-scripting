@@ -108,7 +108,9 @@ namespace DaJet.Scripting
 		{
 			DeclareStatement declare = new();
 
-			if (!Match(Token.Variable))
+            declare.IsPrivate = (Previous().Token == Token.PRIVATE);
+            
+            if (!Match(Token.Variable))
 			{
 				throw new FormatException("Variable identifier expected.");
 			}
@@ -657,7 +659,7 @@ namespace DaJet.Scripting
 
             statement.Statements = statement_block(Token.END);
 
-            if (statement.Statements is null || statement.Statements.Statements is null || statement.Statements.Statements.Count == 0)
+            if (statement.Statements.Count == 0)
             {
                 throw new FormatException("[USE] statement block is empty");
             }
@@ -722,7 +724,7 @@ namespace DaJet.Scripting
 
             statement.Statements = statement_block(Token.END);
 
-            if (statement.Statements is null || statement.Statements.Statements is null || statement.Statements.Statements.Count == 0)
+            if (statement.Statements.Count == 0)
             {
                 throw new FormatException("[FOR] statement block is empty");
             }
@@ -740,7 +742,7 @@ namespace DaJet.Scripting
 
             statement.TRY = statement_block(Token.CATCH, Token.FINALLY);
 
-            if (statement.TRY is null || statement.TRY.Statements is null || statement.TRY.Statements.Count == 0)
+            if (statement.TRY.Count == 0)
             {
                 throw new FormatException("[TRY]: statement block is empty");
             }
@@ -749,7 +751,7 @@ namespace DaJet.Scripting
             {
                 statement.CATCH = statement_block(Token.FINALLY, Token.END);
 
-                if (statement.CATCH is null || statement.CATCH.Statements is null || statement.CATCH.Statements.Count == 0)
+                if (statement.CATCH.Count == 0)
                 {
                     throw new FormatException("[TRY] CATCH block is empty");
                 }
@@ -759,14 +761,14 @@ namespace DaJet.Scripting
             {
                 statement.FINALLY = statement_block(Token.END);
 
-                if (statement.FINALLY is null || statement.FINALLY.Statements is null || statement.FINALLY.Statements.Count == 0)
+                if (statement.FINALLY.Count == 0)
                 {
                     throw new FormatException("[TRY] FINALLY block is empty");
                 }
             }
 
-            bool catch_is_missing = statement.CATCH is null || statement.CATCH.Statements is null || statement.CATCH.Statements.Count == 0;
-            bool finally_is_missing = statement.FINALLY is null || statement.FINALLY.Statements is null || statement.FINALLY.Statements.Count == 0;
+            bool catch_is_missing = (statement.CATCH.Count == 0);
+            bool finally_is_missing = (statement.FINALLY.Count == 0);
 
             if (catch_is_missing && finally_is_missing) // either CATCH or FINALLY block must be present
             {
@@ -807,7 +809,7 @@ namespace DaJet.Scripting
         private SyntaxNode statement()
         {
             if (Match(Token.Comment)) { return comment(); }
-            else if (Match(Token.DECLARE)) { return declare_statement(); }
+            else if (Match(Token.DECLARE, Token.PRIVATE)) { return declare_statement(); }
             else if (Match(Token.SET)) { return assignment(); }
             else if (Match(Token.USE)) { return use_statement(); }
             else if (Match(Token.FOR)) { return for_statement(); }
@@ -862,7 +864,7 @@ namespace DaJet.Scripting
 
                 if (node is not null)
                 {
-                    block.Statements.Add(node);
+                    block.Add(node);
                 }
 
                 for (int i = 0; i < terminals.Length; i++)
@@ -898,7 +900,7 @@ namespace DaJet.Scripting
 
             statement.THEN = statement_block(Token.ELSE, Token.END);
 
-            if (statement.THEN is null || statement.THEN.Statements is null || statement.THEN.Statements.Count == 0)
+            if (statement.THEN.Count == 0)
             {
                 throw new FormatException("IF: THEN statement block is empty");
             }
@@ -907,7 +909,7 @@ namespace DaJet.Scripting
             {
                 statement.ELSE = statement_block(Token.END);
 
-                if (statement.ELSE is null || statement.ELSE.Statements is null || statement.ELSE.Statements.Count == 0)
+                if (statement.ELSE.Count == 0)
                 {
                     throw new FormatException("IF: ELSE statement block is empty");
                 }
@@ -944,7 +946,7 @@ namespace DaJet.Scripting
 
                 StatementBlock block = statement_block(Token.WHEN, Token.ELSE, Token.END);
 
-                if (block is null || block.Statements is null || block.Statements.Count == 0)
+                if (block.Count == 0)
                 {
                     throw new FormatException("[CASE] THEN statement block is empty");
                 }
@@ -954,7 +956,7 @@ namespace DaJet.Scripting
                 statement.CASE.Add(when);
             }
 
-            if (statement.CASE is null || statement.CASE.Count == 0)
+            if (statement.CASE.Count == 0)
             {
                 throw new FormatException("[CASE] WHEN ... THEN expected");
             }
@@ -963,7 +965,7 @@ namespace DaJet.Scripting
             {
                 statement.ELSE = statement_block(Token.END);
 
-                if (statement.ELSE is null || statement.ELSE.Statements is null || statement.ELSE.Statements.Count == 0)
+                if (statement.ELSE.Count == 0)
                 {
                     throw new FormatException("[CASE] ELSE statement block is empty");
                 }
@@ -991,7 +993,7 @@ namespace DaJet.Scripting
 
             statement.Statements = statement_block(Token.END);
 
-            if (statement.Statements is null || statement.Statements.Statements is null || statement.Statements.Statements.Count == 0)
+            if (statement.Statements.Count == 0)
             {
                 throw new FormatException("[WHILE] statement block is empty");
             }

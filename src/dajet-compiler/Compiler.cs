@@ -511,7 +511,7 @@ namespace DaJet.Scripting
             
             _ = IL.BeginExceptionBlock();
 
-            foreach (SyntaxNode node in statement.Statements.Statements)
+            foreach (SyntaxNode node in statement.Statements)
             {
                 Compile(in node, in IL);
             }

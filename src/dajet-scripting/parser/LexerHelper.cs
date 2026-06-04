@@ -31,6 +31,7 @@ namespace DaJet.Scripting
             { "APPLY", Token.APPLY },
             { "ON", Token.ON },
             { "DECLARE", Token.DECLARE },
+            { "PRIVATE", Token.PRIVATE },
             { "NOLOCK", Token.NOLOCK },
             { "ROWLOCK", Token.ROWLOCK },
             { "READPAST", Token.READPAST },
