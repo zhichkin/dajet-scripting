@@ -9,38 +9,36 @@ namespace DaJet.Scripting
     {
         private static readonly BooleanClauseTransformer _transformer = new();
         
-        protected SqlStatement _statement;
         protected MetadataProvider _provider;
-        public override bool TryTranspile(in MetadataProvider provider, in SyntaxNode node, out SqlStatement statement, out string error)
+        protected SelectStatement _statement;
+        public override bool TryTranspile(in SyntaxNode node, in MetadataProvider provider, out string error)
         {
             error = null;
-            statement = null;
-            
-            if (node is not SelectStatement select)
+
+            _provider = provider;
+
+            YearOffset = _provider.GetYearOffset();
+
+            if (node is not SelectStatement statement)
             {
                 error = $"Invalid parameter type [node]: SelectStatement expected";
                 return false;
             }
-            
+
+            _statement = statement;
+
+            _statement.Dialect = _provider.DataSource;
+            _statement.YearOffset = YearOffset;
+
             try
             {
-                YearOffset = provider.GetYearOffset();
-
-                _provider = provider;
-
                 StringBuilder script = new();
 
-                _statement = new SqlStatement(node)
-                {
-                    Dialect = _provider.DataSource,
-                    YearOffset = YearOffset
-                };
-
-                Visit(in select, in script);
+                Visit(in _statement, in script);
 
                 _statement.Sql = script.ToString();
                 
-                if (select.GetIntoClause() is IntoClause into)
+                if (_statement.GetIntoClause() is IntoClause into)
                 {
                     if (into.Value is VariableReference variable)
                     {
@@ -57,12 +55,10 @@ namespace DaJet.Scripting
                 error = ExceptionHelper.GetErrorMessage(exception);
             }
 
-            statement = _statement;
-
             _provider = null;
             _statement = null;
 
-            return string.IsNullOrEmpty(error);
+            return error is null;
         }
         public override void Visit(in SyntaxNode node, in StringBuilder script)
         {
@@ -219,14 +215,13 @@ namespace DaJet.Scripting
             }
             else if (node.Binding is ColumnExpression derived) // Наследуемый источник данных
             {
-                if (derived.Source is null) // Константа, функция, параметр или выражение
+                if (derived.Source is null) // Константа, параметр, функция или выражение
                 {
-                    if (derived.Expression is ScalarExpression)
-                    {
-                        script.Append(node.Identifier); return;
-                    }
-                    
-                    throw new InvalidOperationException($"Ошибка привязки данных: {node.Identifier}");
+                    script.Append(node.Identifier); return; //NOTE: Должно возвращать простое значение (одна колонка)
+
+                    //TODO: Выражение CASE может возвращать свойства объектов составного типа (несколько полей).
+                    // Плюс следует учитывать (не реализовано) специфичную для 1С операцию "расширения типа",
+                    // когда CASE возвращает разные типы данных в THEN и ELSE, они образуют составной тип данных.
                 }
                 else
                 {

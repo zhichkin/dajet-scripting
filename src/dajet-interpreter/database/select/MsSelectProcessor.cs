@@ -13,8 +13,7 @@ namespace DaJet.Scripting
         private readonly static byte[] FALSE = [0x00];
 
         private readonly MsDataSourceScope _dataSource;
-        private readonly Dictionary<string, object> _data;
-        private readonly ExpressionInterpreter _expression;
+        private readonly ExpressionInterpreter _context;
 
         private readonly byte[] _buffer = new byte[16];
         private readonly int _yearOffset;
@@ -24,29 +23,23 @@ namespace DaJet.Scripting
         private readonly string _outputVariable;
         private readonly EntityDefinition _outputSchema;
         private readonly Dictionary<ColumnDefinition, int> _ordinals = new();
-        public MsSelectProcessor(in Stack<DataSourceScope> sources, in SqlStatement statement, in ExpressionInterpreter expression, in Dictionary<string, object> data)
+        public MsSelectProcessor(in SelectStatement statement, in Stack<DataSourceScope> sources, in ExpressionInterpreter context)
         {
-            if (statement.Node is not SelectStatement select)
-            {
-                throw new InvalidOperationException();
-            }
-
             if (sources.Peek() is not MsDataSourceScope use)
             {
                 throw new InvalidOperationException();
             }
 
-            _data = data;
             _dataSource = use;
-            _expression = expression;
+            _context = context;
             _input = statement.Input;
             _yearOffset = statement.YearOffset;
             _commandText = statement.Sql;
-            _outputSchema = DataMapper.InferEntity(in select);
+            _outputSchema = statement.InferEntity();
 
             PrepareOutputColumnOrdinals();
 
-            if (select.GetIntoClause() is IntoClause into)
+            if (statement.GetIntoClause() is IntoClause into)
             {
                 _outputVariable = into.Value?.Identifier;
 
@@ -137,13 +130,9 @@ namespace DaJet.Scripting
                     value = table;
                 }
 
-                if (_data.ContainsKey(_outputVariable))
+                if (!_context.Data.TryAdd(_outputVariable, value))
                 {
-                    _data[_outputVariable] = value;
-                }
-                else
-                {
-                    _data.Add(_outputVariable, value);
+                    _context.Data[_outputVariable] = value;
                 }
             }
         }
@@ -156,7 +145,7 @@ namespace DaJet.Scripting
             {
                 string name = string.Format("@p{0}", _input.IndexOf(input));
 
-                object value = _expression.Evaluate(in input);
+                object value = _context.Evaluate(in input);
 
                 if (value is null)
                 {

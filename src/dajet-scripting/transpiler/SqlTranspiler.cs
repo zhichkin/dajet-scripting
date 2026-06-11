@@ -8,6 +8,6 @@ namespace DaJet.Scripting
     {
         public virtual int YearOffset { get; protected set; }
         public abstract void Visit(in SyntaxNode expression, in StringBuilder script);
-        public abstract bool TryTranspile(in MetadataProvider provider, in SyntaxNode node, out SqlStatement statement, out string error);
+        public abstract bool TryTranspile(in SyntaxNode node, in MetadataProvider provider, out string error);
     }
 }

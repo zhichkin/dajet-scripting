@@ -148,7 +148,7 @@ namespace DaJet.Scripting
         }
         internal Type Evaluate(in MemberAccessExpression node, in ILGenerator IL)
         {
-            List<string> members = node.GetAccessMembers(node.Identifier);
+            List<string> members = node.GetAccessMembers();
 
             if (members.Count > 2) // TODO: allow more members
             {

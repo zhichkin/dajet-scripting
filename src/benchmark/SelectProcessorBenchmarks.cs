@@ -4,6 +4,7 @@ using BenchmarkDotNet.Jobs;
 using DaJet.Data;
 using DaJet.Metadata;
 using DaJet.Scripting;
+using DaJet.Scripting.Model;
 using System.Text;
 
 namespace benchmark
@@ -31,8 +32,8 @@ namespace benchmark
             }
         }
 
-        private static string _ms_script;
-        private static string _pg_script;
+        private static Interpreter _ms_executor;
+        private static Interpreter _pg_executor;
         private static ScriptProcessor _processor;
 
         [GlobalSetup]
@@ -42,22 +43,17 @@ namespace benchmark
             MetadataProvider.Add("PG_TEST", DataSourceType.PostgreSql, in PG_TEST);
 
             string ms_file = Path.Combine(AppContext.BaseDirectory, "scripts", "ms_simple.djs");
-            using (StreamReader reader = new(ms_file, Encoding.UTF8))
-            {
-                _ms_script = reader.ReadToEnd();
-            }
+            Script ms_script = new ScriptBuilder().FromFile(in ms_file).Build();
+            _ms_executor = new Interpreter(in ms_script);
 
             string pg_file = Path.Combine(AppContext.BaseDirectory, "scripts", "pg_simple.djs");
-            using (StreamReader reader = new(pg_file, Encoding.UTF8))
+            Script pg_script = new ScriptBuilder().FromFile(in ms_file).Build();
+            _pg_executor = new Interpreter(in pg_script);
+
+            using (StreamReader reader = new(ms_file, Encoding.UTF8))
             {
-                _pg_script = reader.ReadToEnd();
+                _processor = new Compiler().Compile(reader.ReadToEnd());
             }
-
-            Compiler compiler = new();
-
-            _processor = compiler.Compile(in _ms_script);
-
-            
         }
         [GlobalCleanup]
         public void GlobalCleanup()
@@ -98,21 +94,13 @@ namespace benchmark
         [Benchmark(Description = "MS Interpreter")]
         public object MS_Interpreter()
         {
-            Interpreter executor = new(in _ms_script);
-
-            object value = executor.Execute();
-
-            return value;
+            return _ms_executor.Execute();
         }
 
         [Benchmark(Description = "PG Interpreter")]
         public object PG_Interpreter()
         {
-            Interpreter executor = new(in _pg_script);
-
-            object value = executor.Execute();
-
-            return value;
+            return _pg_executor.Execute();
         }
     }
 }

@@ -12,6 +12,7 @@ namespace DaJet.Scripting
 
             _data = data;
         }
+        public Dictionary<string, object> Data { get { return _data; } }
         public object Evaluate(in SyntaxNode expression)
         {
             if (expression is null) { return null; }
@@ -74,7 +75,7 @@ namespace DaJet.Scripting
         }
         private object Evaluate(in MemberAccessExpression node)
         {
-            List<string> members = node.GetAccessMembers(node.Identifier);
+            List<string> members = node.GetAccessMembers();
 
             if (_data.TryGetValue(members[0], out object value))
             {

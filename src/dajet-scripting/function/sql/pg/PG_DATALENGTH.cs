@@ -14,7 +14,7 @@ namespace DaJet.Scripting
         {
             SyntaxNode expression = node.Parameters[0];
 
-            DataType type = DataMapper.InferType(in expression);
+            DataType type = expression.InferType();
 
             if (type.IsString)
             {

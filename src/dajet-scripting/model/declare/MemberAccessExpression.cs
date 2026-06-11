@@ -1,6 +1,4 @@
-﻿using System.Text;
-
-namespace DaJet.Scripting.Model
+﻿namespace DaJet.Scripting.Model
 {
     public sealed class MemberAccessExpression : SyntaxNode
     {
@@ -13,38 +11,12 @@ namespace DaJet.Scripting.Model
         }
         public string GetVariableName()
         {
-            List<string> members = GetAccessMembers(Identifier);
-            
-            return members[0]; // @variable
+            return GetAccessMembers()[0]; // @variable
         }
-        public string GetDbParameterName()
+        public List<string> GetAccessMembers()
         {
-            // @variable.member -> @variable_member
-            // @variable.member[0].member -> @variable_member_0_member
-            // @variable.member[id=123].member -> @variable_member_id_member
+            string expression = Identifier;
 
-            List<string> members = GetAccessMembers(Identifier);
-
-            StringBuilder name = new();
-
-            for (int i = 0; i < members.Count; i++)
-            {
-                if (i > 0) { name.Append('_'); }
-                
-                if (members[i].StartsWith('['))
-                {
-                    name.Append(members[i].TrimStart('[').TrimEnd(']').Split('=')[0]);
-                }
-                else
-                {
-                    name.Append(members[i]);
-                }
-            }
-
-            return name.ToString();
-        }
-        public List<string> GetAccessMembers(in string expression)
-        {
             List<string> members = new();
 
             int position = 0;

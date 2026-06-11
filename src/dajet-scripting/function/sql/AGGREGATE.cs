@@ -10,7 +10,7 @@ namespace DaJet.Scripting
         {
             SyntaxNode parameter = node.Parameters[0];
 
-            DataType type = DataMapper.InferType(parameter);
+            DataType type = parameter.InferType();
 
             return type;
         }

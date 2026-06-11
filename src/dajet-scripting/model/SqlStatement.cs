@@ -1,21 +1,15 @@
 ﻿using DaJet.Data;
-using DaJet.Scripting.Model;
 
-namespace DaJet.Scripting
+namespace DaJet.Scripting.Model
 {
-    public sealed class SqlStatement
+    public abstract class SqlStatement : SyntaxNode
     {
-        public SqlStatement(in SyntaxNode node)
-        {
-            Node = node;
-        }
-        public SyntaxNode Node { get; private set; }
         public DataSourceType Dialect { get; set; } // SqlServer | PostgreSQL
         public int YearOffset { get; set; }
         public string Sql { get; set; }
         public List<SyntaxNode> Input { get; } = new(); // VariableReference, MemberAccessExpression
         public SyntaxNode Output { get; set; } // INTO clause VariableReference, TableReference
         
-        //public List<SyntaxNode> PostProcessing { get; } = new(); // FunctionExpression
+        //TODO: public List<SyntaxNode> PostProcessing { get; } = new(); // FunctionExpression
     }
 }

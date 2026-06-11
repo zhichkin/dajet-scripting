@@ -15,7 +15,9 @@ namespace DaJet.Scripting
                 return schema;
             }
 
-            schema = MetadataProvider.Get(in domain).GetMetadataObject(in identifier);
+            MetadataProvider provider = MetadataProvider.Get(in domain);
+
+            schema = provider.GetMetadataObject(in identifier);
 
             _ = _cache.TryAdd(key, schema);
 

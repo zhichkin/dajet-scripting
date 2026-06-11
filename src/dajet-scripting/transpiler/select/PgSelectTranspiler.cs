@@ -245,7 +245,7 @@ namespace DaJet.Scripting
         }
         protected override void Visit(in MemberAccessExpression node, in StringBuilder script)
         {
-            List<string> members = node.GetAccessMembers(node.Identifier);
+            List<string> members = node.GetAccessMembers();
 
             string memberName = members[1];
 

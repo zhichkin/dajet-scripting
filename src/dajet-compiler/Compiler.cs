@@ -62,21 +62,21 @@ namespace DaJet.Scripting
 
             Transpiler transpiler = new();
 
-            if (!transpiler.TryTranspile(in script, out List<SqlStatement> statements, out errors))
+            if (!transpiler.TryTranspile(in script, out errors))
             {
                 throw new InvalidOperationException(string.Join('\n', errors));
             }
 
-            return Compile(in script, in statements);
+            return Compile(in script);
         }
-        private ScriptProcessor Compile(in Script script, in List<SqlStatement> statements)
+        private ScriptProcessor Compile(in Script script)
         {
             _counter = 0;
             _statements.Clear();
 
-            foreach (SqlStatement statement in statements)
+            foreach (SqlStatement statement in script.GetSqlStatements())
             {
-                _statements.Add(statement.Node, statement);
+                _statements.Add(statement, statement);
             }
 
             string assemblyName = "Assembly1";
@@ -462,7 +462,7 @@ namespace DaJet.Scripting
             }
             else if (statement.Target is MemberAccessExpression member)
             {
-                List<string> members = member.GetAccessMembers(member.Identifier);
+                List<string> members = member.GetAccessMembers();
 
                 if (!ScriptData.TryGetValue(members[0], out target))
                 {
@@ -533,7 +533,7 @@ namespace DaJet.Scripting
                 return;
             }
 
-            EntityDefinition schema = DataMapper.InferEntity(in statement);
+            EntityDefinition schema = statement.InferEntity();
 
             _counter++;
 

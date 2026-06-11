@@ -7,78 +7,21 @@ namespace DaJet.Scripting
 {
     public sealed class Interpreter
     {
-        private Script _script;
-        private ExpressionInterpreter _expression;
-        private Dictionary<SyntaxNode, SqlStatement> _statements = new();
-
-        private Dictionary<string, object> _parameters = new(); // input parameters
-
-        private object _returnValue = null;
+        private readonly Script _script;
+        private readonly ExpressionInterpreter _context;
         private readonly Dictionary<string, object> _data = new();
         private readonly Stack<DataSourceScope> _sources = new();
         private readonly List<ProcessorBase> _processors = new();
-        public Interpreter(in string script)
-        {
-            ArgumentNullException.ThrowIfNullOrWhiteSpace(script, nameof(script));
 
-            try
-            {
-                Prepare(in script);
-            }
-            catch
-            {
-                Dispose(); throw;
-            }
-        }
+        private object _returnValue = null; // output value
+        private Dictionary<string, object> _parameters = new(); // input parameters
         public Interpreter(in Script script)
         {
             ArgumentNullException.ThrowIfNull(script, nameof(script));
 
             _script = script;
 
-            try
-            {
-                Prepare();
-            }
-            catch
-            {
-                Dispose(); throw;
-            }
-        }
-        private void Prepare()
-        {
-            _expression = new ExpressionInterpreter(in _data);
-
-            Binder binder = new();
-            CacheableSchemaProvider schema = new();
-
-            if (!binder.TryBind(in _script, schema, out List<string> errors))
-            {
-                throw new InvalidOperationException(string.Join('\n', errors));
-            }
-
-            Transpiler transpiler = new();
-
-            if (!transpiler.TryTranspile(in _script, out List<SqlStatement> statements, out errors))
-            {
-                throw new InvalidOperationException(string.Join('\n', errors));
-            }
-
-            foreach (SqlStatement statement in statements)
-            {
-                _statements.Add(statement.Node, statement);
-            }
-        }
-        private void Prepare(in string script)
-        {
-            Parser parser = new();
-
-            if (!parser.TryParse(in script, out _script, out string error))
-            {
-                throw new InvalidOperationException(error);
-            }
-
-            Prepare();
+            _context = new ExpressionInterpreter(in _data);
         }
         public object Execute()
         {
@@ -163,7 +106,7 @@ namespace DaJet.Scripting
 
             if (statement.IsPrivate)
             {
-                value = _expression.Evaluate(statement.Initializer);
+                value = _context.Evaluate(statement.Initializer);
             }
             else // apply parameter value if provided
             {
@@ -171,7 +114,7 @@ namespace DaJet.Scripting
 
                 if (!_parameters.TryGetValue(parameterName, out value))
                 {
-                    value = _expression.Evaluate(statement.Initializer); // parameter is not provided
+                    value = _context.Evaluate(statement.Initializer); // parameter is not provided
                 }
             }
 
@@ -198,7 +141,7 @@ namespace DaJet.Scripting
         }
         private ExitCode Execute(in PrintStatement statement)
         {
-            object value = _expression.Evaluate(statement.Expression);
+            object value = _context.Evaluate(statement.Expression);
 
             if (value is not null)
             {
@@ -209,7 +152,7 @@ namespace DaJet.Scripting
         }
         private ExitCode Execute(in ReturnStatement statement)
         {
-            _returnValue = _expression.Evaluate(statement.Expression);
+            _returnValue = _context.Evaluate(statement.Expression);
 
             return ExitCode.Return;
         }
@@ -255,20 +198,15 @@ namespace DaJet.Scripting
         {
             DataSourceScope use = _sources.Peek();
 
-            if (!_statements.TryGetValue(statement, out SqlStatement sql))
-            {
-                throw new InvalidOperationException();
-            }
-
             ProcessorBase processor; //TODO: use _processors collection
 
             if (use.Type == DataSourceType.SqlServer)
             {
-                processor = new MsSelectProcessor(in _sources, in sql, in _expression, in _data);
+                processor = new MsSelectProcessor(in statement, in _sources, in _context);
             }
             else
             {
-                processor = new PgSelectProcessor(in _sources, in sql, in _expression, in _data);
+                processor = new PgSelectProcessor(in statement, in _sources, in _context);
             }
 
             processor.Process();
@@ -277,7 +215,30 @@ namespace DaJet.Scripting
         }
         private ExitCode Execute(in AssignmentOperator statement)
         {
-            //TODO:
+            object value = _context.Evaluate(statement.Initializer);
+
+            if (statement.Target is VariableReference variable)
+            {
+                if (_context.Data.ContainsKey(variable.Identifier))
+                {
+                    _context.Data[variable.Identifier] = value;
+                }
+            }
+            else if (statement.Target is MemberAccessExpression member)
+            {
+                List<string> members = member.GetAccessMembers();
+
+                if (_context.Data.TryGetValue(members[0], out object target))
+                {
+                    if (target is Dictionary<string, object> _object)
+                    {
+                        if (!_object.TryAdd(members[1], value))
+                        {
+                            _object[members[1]] = value;
+                        }
+                    }
+                }
+            }
 
             return ExitCode.Success;
         }

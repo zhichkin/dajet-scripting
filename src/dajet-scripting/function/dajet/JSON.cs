@@ -9,7 +9,7 @@ namespace DaJet.Scripting
         {
             SyntaxNode parameter = node.Parameters[0];
 
-            DataType type = DataMapper.InferType(in parameter);
+            DataType type = parameter.InferType();
 
             if (type.IsObject || type.IsArray)
             {

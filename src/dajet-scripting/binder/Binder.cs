@@ -163,7 +163,7 @@ namespace DaJet.Scripting
         }
         private void Bind(in MemberAccessExpression node)
         {
-            List<string> members = node.GetAccessMembers(node.Identifier);
+            List<string> members = node.GetAccessMembers();
 
             string target = members[0];
 
@@ -191,15 +191,15 @@ namespace DaJet.Scripting
             {
                 if (declare.Binding is DefineStatement binding)
                 {
-                    List<string> members = member.GetAccessMembers(member.Identifier);
+                    List<string> members = member.GetAccessMembers();
 
                     string memberName = members[1];
 
                     DefineProperty property = binding.GetPropertyByName(memberName);
 
-                    if (property is null) // Добавляем свойство в анонимную схему, если оно отсутствует
+                    if (property is null && node.Initializer is not null) // Добавляем свойство в анонимную схему, если оно отсутствует
                     {
-                        DataType type = DataMapper.InferType(node.Initializer); // Выводим тип свойства
+                        DataType type = node.Initializer.InferType(); // Выводим тип свойства
 
                         if (type.IsObject || type.IsArray)
                         {
@@ -317,7 +317,7 @@ namespace DaJet.Scripting
             if (into.Value is VariableReference variable &&
                 variable.Binding is DeclareStatement declare)
             {
-                DefineStatement schema = DataMapper.InferSchema(in select);
+                DefineStatement schema = select.InferSchema();
 
                 if (declare.Binding is DefineStatement binding)
                 {

@@ -1,13 +1,13 @@
 
-DECLARE @Таблица array
+DECLARE @Код string  = 'MS-001'
 
-DECLARE @Код string  = '000000001'
+PRIVATE @Таблица array
 
 USE 'MS_TEST'
 
   SELECT Ссылка, Код, Наименование
     INTO @Таблица
-    FROM Справочник.Справочник1
+    FROM Справочник.Номенклатура
    WHERE Код = @Код
 
 END

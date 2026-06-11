@@ -546,10 +546,7 @@ namespace DaJet.Scripting
                 return false; // Источник данных - колонка таблицы СУБД
             }
 
-            if (!DataMapper.TryInfer(in node, out PropertyDefinition source, out string error))
-            {
-                throw new InvalidCastException($"Failed to infer data type from {node.GetType()} expression: {error}");
-            }
+            PropertyDefinition source = node.InferSource();
 
             if (string.IsNullOrEmpty(source.Name))
             {
@@ -632,13 +629,13 @@ namespace DaJet.Scripting
 
             if (item.Expression1 is null)
             {
-                target = DataMapper.InferType(comparison.Expression1);
-                source = DataMapper.InferType(comparison.Expression2);
+                target = comparison.Expression1.InferType();
+                source = comparison.Expression2.InferType();
             }
             else
             {
-                target = DataMapper.InferType(comparison.Expression2);
-                source = DataMapper.InferType(comparison.Expression1);
+                target = comparison.Expression2.InferType();
+                source = comparison.Expression1.InferType();
             }
 
             //DataType type = target.Type;
@@ -686,11 +683,11 @@ namespace DaJet.Scripting
 
             if (item.Expression1 is null)
             {
-                target = DataMapper.InferType(comparison.Expression1);
+                target = comparison.Expression1.InferType();
             }
             else
             {
-                target = DataMapper.InferType(comparison.Expression2);
+                target = comparison.Expression2.InferType();
             }
 
             if (!target.IsEntity) { return; } // TypeCode can only be used in conjunction with Entity
@@ -797,12 +794,7 @@ namespace DaJet.Scripting
             //{
             //    if (derived.Source is null) // Константа, функция, параметр или выражение
             //    {
-            //        //if (derived.Expression is ScalarExpression)
-            //        //{
-            //        //    script.Append(node.Identifier); return;
-            //        //}
-
-            //        throw new InvalidOperationException($"Ошибка привязки данных: {node.Identifier}");
+            //        //script.Append(node.Identifier); return;
             //    }
             //    else
             //    {
@@ -812,7 +804,7 @@ namespace DaJet.Scripting
         }
         private void Transform(in ScalarExpression node, in Dictionary<ColumnPurpose, ComparisonOperator> map, Action<ComparisonOperator, SyntaxNode> setter)
         {
-            DataType type = DataMapper.InferType(node);
+            DataType type = node.InferType();
 
             //UnionTag tag = type.IsUuid ? UnionTag.Entity : type.GetSingleTagOrUndefined();
 
@@ -823,7 +815,7 @@ namespace DaJet.Scripting
         }
         private void Transform(in VariableReference node, in Dictionary<ColumnPurpose, ComparisonOperator> map, Action<ComparisonOperator, SyntaxNode> setter)
         {
-            DataType type = DataMapper.InferType(node);
+            DataType type = node.InferType();
 
             if (type.IsEntity)
             {
@@ -899,7 +891,7 @@ namespace DaJet.Scripting
         }
         private void Transform(in MemberAccessExpression node, in Dictionary<ColumnPurpose, ComparisonOperator> map, Action<ComparisonOperator, SyntaxNode> setter)
         {
-            DataType type = DataMapper.InferType(node);
+            DataType type = node.InferType();
 
             if (type.IsEntity)
             {

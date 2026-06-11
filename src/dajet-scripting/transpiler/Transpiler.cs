@@ -7,13 +7,11 @@ namespace DaJet.Scripting
     public sealed class Transpiler
     {
         private List<string> _errors;
-        private List<SqlStatement> _statements;
         private Stack<MetadataProvider> _providers = new();
         public Transpiler() { }
-        public bool TryTranspile(in Script script, out List<SqlStatement> statements, out List<string> errors)
+        public bool TryTranspile(in Script script, out List<string> errors)
         {
             _errors = new List<string>();
-            _statements = new List<SqlStatement>();
 
             try
             {
@@ -28,10 +26,8 @@ namespace DaJet.Scripting
             }
 
             errors = _errors;
-            statements = _statements;
 
             _errors = null;
-            _statements = null;
 
             return (errors.Count == 0);
         }
@@ -53,6 +49,31 @@ namespace DaJet.Scripting
 
             _ = _providers.Pop();
         }
+        private void Visit(in SelectStatement node)
+        {
+            SqlTranspiler transpiler;
+
+            MetadataProvider provider = _providers.Peek();
+
+            if (provider.DataSource == DataSourceType.SqlServer)
+            {
+                transpiler = new MsSelectTranspiler();
+            }
+            else if (provider.DataSource == DataSourceType.PostgreSql)
+            {
+                transpiler = new PgSelectTranspiler();
+            }
+            else
+            {
+                _errors.Add($"Unsupported data provider: {provider.DataSource}"); return;
+            }
+
+            if (!transpiler.TryTranspile(node, in provider, out string error))
+            {
+                _errors.Add(error);
+            }
+        }
+
         private void Visit(in IfStatement node)
         {
             if (node.THEN is not null)
@@ -112,35 +133,6 @@ namespace DaJet.Scripting
             if (node.FINALLY is not null)
             {
 
-            }
-        }
-
-        private void Visit(in SelectStatement node)
-        {
-            SqlTranspiler transpiler;
-
-            MetadataProvider provider = _providers.Peek();
-
-            if (provider.DataSource == DataSourceType.SqlServer)
-            {
-                transpiler = new MsSelectTranspiler();
-            }
-            else if (provider.DataSource == DataSourceType.PostgreSql)
-            {
-                transpiler = new PgSelectTranspiler();
-            }
-            else
-            {
-                _errors.Add($"Unsupported data provider: {provider.DataSource}"); return;
-            }
-
-            if (transpiler.TryTranspile(in provider, node, out SqlStatement statement, out string error))
-            {
-                _statements.Add(statement);
-            }
-            else
-            {
-                _errors.Add(error);
             }
         }
     }

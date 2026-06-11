@@ -38,10 +38,10 @@ namespace DaJet.Host
     }
     internal class Program
     {
-        private static readonly string MS_UNF = "Data Source=ZHICHKIN;Initial Catalog=unf;Integrated Security=True;Encrypt=False;";
+        private static readonly string MS_UNF = "Data Source=Z-NOTEBOOK;Initial Catalog=unf;Integrated Security=True;Encrypt=False;";
         private static readonly string PG_UNF = "Host=127.0.0.1;Port=5432;Database=unf;Username=postgres;Password=postgres;";
-        private static readonly string MS_TEST = "Data Source=ZHICHKIN;Initial Catalog=dajet-metadata;Integrated Security=True;Encrypt=False;";
-        private static readonly string PG_TEST = "Host=localhost;Port=5432;Database=dajet-metadata;Username=postgres;Password=postgres;";
+        private static readonly string MS_TEST = "Data Source=Z-NOTEBOOK;Initial Catalog=test;Integrated Security=True;Encrypt=False;";
+        private static readonly string PG_TEST = "Host=localhost;Port=5432;Database=test;Username=postgres;Password=postgres;";
 
         private static readonly JsonSerializerOptions JsonOptions = new()
         {
@@ -61,7 +61,7 @@ namespace DaJet.Host
             MetadataProvider.Add("PG_TEST", DataSourceType.PostgreSql, in PG_TEST);
 
             string source; // parameters.djs functions\\sum_обороты.djs functions\\sum_остатки.djs
-            string scriptPath = "functions\\sum_остатки.djs"; // select\\join\\product_prices.djs select_join_null.djs
+            string scriptPath = "select\\document.djs"; // "select\\cte\\row_number.djs"; //  select_join_null.djs
             string filePath = Path.Combine(AppContext.BaseDirectory, "scripts", scriptPath);
 
             using (StreamReader reader = new(filePath, Encoding.UTF8))
@@ -147,18 +147,15 @@ namespace DaJet.Host
 
             Transpiler transpiler = new();
 
-            if (!transpiler.TryTranspile(in script, out List<SqlStatement> statements, out errors))
+            if (!transpiler.TryTranspile(in script, out errors))
             {
                 Console.WriteLine(string.Join('\n', errors)); return;
             }
 
-            if (statements is not null)
+            foreach (SqlStatement statement in script.GetSqlStatements())
             {
-                foreach (SqlStatement statement in statements)
-                {
-                    Console.WriteLine(statement.Sql);
-                    Console.WriteLine("----");
-                }
+                Console.WriteLine(statement.Sql);
+                Console.WriteLine("----");
             }
         }
         private static void CompileAndRun(in string source)
@@ -243,14 +240,9 @@ namespace DaJet.Host
 
             parameters = GetParametersFromJson();
 
-            //Parser parser = new();
-            //if (!parser.TryParse(in source, out Script script, out string error))
-            //{
-            //    Console.WriteLine(error); return;
-            //}
-            //Interpreter interpreter = new(in script);
+            Script script = new ScriptBuilder().FromSource(in source).Build();
 
-            Interpreter interpreter = new(in source);
+            Interpreter interpreter = new(in script);
 
             object value = interpreter.Execute(in parameters);
 
