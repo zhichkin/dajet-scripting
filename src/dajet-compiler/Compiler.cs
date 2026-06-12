@@ -683,12 +683,12 @@ namespace DaJet.Scripting
 
             if (provider.DataSource == DataSourceType.SqlServer)
             {
-                MsDataMapper.YearOffset = provider.GetYearOffset();
+                MsDatabaseMapper.YearOffset = provider.GetYearOffset();
             }
 
             if (input is not null && input.Count > 0)
             {
-                MsDataMapper.MapInput(in input, in data, ScriptData, in IL);
+                MsDatabaseMapper.MapInput(in input, in data, ScriptData, in IL);
             }
 
             IL.Emit(OpCodes.Ret);
@@ -750,7 +750,7 @@ namespace DaJet.Scripting
             //    MsDataMapper.YearOffset = provider.GetYearOffset();
             //}
 
-            MsDataMapper.MapOutput(in outputType, in schema, in IL);
+            MsDatabaseMapper.MapOutput(in outputType, in schema, in IL);
 
             // _context.OutputProperty.Add(record);
 

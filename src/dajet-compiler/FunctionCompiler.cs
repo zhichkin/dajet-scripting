@@ -53,7 +53,7 @@ namespace DaJet.Scripting
                 _ = context.Evaluate(in member, in IL); // push entity value onto stack
             }
 
-            IL.Emit(OpCodes.Stloc_1); ///<see cref="MsDataMapper.MapInput"/>
+            IL.Emit(OpCodes.Stloc_1); ///<see cref="MsDatabaseMapper.MapInput"/>
             IL.Emit(OpCodes.Ldloca_S, 1); // load address of local variable onto stack
             IL.Emit(OpCodes.Call, EntityTypeCode.GetGetMethod());
 
@@ -79,7 +79,7 @@ namespace DaJet.Scripting
                 _ = context.Evaluate(in member, in IL); // push entity value onto stack
             }
 
-            IL.Emit(OpCodes.Stloc_1); ///<see cref="MsDataMapper.MapInput"/>
+            IL.Emit(OpCodes.Stloc_1); ///<see cref="MsDatabaseMapper.MapInput"/>
             IL.Emit(OpCodes.Ldloca_S, 1); // load address of local variable onto stack
             IL.Emit(OpCodes.Call, EntityIdentity.GetGetMethod());
 

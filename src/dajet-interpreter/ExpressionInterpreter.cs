@@ -12,7 +12,6 @@ namespace DaJet.Scripting
 
             _data = data;
         }
-        public Dictionary<string, object> Data { get { return _data; } }
         public object Evaluate(in SyntaxNode expression)
         {
             if (expression is null) { return null; }

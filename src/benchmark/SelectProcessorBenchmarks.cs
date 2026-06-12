@@ -18,8 +18,8 @@ namespace benchmark
     //[MaxIterationCount(20)]
     public class SelectProcessorBenchmarks
     {
-        private static readonly string MS_TEST = "Data Source=ZHICHKIN;Initial Catalog=dajet-metadata;Integrated Security=True;Encrypt=False;";
-        private static readonly string PG_TEST = "Host=127.0.0.1;Port=5432;Database=dajet-metadata;Username=postgres;Password=postgres;";
+        private static readonly string MS_TEST = "Data Source=Z-NOTEBOOK;Initial Catalog=test;Integrated Security=True;Encrypt=False;";
+        private static readonly string PG_TEST = "Host=127.0.0.1;Port=5432;Database=test;Username=postgres;Password=postgres;";
         private class Config : ManualConfig
         {
             public Config()

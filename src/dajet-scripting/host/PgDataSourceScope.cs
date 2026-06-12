@@ -1,16 +1,17 @@
-﻿using Microsoft.Data.SqlClient;
+﻿using DaJet.Data.PostgreSql;
+using Npgsql;
 using System.Data;
 
 namespace DaJet.Data
 {
-    public sealed class MsDataSourceScope : DataSourceScope
+    public sealed class PgDataSourceScope : DataSourceScope<NpgsqlCommand>
     {
         private bool _disposed;
-        private SqlConnection _connection;
-        private SqlTransaction _transaction;
-        public MsDataSourceScope(string connectionString, string isolationLevel)
+        private NpgsqlConnection _connection;
+        private NpgsqlTransaction _transaction;
+        public PgDataSourceScope(string connectionString, string isolationLevel)
         {
-            _connection = new SqlConnection(connectionString);
+            _connection = PgDataSourceFactory.CreateConnection(in connectionString);
 
             try
             {
@@ -26,12 +27,12 @@ namespace DaJet.Data
                 Dispose(); throw;
             }
         }
-        public override DataSourceType Type { get { return DataSourceType.SqlServer; } }
-        public SqlCommand CreateCommand()
+        public override DataSourceType Type { get { return DataSourceType.PostgreSql; } }
+        public override NpgsqlCommand CreateCommand()
         {
             // ObjectDisposedException.ThrowIf(_disposed, typeof(MsDataContext));
 
-            SqlCommand command = _connection.CreateCommand();
+            NpgsqlCommand command = _connection.CreateCommand();
 
             command.Connection = _connection;
             command.Transaction = _transaction;
@@ -39,19 +40,19 @@ namespace DaJet.Data
 
             return command;
         }
-        public void TxBegin()
+        public override void TxBegin()
         {
             // ObjectDisposedException.ThrowIf(_disposed, typeof(MsDataContext));
 
             _transaction = _connection.BeginTransaction();
         }
-        public void TxCommit()
+        public override void TxCommit()
         {
             // ObjectDisposedException.ThrowIf(_disposed, typeof(MsDataContext));
 
             _transaction?.Commit();
         }
-        public void TxRollback()
+        public override void TxRollback()
         {
             // ObjectDisposedException.ThrowIf(_disposed, typeof(MsDataContext));
 

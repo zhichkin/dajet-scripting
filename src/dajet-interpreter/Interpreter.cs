@@ -1,17 +1,18 @@
 ﻿using DaJet.Data;
 using DaJet.Metadata;
+using DaJet.Scripting.Host;
 using DaJet.Scripting.Model;
 using DaJet.TypeSystem;
 
 namespace DaJet.Scripting
 {
-    public sealed class Interpreter
+    public sealed class Interpreter : ScriptContext
     {
         private readonly Script _script;
         private readonly ExpressionInterpreter _context;
-        private readonly Dictionary<string, object> _data = new();
         private readonly Stack<DataSourceScope> _sources = new();
-        private readonly List<ProcessorBase> _processors = new();
+        private readonly Dictionary<string, object> _data = new();
+        private readonly Dictionary<SyntaxNode, ProcessorBase> _processors = new();
 
         private object _returnValue = null; // output value
         private Dictionary<string, object> _parameters = new(); // input parameters
@@ -23,6 +24,47 @@ namespace DaJet.Scripting
 
             _context = new ExpressionInterpreter(in _data);
         }
+        private void Dispose()
+        {
+            foreach (DataSourceScope source in _sources)
+            {
+                source.Dispose();
+            }
+
+            foreach (ProcessorBase processor in _processors.Values)
+            {
+                processor.Dispose();
+            }
+
+            _data.Clear();
+            _sources.Clear();
+            _parameters.Clear();
+            _processors.Clear();
+            _returnValue = null;
+        }
+
+        public override DataSourceScope GetDataSource()
+        {
+            return _sources.Peek();
+        }
+        public override object Evaluate(in SyntaxNode expression)
+        {
+            return _context.Evaluate(in expression);
+        }
+        public override object GetValue(in string name)
+        {
+            if (_data.TryGetValue(name, out object value))
+            {
+                return value;
+            }
+
+            return null;
+        }
+        public override void SetValue(in string name, in object value)
+        {
+            _data[name] = value;
+        }
+        
         public object Execute()
         {
             object value = null;
@@ -58,21 +100,6 @@ namespace DaJet.Scripting
 
             return Execute();
         }
-        private void Dispose()
-        {
-            _returnValue = null;
-            _parameters.Clear();
-
-            _data.Clear();
-
-            foreach (DataSourceScope source in _sources)
-            {
-                source.Dispose();
-            }
-
-            _sources.Clear();
-        }
-        
         private ExitCode Execute(in SyntaxNode node)
         {
             if (node is DeclareStatement declare) { return Execute(in declare); }
@@ -101,8 +128,8 @@ namespace DaJet.Scripting
         private ExitCode Execute(in DeclareStatement statement)
         {
             string name = statement.Identifier;
-            
-            object value = null;
+
+            object value;
 
             if (statement.IsPrivate)
             {
@@ -196,20 +223,30 @@ namespace DaJet.Scripting
         }
         private ExitCode Execute(in SelectStatement statement)
         {
-            DataSourceScope use = _sources.Peek();
+            DataSourceScope use = GetDataSource();
 
-            ProcessorBase processor; //TODO: use _processors collection
-
-            if (use.Type == DataSourceType.SqlServer)
+            if (!_processors.TryGetValue(statement, out ProcessorBase processor))
             {
-                processor = new MsSelectProcessor(in statement, in _sources, in _context);
-            }
-            else
-            {
-                processor = new PgSelectProcessor(in statement, in _sources, in _context);
+                if (use.Type == DataSourceType.SqlServer)
+                {
+                    processor = new MsSelectProcessor(this, in statement);
+                }
+                else
+                {
+                    processor = new PgSelectProcessor(this, in statement);
+                }
+
+                _processors.Add(statement, processor);
             }
 
-            processor.Process();
+            try
+            {
+                processor.Process();
+            }
+            finally
+            {
+                processor.Dispose();
+            }
 
             return ExitCode.Success;
         }
@@ -219,23 +256,19 @@ namespace DaJet.Scripting
 
             if (statement.Target is VariableReference variable)
             {
-                if (_context.Data.ContainsKey(variable.Identifier))
-                {
-                    _context.Data[variable.Identifier] = value;
-                }
+                SetValue(variable.Identifier, in value);
             }
             else if (statement.Target is MemberAccessExpression member)
             {
                 List<string> members = member.GetAccessMembers();
 
-                if (_context.Data.TryGetValue(members[0], out object target))
+                object target = GetValue(members[0]);
+
+                if (target is Dictionary<string, object> _object)
                 {
-                    if (target is Dictionary<string, object> _object)
+                    if (!_object.TryAdd(members[1], value))
                     {
-                        if (!_object.TryAdd(members[1], value))
-                        {
-                            _object[members[1]] = value;
-                        }
+                        _object[members[1]] = value;
                     }
                 }
             }

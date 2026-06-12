@@ -9,7 +9,7 @@ using System.Reflection.Emit;
 
 namespace DaJet.Scripting
 {
-    internal static class MsDataMapper
+    internal static class MsDatabaseMapper
     {
         #region "STATIC METADATA FIELDS"
 
@@ -72,7 +72,7 @@ namespace DaJet.Scripting
         
         #endregion
         
-        static MsDataMapper()
+        static MsDatabaseMapper()
         {
             TRUE = typeof(MsSelectProcessor).GetField(nameof(TRUE),
                 BindingFlags.Static | BindingFlags.NonPublic);
