@@ -31,10 +31,34 @@ namespace DaJet.Scripting
 
             return (errors.Count == 0);
         }
+
+        #region "Binding and syntax errors"
         private void RegisterBindingError(Token token, string identifier)
         {
             _errors.Add($"Failed to bind [{token}: {identifier}]");
         }
+        private void DuplicateTableIdentifierError(Type type, string identifier)
+        {
+            _errors.Add($"Duplicate table name or alias [{type.Name}: {identifier}]");
+        }
+        private void DuplicateColumnAliasError(Type table, string alias)
+        {
+            _errors.Add($"Duplicate SELECT column alias [{table.Name}: {alias}]");
+        }
+        private void ColumnAliasIsNotDefinedError()
+        {
+            _errors.Add("SELECT expression column alias is not defined");
+        }
+        private void AmbiguousColumnNameError(string name)
+        {
+            _errors.Add($"Ambiguous сolumn name [{name}]");
+        }
+        private void TableAliasIsNotFound(string alias, string column)
+        {
+            _errors.Add($"Table alias [{alias}] is not found for column identifier [{column}]");
+        }
+        #endregion
+
         private void Bind(in SyntaxNode node)
         {
             if (node is null) { return; }
@@ -57,10 +81,6 @@ namespace DaJet.Scripting
             else if (node is TableReference table) { Bind(in table); }
             
             //else if (node is TemporaryTableExpression temporary_table) { Bind(in temporary_table); }
-
-            //else if (node is FromClause from) { Bind(in from); }
-            //else if (node is IntoClause into) { Bind(in into); }
-            //else if (node is TopClause top) { Bind(in top); }
 
             else if (node is CaseExpression case_when_then_else) { Bind(in case_when_then_else); }
             else if (node is WhenClause when) { Bind(in when); }
@@ -118,7 +138,6 @@ namespace DaJet.Scripting
             else if (node is PrintStatement print) { Bind(in print); }
             else if (node is ReturnStatement return_statement) { Bind(in return_statement); }
         }
-
         private void Bind(in Script node)
         {
             if (_scope is null) // root Script
@@ -139,7 +158,6 @@ namespace DaJet.Scripting
 
             _scope = _scope.CloseScope();
         }
-        
         private void Bind(in DeclareStatement node)
         {
             _scope.Variables.Add(node.Identifier, node);
@@ -341,6 +359,55 @@ namespace DaJet.Scripting
                 }
             }
         }
+        private void BindOrderByClause(in SelectExpression select, in Dictionary<string, ColumnExpression> aliases)
+        {
+            if (select.Order is not OrderClause order)
+            {
+                return;
+            }
+
+            OrderExpression expression;
+
+            List<OrderExpression> expressions = order.Expressions;
+
+            if (expressions is null)
+            {
+                return;
+            }
+
+            int count = expressions.Count;
+
+            for (int i = 0; i < count; i++)
+            {
+                expression = expressions[i];
+
+                if (expression.Expression is ColumnReference column)
+                {
+                    column.GetColumnIdentifiers(out string tableAlias, out string columnName);
+
+                    if (string.IsNullOrEmpty(tableAlias))
+                    {
+                        // Check for special SELECT ... ORDER BY <alias> case
+                        if (aliases.TryGetValue(columnName, out ColumnExpression property))
+                        {
+                            column.Binding = property; // successful binding
+                        }
+                        else
+                        {
+                            Bind(in column);
+                        }
+                    }
+                    else
+                    {
+                        Bind(in column);
+                    }
+                }
+                else
+                {
+                    Bind(in expression);
+                }
+            }
+        }
 
         #region "TABLE BINDING"
         private void Bind(in CommonTableExpression node)
@@ -352,7 +419,12 @@ namespace DaJet.Scripting
                 Bind(node.Next);
             }
 
-            _scope.Tables.Add(node.Name, node); // join current statement scope
+            // Join current statement scope
+
+            if (!_scope.Tables.TryAdd(node.Name, node))
+            {
+                DuplicateTableIdentifierError(node.GetType(), node.Name);
+            }
 
             Bind(node.Expression); //NOTE: { SelectExpression | TableUnionOperator | INSERT | UPDATE | DELETE }
         }
@@ -360,19 +432,43 @@ namespace DaJet.Scripting
         private void Bind(in SelectExpression node)
         {
             _scope = _scope.OpenScope(node);
-
-            if (node.From is not null) { Bind(node.From); }
-
-            for (int i = 0; i < node.Columns.Count; i++)
-            {
-                Bind(node.Columns[i]);
-            }
-
+            
             if (node.Top is not null) { Bind(node.Top); }
+            if (node.From is not null) { Bind(node.From); }
             if (node.Where is not null) { Bind(node.Where); }
-            if (node.Order is not null) { Bind(node.Order); }
             if (node.Group is not null) { Bind(node.Group); }
             if (node.Having is not null) { Bind(node.Having); }
+
+            ColumnExpression column;
+            List<ColumnExpression> columns = node.Columns;
+            int count = columns.Count;
+            Dictionary<string, ColumnExpression> aliases = new(count);
+
+            for (int i = 0; i < count; i++)
+            {
+                column = columns[i];
+
+                Bind(in column);
+
+                if (!string.IsNullOrEmpty(column.Alias))
+                {
+                    if (!aliases.TryAdd(column.Alias, column))
+                    {
+                        Type type = _scope.Parent?.Owner?.GetType();
+
+                        DuplicateColumnAliasError(type is null ? node.GetType() : type, column.Alias);
+                    }
+                }
+                else
+                {
+                    if (column.Expression is not ColumnReference)
+                    {
+                        ColumnAliasIsNotDefinedError(); // Выражения должны иметь синоним
+                    }
+                }
+            }
+
+            BindOrderByClause(in node, in aliases);
 
             _scope = _scope.CloseScope();
         }
@@ -382,7 +478,10 @@ namespace DaJet.Scripting
 
             if (!string.IsNullOrWhiteSpace(node.Alias))
             {
-                _scope.Aliases.Add(node.Alias, node); // join current SelectExpression scope
+                if (!_scope.Tables.TryAdd(node.Alias, node)) // join current SelectExpression scope
+                {
+                    DuplicateTableIdentifierError(node.GetType(), node.Alias);
+                }
             }
         }
         private void Bind(in TableJoinOperator node)
@@ -444,18 +543,9 @@ namespace DaJet.Scripting
         }
         private void Bind(in TableReference node)
         {
-            // 1. try bind common table expression or temporary table
             node.Binding = _scope.GetTableBinding(node.Identifier);
-
-            //// 2. try bind user-defined type (table-valued parameter)
-            //// see DeclareStatement binding to UserDefinedType
-            //if (node.Binding is null)
-            //{
-            //    node.Binding = _scope.GetVariableBinding(node.Identifier);
-            //}
-
-            // 3. try bind database schema table
-            if (node.Binding is null)
+            
+            if (node.Binding is null) // Try bind database schema table
             {
                 Scope scope = _scope.Ancestor<UseStatement>();
 
@@ -477,15 +567,21 @@ namespace DaJet.Scripting
             {
                 RegisterBindingError(node.Token, node.Identifier);
             }
-            else // successful binding
+            else // successful binding - join current SelectExpression scope
             {
                 if (!string.IsNullOrWhiteSpace(node.Alias))
                 {
-                    _scope.Aliases.Add(node.Alias, node.Binding); // join current SelectExpression scope
+                    if (!_scope.Tables.TryAdd(node.Alias, node.Binding))
+                    {
+                        DuplicateTableIdentifierError(node.GetType(), node.Alias);
+                    }
                 }
                 else
                 {
-                    _scope.Aliases.Add(node.Identifier, node.Binding);
+                    if (!_scope.Tables.TryAdd(node.Identifier, node.Binding))
+                    {
+                        DuplicateTableIdentifierError(node.GetType(), node.Identifier);
+                    }
                 }
             }
         }
@@ -633,44 +729,82 @@ namespace DaJet.Scripting
         {
             //if (!TryBindEnumValue(in node))
             //{
-            BindColumn(in node);
+            //    BindColumn(in node);
             //}
 
-            if (node.Binding is null)
+            //NOTE: ColumnReference can be bound to either PropertyDefinition (direct) or ColumnExpression (derived)
+
+            if (_scope.Columns.TryGetValue(node.Identifier, out object binding))
             {
-                RegisterBindingError(node.Token, node.Identifier);
+                node.Binding = binding; // Сolumn identifier is already bound in the current scope
             }
-            else // successful binding
+            else
             {
-                //TODO: find all ambiguous names and report error
-                _ = _scope.Columns.TryAdd(node.Identifier, node.Binding);
+                BindColumn(in node);
+
+                if (node.Binding is not null) // successful binding
+                {
+                    _ = _scope.Columns.TryAdd(node.Identifier, node.Binding);
+                }
             }
         }
-        
-        //private bool TryBindEnumValue(in ColumnReference column)
-        //{
-        //    string[] identifiers = column.Identifier.Split('.', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-
-        //    if (identifiers is null || identifiers.Length != 3) { return false; }
-
-        //    if (_schema is not null && _schema.TryGetEnumValue(column.Identifier, out EnumValue value) && value is not null)
-        //    {
-        //        column.Binding = value;
-        //        column.Token = Token.Enumeration;
-
-        //        return true;
-        //    }
-
-        //    return false;
-        //}
-
         private void BindColumn(in ColumnReference column)
         {
             column.GetColumnIdentifiers(out string tableAlias, out string columnName);
 
-            if (_scope.TryGetTableByAlias(in tableAlias, out object table))
+            if (string.IsNullOrEmpty(tableAlias)) // Если синоним таблицы не указан
             {
-                BindColumn(in table, in columnName, in column);
+                BindColumnToMultipleTables(in column);
+            }
+            else
+            {
+                if (_scope.TryGetTableByAlias(in tableAlias, out object table))
+                {
+                    BindColumn(in table, in columnName, in column);
+                }
+                else
+                {
+                    TableAliasIsNotFound(tableAlias, column.Identifier);
+                }
+            }
+
+            if (column.Binding is null)
+            {
+                RegisterBindingError(column.Token, column.Identifier);
+            }
+        }
+        private void BindColumnToMultipleTables(in ColumnReference column)
+        {
+            string columnName = column.Identifier;
+
+            List<object> bound = new();
+            List<object> tables = _scope.GetScopedTables();
+
+            foreach (object item in tables)
+            {
+                column.Binding = null;
+
+                BindColumn(in item, in columnName, in column);
+
+                if (column.Binding is not null)
+                {
+                    bound.Add(column.Binding);
+                }
+            }
+
+            if (bound.Count == 0)
+            {
+                column.Binding = null; // Failed to bind
+            }
+            else if (bound.Count > 1)
+            {
+                column.Binding = null;
+
+                AmbiguousColumnNameError(columnName);
+            }
+            else // successful binding
+            {
+                column.Binding = bound[0];
             }
         }
         private void BindColumn(in object source, in string identifier, in ColumnReference column)
@@ -798,6 +932,23 @@ namespace DaJet.Scripting
                 }
             }
         }
+
+        //private bool TryBindEnumValue(in ColumnReference column)
+        //{
+        //    string[] identifiers = column.Identifier.Split('.', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+        //    if (identifiers is null || identifiers.Length != 3) { return false; }
+
+        //    if (_schema is not null && _schema.TryGetEnumValue(column.Identifier, out EnumValue value) && value is not null)
+        //    {
+        //        column.Binding = value;
+        //        column.Token = Token.Enumeration;
+
+        //        return true;
+        //    }
+
+        //    return false;
+        //}
 
         //private void BindColumn(in OutputClause output, in string identifier, in ColumnReference column)
         //{

@@ -7,13 +7,14 @@ USE 'MS_TEST'
   (
     SELECT 1 AS Уровень
      UNION ALL
-    SELECT parent.Уровень + 1
+    SELECT parent.Уровень + 1 AS Уровень
       FROM РекурсивныйЗапрос AS parent
      WHERE parent.Уровень + 1 <= 5
    )
-   SELECT Уровень INTO @Таблица
+   SELECT ПоПорядкуУбывания = Уровень INTO @Таблица
      FROM РекурсивныйЗапрос
-    ORDER BY Уровень DESC
+    WHERE Уровень > 2
+    ORDER BY ПоПорядкуУбывания DESC
 
 END
 

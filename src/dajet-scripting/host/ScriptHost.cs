@@ -1,7 +1,6 @@
 ﻿using DaJet.Utilities;
 using System.Collections.Concurrent;
 using System.Text;
-using System.Text.Json;
 
 namespace DaJet.Scripting.Host
 {
@@ -37,10 +36,10 @@ namespace DaJet.Scripting.Host
 
             string settingsPath = Path.ChangeExtension(scriptPath, "json");
 
-            ScriptSettings entry = GetScriptSettings(in settingsPath);
-
             try
             {
+                ScriptSettings entry = ScriptSettings.Create(in settingsPath);
+
                 string script = null;
 
                 using (StreamReader reader = new(scriptPath, Encoding.UTF8))
@@ -67,31 +66,6 @@ namespace DaJet.Scripting.Host
                 FileLogger.Default.Write($"[HOST][ERROR] Failed to load {fileName}");
                 FileLogger.Default.Write(ExceptionHelper.GetErrorMessageAndStackTrace(error));
             }
-        }
-        private static ScriptSettings GetScriptSettings(in string settingsPath)
-        {
-            if (!File.Exists(settingsPath))
-            {
-                return ScriptSettings.Default;
-            }
-
-            ScriptSettings settings = null;
-
-            try
-            {
-                using (StreamReader reader = new(settingsPath, Encoding.UTF8))
-                {
-                    string json = reader.ReadToEnd();
-
-                    settings = JsonSerializer.Deserialize<ScriptSettings>(json);
-                }
-            }
-            catch (Exception exception)
-            {
-                FileLogger.Default.Write(ExceptionHelper.GetErrorMessageAndStackTrace(exception));
-            }
-
-            return settings is null ? ScriptSettings.Default : settings;
         }
 
         public bool TryGet(string key, out ScriptSettings entry)

@@ -42,9 +42,11 @@ namespace DaJet.Scripting.Model
                     {
                         property.Name = column.Alias;
                     }
-                    else if (column.Expression is ColumnReference derived)
+                    else if (column.Expression is ColumnReference field)
                     {
-                        property.Name = derived.Identifier;
+                        field.GetColumnIdentifiers(out _, out string columnName);
+
+                        property.Name = columnName;
                     }
 
                     schema.Properties.Add(property);
@@ -63,9 +65,11 @@ namespace DaJet.Scripting.Model
                 {
                     property.Name = column.Alias;
                 }
-                else if (column.Expression is ColumnReference derived)
+                else if (column.Expression is ColumnReference field)
                 {
-                    property.Name = derived.Identifier;
+                    field.GetColumnIdentifiers(out _, out string columnName);
+
+                    property.Name = columnName;
                 }
                 else if (!string.IsNullOrEmpty(source.Name))
                 {
@@ -114,9 +118,11 @@ namespace DaJet.Scripting.Model
                     {
                         property.Name = column.Alias;
                     }
-                    else if (column.Expression is ColumnReference derived)
+                    else if (column.Expression is ColumnReference field)
                     {
-                        property.Name = derived.Identifier;
+                        field.GetColumnIdentifiers(out _, out string columnName);
+
+                        property.Name = columnName;
                     }
 
                     entity.Properties.Add(property);
@@ -139,9 +145,11 @@ namespace DaJet.Scripting.Model
                 {
                     property.Name = column.Alias;
                 }
-                else if (column.Expression is ColumnReference derived)
+                else if (column.Expression is ColumnReference field)
                 {
-                    property.Name = derived.Identifier;
+                    field.GetColumnIdentifiers(out _, out string columnName);
+
+                    property.Name = columnName;
                 }
                 else if (!string.IsNullOrEmpty(source.Name))
                 {

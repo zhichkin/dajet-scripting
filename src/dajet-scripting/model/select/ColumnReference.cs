@@ -25,16 +25,14 @@
             tableAlias = string.Empty;
             columnName = string.Empty;
 
-            if (names.Length == 0)
+            if (names.Length == 1)
             {
-                return;
+                columnName = Identifier;
             }
-
-            columnName = names[names.Length - 1];
-
-            if (names.Length > 1)
+            else if (names.Length > 1)
             {
                 tableAlias = names[0];
+                columnName = names[1];
             }
         }
     }

@@ -3,7 +3,7 @@ DECLARE @Таблица array
 
 USE 'MS_TEST'
 
-  SELECT Максимум = MAX(Товар.НомерПоПорядку)
+  SELECT Максимум = MAX(НомерПоПорядку)
     INTO @Таблица
     FROM (SELECT TOP 3 Код
                , Наименование

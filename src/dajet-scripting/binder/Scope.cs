@@ -1,6 +1,4 @@
 ﻿using DaJet.Scripting.Model;
-using DaJet.TypeSystem;
-using System.Xml.Linq;
 
 namespace DaJet.Scripting
 {
@@ -20,11 +18,20 @@ namespace DaJet.Scripting
         public Scope Parent { get; set; }
         ///<summary>Дочерние области видимости (логические)</summary>
         public List<Scope> Children { get; } = new();
-        
-        public Dictionary<string, DeclareStatement> Variables { get; } = new(); // DECLARE statement
-        public Dictionary<string, object> Tables { get; } = new(); // CTE (common table expression) or temporary tables
-        public Dictionary<string, object> Aliases { get; } = new(); // table expression (subquery) or schema tables
-        public Dictionary<string, object> Columns { get; } = new(); //NOTE: used for diagnosic purposes
+
+        /// <summary>
+        /// 1. CTE (common table expression) or temporary tables <br/>
+        /// 2. Table expression (subquery) or database schema tables
+        /// </summary>
+        public Dictionary<string, object> Tables { get; } = new();
+        /// <summary>
+        /// SELECT scoped column references (SelectExpression)
+        /// </summary>
+        public Dictionary<string, object> Columns { get; } = new();
+        /// <summary>
+        /// DECLARE statement
+        /// </summary>
+        public Dictionary<string, DeclareStatement> Variables { get; } = new();
         public override string ToString() { return $"Owner: {Owner}"; }
 
         public Scope GetRoot()
@@ -110,6 +117,28 @@ namespace DaJet.Scripting
             return null;
         }
 
+        public List<object> GetScopedTables()
+        {
+            // Ищем все, доступные для поиска колонки, таблицы.
+            // Общие табличные выражения верхнего уровня не учитываем,
+            // так как они уже были привязаны ранее по областям видимости
+
+            List<object> tables = new();
+
+            Scope scope = this; // lookup current and upper scopes
+
+            while (scope is not null && scope.Owner is not SelectStatement)
+            {
+                if (scope.Tables.Count > 0)
+                {
+                    tables.AddRange(scope.Tables.Values);
+                }
+
+                scope = scope.Parent;
+            }
+
+            return tables;
+        }
         public object GetTableBinding(in string name)
         {
             Scope scope = this;
@@ -130,12 +159,12 @@ namespace DaJet.Scripting
         {
             // TODO: find all candidate tables and warn ambiguous names
 
-            if (string.IsNullOrEmpty(alias) ||
-                alias.ToLowerInvariant() == "deleted" ||
-                alias.ToLowerInvariant() == "inserted")
+            if (string.IsNullOrEmpty(alias)
+                || alias.Equals("deleted", StringComparison.OrdinalIgnoreCase)
+                || alias.Equals("inserted", StringComparison.OrdinalIgnoreCase))
             {
                 // take first available table
-                table = Aliases.Values.FirstOrDefault();
+                table = Tables.Values.FirstOrDefault();
                 
                 return (table is not null);
             }
@@ -146,7 +175,7 @@ namespace DaJet.Scripting
 
             while (scope is not null)
             {
-                if (scope.Aliases.TryGetValue(alias, out table))
+                if (scope.Tables.TryGetValue(alias, out table))
                 {
                     return true;
                 }

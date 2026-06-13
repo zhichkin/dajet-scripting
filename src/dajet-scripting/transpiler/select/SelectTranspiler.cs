@@ -217,7 +217,17 @@ namespace DaJet.Scripting
             {
                 if (derived.Source is null) // Константа, параметр, функция или выражение
                 {
-                    script.Append(node.Identifier); return; //NOTE: Должно возвращать простое значение (одна колонка)
+                    script.Append(node.Identifier);
+
+                    if (node.Parent is ColumnExpression parent) // SELECT clause column
+                    {
+                        if (!string.IsNullOrEmpty(parent.Alias))
+                        {
+                            script.Append(" AS ").Append(parent.Alias);
+                        }
+                    }
+
+                    return; //NOTE: Должно возвращать простое значение (одна колонка)
 
                     //TODO: Выражение CASE может возвращать свойства объектов составного типа (несколько полей).
                     // Плюс следует учитывать (не реализовано) специфичную для 1С операцию "расширения типа",
