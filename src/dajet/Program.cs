@@ -61,7 +61,7 @@ namespace DaJet.Host
             MetadataProvider.Add("PG_TEST", DataSourceType.PostgreSql, in PG_TEST);
 
             string source;
-            string scriptPath = "select\\cte\\generator.djs";
+            string scriptPath = "select\\order-by-alias.djs";
             string filePath = Path.Combine(AppContext.BaseDirectory, "scripts", scriptPath);
 
             using (StreamReader reader = new(filePath, Encoding.UTF8))
@@ -73,10 +73,10 @@ namespace DaJet.Host
             Console.WriteLine(source);
             Console.WriteLine("----");
 
-            //Transpile(in source);
-
             ExecuteQuery(in source);
 
+            //Transpile(in source);
+            
             //CompileAndRun(in source);
 
             //for (int i = 0; i < 1000; i++)
@@ -225,20 +225,22 @@ namespace DaJet.Host
         }
         private static void ExecuteQuery(in string source)
         {
-            Dictionary<string, object> parameters = new()
-            {
-                { "Булево", true },
-                { "ЦелоеЧисло", 12345 },
-                { "БольшоеЧисло", 12345L },
-                { "ДесятичноеЧисло", 12.34M },
-                { "ДатаВремя", DateTime.Now },
-                { "Строка", "000000002" },
-                { "ДвоичноеЧисло", Convert.FromBase64String("DEADBEEF") },
-                { "Идентификатор", new Guid("41F517C5-BC81-45E6-A9E8-7A2C8F573117") },
-                { "ПустаяСсылка", Entity.Undefined }
-            };
+            //Dictionary<string, object> parameters = new()
+            //{
+            //    { "Булево", true },
+            //    { "ЦелоеЧисло", 12345 },
+            //    { "БольшоеЧисло", 12345L },
+            //    { "ДесятичноеЧисло", 12.34M },
+            //    { "ДатаВремя", DateTime.Now },
+            //    { "Строка", "000000002" },
+            //    { "ДвоичноеЧисло", Convert.FromBase64String("DEADBEEF") },
+            //    { "Идентификатор", new Guid("41F517C5-BC81-45E6-A9E8-7A2C8F573117") },
+            //    { "ПустаяСсылка", Entity.Undefined }
+            //};
 
-            parameters = GetParametersFromJson();
+            //parameters = GetParametersFromJson();
+
+            Dictionary<string, object> parameters = new();
 
             Script script = new ScriptBuilder().FromSource(in source).Build();
 

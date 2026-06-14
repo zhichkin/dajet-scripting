@@ -47,7 +47,7 @@ namespace DaJet.Scripting
         }
         private void ColumnAliasIsNotDefinedError()
         {
-            _errors.Add("SELECT expression column alias is not defined");
+            _errors.Add("[SELECT] expression column alias must be defined");
         }
         private void AmbiguousColumnNameError(string name)
         {
@@ -450,25 +450,40 @@ namespace DaJet.Scripting
 
                 Bind(in column);
 
-                if (!string.IsNullOrEmpty(column.Alias))
+                if (!node.IsUnionSubordinate)
                 {
-                    if (!aliases.TryAdd(column.Alias, column))
+                    if (string.IsNullOrEmpty(column.Alias))
                     {
-                        Type type = _scope.Parent?.Owner?.GetType();
+                        if (column.Expression is not ColumnReference reference)
+                        {
+                            ColumnAliasIsNotDefinedError(); // Выражения должны иметь синоним (имя свойства)
+                        }
+                        else
+                        {
+                            reference.GetColumnIdentifiers(out _, out string columnName);
 
-                        DuplicateColumnAliasError(type is null ? node.GetType() : type, column.Alias);
+                            column.Alias = columnName; // Неявная нормализация имён свойств схемы данных
+                        }
                     }
-                }
-                else
-                {
-                    if (column.Expression is not ColumnReference)
+
+                    if (!string.IsNullOrEmpty(column.Alias))
                     {
-                        ColumnAliasIsNotDefinedError(); // Выражения должны иметь синоним
+                        // Проверка на дублирование имён свойств и подготовка синонимов для ORDER BY
+
+                        if (!aliases.TryAdd(column.Alias, column))
+                        {
+                            Type type = _scope.Parent?.Owner?.GetType();
+
+                            DuplicateColumnAliasError(type is null ? node.GetType() : type, column.Alias);
+                        }
                     }
                 }
             }
 
-            BindOrderByClause(in node, in aliases);
+            if (node.Order is not null)
+            {
+                BindOrderByClause(in node, in aliases);
+            }
 
             _scope = _scope.CloseScope();
         }
@@ -498,21 +513,16 @@ namespace DaJet.Scripting
             {
                 Bind(in select1);
             }
-            else if (node.Expression1 is TableUnionOperator union1)
-            {
-                Bind(in union1);
-            }
 
             if (node.Expression2 is SelectExpression select2)
             {
                 Bind(in select2);
             }
-            else if (node.Expression2 is TableUnionOperator union2)
+            else if (node.Expression2 is TableUnionOperator union)
             {
-                Bind(in union2);
+                Bind(in union);
             }
 
-            //NOTE: UNION root order clause
             if (node.Order is OrderClause order)
             {
                 for (int i = 0; i < order.Expressions.Count; i++)
@@ -829,9 +839,9 @@ namespace DaJet.Scripting
             {
                 BindColumn(in temporary, in identifier, in column);
             }
-            else if (source is TableUnionOperator union) // ORDER clause column of the UNION operator 
+            else if (source is TableUnionOperator union)
             {
-                BindColumn(in union, in identifier, in column);
+                BindColumn(in union, in identifier, in column); // ORDER BY clause columns of the UNION operator
             }
         }
         private void BindColumn(in TableExpression table, in string identifier, in ColumnReference column)
@@ -847,13 +857,11 @@ namespace DaJet.Scripting
         }
         private void BindColumn(in TableUnionOperator union, in string identifier, in ColumnReference column)
         {
-            if (union.Expression1 is SelectExpression select1)
+            // Used to bind ORDER BY clause columns of the UNION operator
+
+            if (union.Expression1 is SelectExpression select)
             {
-                BindColumn(in select1, in identifier, in column);
-            }
-            else if (union.Expression2 is SelectExpression select2)
-            {
-                BindColumn(in select2, in identifier, in column); // ?
+                BindColumn(in select, in identifier, in column);
             }
         }
         private void BindColumn(in CommonTableExpression table, in string identifier, in ColumnReference column)

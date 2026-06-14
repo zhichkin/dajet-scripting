@@ -7,7 +7,7 @@ USE 'MS_TEST'
   (
     SELECT 1 AS Уровень
      UNION ALL
-    SELECT parent.Уровень + 1 AS Уровень
+    SELECT parent.Уровень + 1
       FROM РекурсивныйЗапрос AS parent
      WHERE parent.Уровень + 1 <= 5
    )

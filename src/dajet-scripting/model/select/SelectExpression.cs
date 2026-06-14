@@ -7,6 +7,7 @@
         /// Correlation flag: true if select expression is correlated subquery.
         /// </summary>
         public bool IsCorrelated { get; set; } = true;
+        public bool IsUnionSubordinate { get; set; }
         public FromClause From { get; set; }
         public List<ColumnExpression> Columns { get; set; } = new();
         public bool Distinct { get; set; }

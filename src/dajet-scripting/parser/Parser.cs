@@ -1476,8 +1476,23 @@ namespace DaJet.Scripting
 
             SyntaxNode bottom = _union.Expression2;
 
+            if (bottom is SelectExpression subordinate)
+            {
+                subordinate.IsUnionSubordinate = true; // final subordinate
+            }
+
             while (bottom is TableUnionOperator next)
             {
+                if (next.Expression1 is SelectExpression select1)
+                {
+                    select1.IsUnionSubordinate = true;
+                }
+
+                if (next.Expression2 is SelectExpression select2)
+                {
+                    select2.IsUnionSubordinate = true; // final subordinate
+                }
+
                 bottom = next.Expression2;
             }
 
@@ -1522,7 +1537,7 @@ namespace DaJet.Scripting
             {
                 if (node is SelectExpression select && select.Order is not null)
                 {
-                    throw new FormatException("UNION: unexpected ORDER keyword.");
+                    throw new FormatException("UNION: unexpected ORDER BY clause.");
                 }
 
                 Skip(Token.Comment);
