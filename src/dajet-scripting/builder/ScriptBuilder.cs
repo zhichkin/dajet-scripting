@@ -12,11 +12,33 @@ namespace DaJet.Scripting
         private readonly List<Action> _steps = new(5);
         public ScriptBuilder FromFile(in string path)
         {
-            _path = path; _steps.Add(FromFileStep); return this;
+            _path = path;
+
+            _steps.Clear();
+
+            _steps.Add(FromFileStep);
+
+            _steps.Add(Parse);
+
+            return this;
         }
         public ScriptBuilder FromSource(in string source)
         {
-            _source = source; return this;
+            _source = source;
+
+            _steps.Clear();
+
+            _steps.Add(Parse);
+
+            return this;
+        }
+        public ScriptBuilder FromScript(in Script script)
+        {
+            _script = script;
+
+            _steps.Clear();
+
+            return this;
         }
         private void FromFileStep()
         {
@@ -72,9 +94,10 @@ namespace DaJet.Scripting
         }
         public Script Build()
         {
-            _steps.Add(Parse);
             //THINK: _steps.Add(Register); // import schema definitions
+
             _steps.Add(Bind);
+
             _steps.Add(Transpile);
 
             foreach (Action step in _steps)
