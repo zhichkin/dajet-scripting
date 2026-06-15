@@ -68,14 +68,9 @@ static void Main()
 
   string filePath = Path.Combine(AppContext.BaseDirectory, "scripts", "test.djs");
 
-  string source;
+  Script script = new ScriptBuilder().FromFile(in filePath).Build();
 
-  using (StreamReader reader = new(filePath, Encoding.UTF8))
-  {
-    source = reader.ReadToEnd();
-  }
-
-  Interpreter interpreter = new(in source);
+  Interpreter interpreter = new(in script);
 
   Dictionary<string, object> parameters = new()
   {
