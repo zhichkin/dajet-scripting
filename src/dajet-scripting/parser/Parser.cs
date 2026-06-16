@@ -2383,29 +2383,17 @@ namespace DaJet.Scripting
 
             throw new FormatException($"Unknown expression: {Previous()}");
         }
-        private TypeIdentifier type()
+        private TypeReference type()
         {
-            TypeIdentifier type = new()
+            TypeReference type = new();
+
+            try
             {
-                Identifier = Previous().Value
-            };
-            
-            if (Match(Token.OpenRoundBracket))
+                type.Type = datatype();
+            }
+            catch
             {
-                if (!Match(Token.Number)) { throw new FormatException("Number literal expected."); }
-                if (!int.TryParse(Previous().Value, out int qualifier1)) { throw new FormatException("Number literal expected."); }
-
-                type.Qualifier1 = qualifier1;
-
-                if (Match(Token.Comma))
-                {
-                    if (!Match(Token.Number)) { throw new FormatException("Number literal expected."); }
-                    if (!int.TryParse(Previous().Value, out int qualifier2)) { throw new FormatException("Number literal expected."); }
-
-                    type.Qualifier2 = qualifier2;
-                }
-
-                if (!Match(Token.CloseRoundBracket)) { throw new FormatException("Close round bracket expected."); }
+                type.Schema = Previous().Value;
             }
 
             return type;

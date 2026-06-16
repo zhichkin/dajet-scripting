@@ -17,7 +17,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="DaJet.Metadata" Version="5.0.18" />
+    <PackageReference Include="DaJet.Metadata" Version="5.0.19" />
   </ItemGroup>
 
   <ItemGroup>

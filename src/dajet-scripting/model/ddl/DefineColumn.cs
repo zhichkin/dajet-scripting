@@ -4,6 +4,6 @@
     //{
     //    public ColumnDefinition() { Token = Token.COLUMN; }
     //    public string Name { get; set; }
-    //    public TypeIdentifier Type { get; set; }
+    //    public TypeReference Type { get; set; }
     //}
 }

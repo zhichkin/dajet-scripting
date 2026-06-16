@@ -61,7 +61,7 @@ namespace DaJet.Host
             MetadataProvider.Add("PG_TEST", DataSourceType.PostgreSql, in PG_TEST);
 
             string source;
-            string scriptPath = "select\\order-by-alias.djs";
+            string scriptPath = "is_type\\ОстатокТовара_Cte.djs";
             string filePath = Path.Combine(AppContext.BaseDirectory, "scripts", scriptPath);
 
             using (StreamReader reader = new(filePath, Encoding.UTF8))

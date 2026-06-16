@@ -139,28 +139,31 @@ namespace DaJet.Scripting
 
             script.Append("CREATE SEQUENCE ").Append(node.Identifier).Append(" AS ");
 
-            if (node.DataType is TypeIdentifier info)
+            if (node.DataType is TypeReference info)
             {
-                if (info.Binding is Type type)
+                if (!info.Type.IsUndefined)
                 {
-                    if (type == typeof(decimal)) // number(p,s))
+                    if (info.Type.IsDecimal) // number(p,s))
                     {
-                        if (info.Qualifier1 > 0)
+                        if (info.Type.Precision > 0)
                         {
-                            script.Append("numeric(").Append(info.Qualifier1).Append(',').Append(info.Qualifier2).Append(')');
+                            script.Append("numeric(").Append(info.Type.Precision).Append(',').Append(info.Type.Scale).Append(')');
                         }
                         else
                         {
                             script.Append("bigint");
                         }
                     }
-                    else if (type == typeof(int))
+                    else if (info.Type.IsInteger)
                     {
-                        script.Append("int");
-                    }
-                    else
-                    {
-                        script.Append("bigint");
+                        if (info.Type.Size == 8)
+                        {
+                            script.Append("bigint");
+                        }
+                        else
+                        {
+                            script.Append("int");
+                        }
                     }   
                 }
                 else

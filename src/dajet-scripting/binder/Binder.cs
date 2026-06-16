@@ -11,6 +11,7 @@ namespace DaJet.Scripting
         public bool TryBind(in Script script, in ISchemaProvider schema, out List<string> errors)
         {
             ArgumentNullException.ThrowIfNull(script, nameof(script));
+            ArgumentNullException.ThrowIfNull(schema, nameof(schema));
 
             _schema = schema;
 
@@ -65,6 +66,7 @@ namespace DaJet.Scripting
 
             if (node is Script script) { Bind(in script); } // ? EXECUTE вложенный скрипт
 
+            else if (node is TypeReference type) { Bind(in type); }
             else if (node is DeclareStatement declare) { Bind(in declare); }
             else if (node is VariableReference variable) { Bind(in variable); }
             else if (node is MemberAccessExpression member) { Bind(in member); }
@@ -157,6 +159,35 @@ namespace DaJet.Scripting
             }
 
             _scope = _scope.CloseScope();
+        }
+        private void Bind(in TypeReference node)
+        {
+            if (!node.Type.IsUndefined)
+            {
+                return; // Простой тип данных
+            }
+
+            // Объект метаданных (базы данных)
+
+            Scope scope = _scope.Ancestor<UseStatement>();
+
+            if (scope is not null)
+            {
+                if (scope.Owner is UseStatement use)
+                {
+                    MetadataEntry entity = _schema.GetEntry(use.Source, node.Schema);
+
+                    if (entity is not null)
+                    {
+                        node.Binding = entity;
+                    }
+                }
+            }
+
+            if (node.Binding is null)
+            {
+                RegisterBindingError(node.Token, node.Schema);
+            }
         }
         private void Bind(in DeclareStatement node)
         {

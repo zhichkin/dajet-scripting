@@ -380,7 +380,7 @@ namespace DaJet.Scripting
 
         //    return value;
         //}
-        //public static object GetDefaultValue(in TypeIdentifier identifier)
+        //public static object GetDefaultValue(in TypeReference identifier)
         //{
         //    if (IsDataType(identifier.Identifier, out Type type))
         //    {

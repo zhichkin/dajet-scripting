@@ -45,6 +45,7 @@ namespace DaJet.Scripting.Model
             else if (node is MultiplyOperator multiply) { return Infer(in multiply); }
             else if (node is CaseExpression _case) { return Infer(in _case); }
             else if (node is TableExpression table) { return Infer(in table); }
+            else if (node is TypeReference type) { return Infer(in type); }
 
             throw new FormatException($"Unknown expression type: {node.GetType()}");
         }
@@ -71,6 +72,21 @@ namespace DaJet.Scripting.Model
             throw new InvalidCastException($"Invalid binding of ColumnReference [{node.Identifier}]");
         }
 
+        private static PropertyDefinition Infer(in TypeReference node)
+        {
+            PropertyDefinition property = new();
+
+            if (node.Binding is MetadataEntry entity)
+            {
+                property.Type = DataType.Entity(entity.Code);
+            }
+            else
+            {
+                property.Type = node.Type;
+            }
+
+            return property;
+        }
         private static PropertyDefinition Infer(in ScalarExpression node)
         {
             PropertyDefinition property = new();

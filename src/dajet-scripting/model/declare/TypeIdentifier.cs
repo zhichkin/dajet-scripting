@@ -1,15 +1,16 @@
-﻿namespace DaJet.Scripting.Model
+﻿using DaJet.TypeSystem;
+
+namespace DaJet.Scripting.Model
 {
-    public sealed class TypeIdentifier : SyntaxNode
+    public sealed class TypeReference : SyntaxNode
     {
-        public TypeIdentifier() { Token = Token.Type; }
-        public string Identifier { get; set; } = string.Empty;
-        public int Qualifier1 { get; set; } = 0;
-        public int Qualifier2 { get; set; } = 0;
-        public object Binding { get; set; }
+        public TypeReference() { Token = Token.Type; }
+        public DataType Type { get; set; }
+        public string Schema { get; set; } = string.Empty;
+        public MetadataEntry Binding { get; set; }
         public override string ToString()
         {
-            return $"[{Token}: {Identifier}]";
+            return $"[{Token}: {Type} {{{Schema}}}]";
         }
     }
 }

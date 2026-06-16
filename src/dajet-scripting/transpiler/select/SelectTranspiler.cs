@@ -60,6 +60,16 @@ namespace DaJet.Scripting
 
             return error is null;
         }
+
+        protected int GetParametersCount()
+        {
+            return _statement.Input.Count;
+        }
+        protected virtual string GetNextParameterName()
+        {
+            return string.Format("@p{0}", GetParametersCount());
+        }
+
         public override void Visit(in SyntaxNode node, in StringBuilder script)
         {
             if (node is GroupOperator group) { Visit(in group, in script); }
@@ -207,8 +217,7 @@ namespace DaJet.Scripting
                         }
                         else // multiple columns
                         {
-                            string suffix = GetColumnPurposeSuffix(column.Purpose);
-                            script.Append(" AS ").Append(alias).Append('_').Append(suffix);
+                            script.Append(" AS ").Append(alias).Append('_').Append(column.Purpose.GetSuffix());
                         }
                     }
                 }
@@ -264,12 +273,11 @@ namespace DaJet.Scripting
                     }
                     else // multiple columns
                     {
-                        string suffix = GetColumnPurposeSuffix(column.Purpose);
-                        script.Append(node.Identifier).Append('_').Append(suffix);
+                        script.Append(node.Identifier).Append('_').Append(column.Purpose.GetSuffix());
                         
                         if (!string.IsNullOrEmpty(alias))
                         {
-                            script.Append(" AS ").Append(alias).Append('_').Append(suffix);
+                            script.Append(" AS ").Append(alias).Append('_').Append(column.Purpose.GetSuffix());
                         }
                     }
                 }
@@ -279,20 +287,6 @@ namespace DaJet.Scripting
             //{
             //    Visit(in value, in script);
             //}
-        }
-        private static string GetColumnPurposeSuffix(ColumnPurpose purpose)
-        {
-            if (purpose == ColumnPurpose.Tag) { return "TYPE"; }
-            else if (purpose == ColumnPurpose.Boolean) { return "L"; }
-            else if (purpose == ColumnPurpose.Numeric) { return "N"; }
-            else if (purpose == ColumnPurpose.DateTime) { return "T"; }
-            else if (purpose == ColumnPurpose.String) { return "S"; }
-            else if (purpose == ColumnPurpose.TypeCode) { return "TRef"; }
-            else if (purpose == ColumnPurpose.Identity) { return "RRef"; }
-            else
-            {
-                return string.Empty;
-            }
         }
 
         protected virtual void Visit(in TableExpression node, in StringBuilder script)
@@ -645,6 +639,8 @@ namespace DaJet.Scripting
             {
                 script.Append(" WHEN ");
 
+                _transformer.Transform(when);
+
                 Visit(when.WHEN, in script);
 
                 script.Append(" THEN ");
@@ -702,21 +698,13 @@ namespace DaJet.Scripting
         }
         protected virtual void Visit(in VariableReference node, in StringBuilder script)
         {
-            int count = _statement.Input.Count; //FIXME: create RegisterInputParameter !?
-
-            string parameter = string.Format("@p{0}", count);
-
-            script.Append(parameter); // node.Identifier
+            script.Append(GetNextParameterName());
 
             _statement.Input.Add(node);
         }
         protected virtual void Visit(in MemberAccessExpression node, in StringBuilder script)
         {
-            int count = _statement.Input.Count; //FIXME: create RegisterInputParameter !?
-
-            string parameter = string.Format("@p{0}", count);
-
-            script.Append(parameter);
+            script.Append(GetNextParameterName());
 
             _statement.Input.Add(node);
         }
@@ -724,6 +712,11 @@ namespace DaJet.Scripting
         //protected virtual void Visit(in EnumValue node, in StringBuilder script)
         //{
         //    script.Append($"0x{ParserHelper.GetUuidHexLiteral(node.Uuid)}");
+        //}
+
+        //protected override void Visit(in EnumValue node, in StringBuilder script)
+        //{
+        //    script.Append($"CAST(E'\\\\x{ParserHelper.GetUuidHexLiteral(node.Uuid)}' AS bytea)");
         //}
 
         protected virtual void Visit(in FunctionExpression node, in StringBuilder script)
@@ -734,11 +727,7 @@ namespace DaJet.Scripting
             }
             else if (DaJetFunctions.Contains(node.Name))
             {
-                int count = _statement.Input.Count; //FIXME: create RegisterInputParameter !?
-
-                string parameter = string.Format("@p{0}", count);
-
-                script.Append(parameter);
+                script.Append(GetNextParameterName());
 
                 _statement.Input.Add(node);
             }
@@ -746,33 +735,6 @@ namespace DaJet.Scripting
             {
                 throw new InvalidOperationException($"Unknown function name: {node.Name}");
             }
-
-            
-            //else if (name == "VECTOR")
-            //{
-            //    if (node.Parameters is not null && node.Parameters.Count > 0 && node.Parameters[0] is ScalarExpression scalar)
-            //    {
-            //        script.Append("NEXT VALUE FOR ").Append(scalar.Literal);
-            //    }
-            //}
-            //else if (name == "CHARLENGTH")
-            //{
-            //    script.Append("LEN").Append('(');
-            //    Visit(node.Parameters[0], in script);
-            //    script.Append(')');
-            //}
-            //else if (name == "NEWUUID")
-            //{
-            //    script.Append("NEWID()");
-            //}
-            //else if (node.Token != TokenType.UDF)
-            //{
-            //    base.Visit(in node, in script);
-            //}
-            //else
-            //{
-            //    throw new InvalidOperationException($"Invalid function name: {node.Name}");
-            //}
         }
         protected virtual void Visit(in OverClause node, in StringBuilder script)
         {

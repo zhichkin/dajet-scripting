@@ -7,9 +7,9 @@ namespace DaJet.Scripting
         private static Dictionary<string, Type> _datatype = new()
         {
             { "boolean", typeof(bool) }, // L
-            { "number", typeof(decimal) }, // N
+            { "number", typeof(decimal) }, 
             { "integer", typeof(int) },
-            { "decimal", typeof(decimal) },
+            { "decimal", typeof(decimal) }, // N
             { "datetime", typeof(DateTime) }, // T
             { "string", typeof(string) }, // S
             { "binary", typeof(byte[]) }, // B

@@ -22,7 +22,12 @@ namespace DaJet.Scripting
 
                 if (node is not null)
                 {
-                    clause.Expression = node;
+                    clause.Expression = node; // successful transformation
+                }
+                else
+                {
+                    Transform(comparison.Expression1);
+                    Transform(comparison.Expression2);
                 }
             }
             else
@@ -38,7 +43,12 @@ namespace DaJet.Scripting
 
                 if (node is not null)
                 {
-                    clause.WHEN = node;
+                    clause.WHEN = node; // successful transformation
+                }
+                else
+                {
+                    Transform(comparison.Expression1);
+                    Transform(comparison.Expression2);
                 }
             }
             else
@@ -54,7 +64,12 @@ namespace DaJet.Scripting
 
                 if (node is not null)
                 {
-                    clause.Expression = node;
+                    clause.Expression = node; // successful transformation
+                }
+                else
+                {
+                    Transform(comparison.Expression1);
+                    Transform(comparison.Expression2);
                 }
             }
             else
@@ -70,7 +85,12 @@ namespace DaJet.Scripting
 
                 if (node is not null)
                 {
-                    _operator.Expression = node;
+                    _operator.Expression = node; // successful transformation
+                }
+                else
+                {
+                    Transform(comparison.Expression1);
+                    Transform(comparison.Expression2);
                 }
             }
             else
@@ -86,7 +106,12 @@ namespace DaJet.Scripting
 
                 if (node is not null)
                 {
-                    _operator.Expression = node;
+                    _operator.Expression = node; // successful transformation
+                }
+                else
+                {
+                    Transform(comparison.Expression1);
+                    Transform(comparison.Expression2);
                 }
             }
             else
@@ -102,7 +127,12 @@ namespace DaJet.Scripting
 
                 if (node1 is not null)
                 {
-                    _operator.Expression1 = node1;
+                    _operator.Expression1 = node1; // successful transformation
+                }
+                else
+                {
+                    Transform(comparison1.Expression1);
+                    Transform(comparison1.Expression2);
                 }
             }
             else
@@ -116,7 +146,12 @@ namespace DaJet.Scripting
 
                 if (node2 is not null)
                 {
-                    _operator.Expression2 = node2;
+                    _operator.Expression2 = node2; // successful transformation
+                }
+                else
+                {
+                    Transform(comparison2.Expression1);
+                    Transform(comparison2.Expression2);
                 }
             }
             else

@@ -7,6 +7,10 @@ namespace DaJet.Scripting
 {
     public sealed class PgSelectTranspiler : SelectTranspiler
     {
+        protected override string GetNextParameterName()
+        {
+            return string.Format("${0}", GetParametersCount() + 1);
+        }
         protected override void Visit(in SelectStatement node, in StringBuilder script)
         {
             script.AppendLine();
@@ -226,17 +230,11 @@ namespace DaJet.Scripting
         }
         protected override void Visit(in VariableReference node, in StringBuilder script)
         {
-            int count = _statement.Input.Count + 1; //FIXME: create RegisterInputParameter !?
-
-            string parameter;
+            string parameter = GetNextParameterName();
 
             if (node.Binding is DeclareStatement declare && declare.Type.IsString)
             {
-                parameter = string.Format("${0}::mvarchar", count);
-            }
-            else
-            {
-                parameter = string.Format("${0}", count);
+                parameter += "::mvarchar";
             }
 
             script.Append(parameter);
@@ -249,9 +247,7 @@ namespace DaJet.Scripting
 
             string memberName = members[1];
 
-            int count = _statement.Input.Count + 1; //FIXME: create RegisterInputParameter !?
-
-            string parameter = string.Format("${0}", count);
+            string parameter = GetNextParameterName();
 
             if (node.Binding is DeclareStatement declare && declare.Type.IsObject)
             {
@@ -295,11 +291,7 @@ namespace DaJet.Scripting
             }
             else if (DaJetFunctions.Contains(node.Name))
             {
-                int count = _statement.Input.Count + 1; //FIXME: create RegisterInputParameter !?
-
-                string parameter = string.Format("${0}", count);
-
-                script.Append(parameter);
+                script.Append(GetNextParameterName());
 
                 _statement.Input.Add(node);
             }
@@ -308,11 +300,6 @@ namespace DaJet.Scripting
                 throw new InvalidOperationException($"Unknown function name: {node.Name}");
             }
         }
-
-        //    if (name == "NEWUUID")
-        //    {
-        //        script.Append($"CAST(E'\\\\x{ParserHelper.GetUuidHexLiteral(Guid.NewGuid())}' AS bytea)"); return;
-        //    }
 
         protected override void Visit(in TableVariableExpression node, in StringBuilder script)
         {
