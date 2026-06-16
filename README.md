@@ -1,4 +1,4 @@
-# DaJet Script 2.0
+# DaJet Script 2.0 <a href="https://www.nuget.org/packages/DaJet.Scripting"><img width="32" height="32" alt="DaJet Metadata at NuGet" src="https://github.com/user-attachments/assets/579f736b-975b-4657-a813-f26329afbcfb"/></a>
 
 Данная версия DaJet Script является продолжением проекта [DaJet](https://zhichkin.github.io/). В новой версии планируется выполнить рефакторинг существующего кода, сохранив при этом синтаксис и все базовые концепции. Функционал предыдущей версии постепенно переносится в этот репозиторий. Одной из причин является необходимость перевода проекта DaJet на новую версию библиотеки [DaJet.Metadata](https://github.com/zhichkin/dajet-metadata), которая была перписана с нуля.
 
