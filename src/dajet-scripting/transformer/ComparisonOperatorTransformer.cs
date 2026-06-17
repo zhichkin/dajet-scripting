@@ -21,6 +21,29 @@ namespace DaJet.Scripting
                 {
                     return TransformColumnIsType(in comparison);
                 }
+                else if (comparison.Expression1 is ColumnReference column && comparison.Expression2 is TypeReference type) 
+                {
+                    // Колонка не составного типа данных, не являющаяся выражением
+                    // Например: WHERE Номенклатура IS Справочник.Номенклатура
+
+                    PropertyDefinition source = column.InferSource();
+
+                    if (string.IsNullOrEmpty(source.Name))
+                    {
+                        return null; // Константа, функция, параметр или выражение
+                    }
+
+                    if (source.Type.IsUnion || !source.Type.IsEntity)
+                    {
+                        return null; // Финальная проверка на всякий случай
+                    }
+
+                    // Это порождает такой код, как (0x00000035 = 0x00000035), что не является ошибкой
+
+                    comparison.Token = Token.Equals;
+
+                    return TransformUnionComparison(in comparison); //FIXME: consider more appropriate method names
+                }
             }
             else if (comparison.Token == Token.Equals)
             {
@@ -86,11 +109,22 @@ namespace DaJet.Scripting
                 {
                     if (derived.Source is not null) // Источник данных - колонка таблицы СУБД
                     {
-                        left.Identifier += derived.Source.Columns[0].Purpose.GetSuffix();
+                        //TODO: CreateSingleColumnReference !!!
+
+                        ColumnDefinition source = derived.Source.Columns[0];
+
+                        left.Identifier = string.Format("{0}_{1}", left.Identifier, source.Purpose.GetSuffix());
 
                         left.Binding = new PropertyDefinition()
                         {
-                            Columns = [derived.Source.Columns[0]]
+                            Columns = [
+                                new ColumnDefinition()
+                                {
+                                    Name = left.Identifier,
+                                    Type = source.Type,
+                                    Purpose = source.Purpose
+                                }
+                            ]
                         };
                     }
                 }
@@ -163,6 +197,33 @@ namespace DaJet.Scripting
         private void SetExpression2(ComparisonOperator comparison, SyntaxNode value)
         {
             comparison.Expression2 = value;
+        }
+        private static ColumnReference CreateSingleColumnReference(in ColumnReference column, in ColumnDefinition source)
+        {
+            column.GetColumnIdentifiers(out _, out string columnName);
+
+            columnName = string.Format("{0}_{1}", columnName, source.Purpose.GetSuffix());
+
+            string identifier = string.Format("{0}_{1}", column.Identifier, source.Purpose.GetSuffix());
+
+            PropertyDefinition binding = new()
+            {
+                Columns =
+                [
+                    new ColumnDefinition()
+                    {
+                        Name = columnName,
+                        Type = source.Type,
+                        Purpose = source.Purpose
+                    }
+                ]
+            };
+
+            return new ColumnReference()
+            {
+                Binding = binding,
+                Identifier = identifier
+            };
         }
         private void ConfigureTag(in Dictionary<ColumnPurpose, ComparisonOperator> map, in ComparisonOperator comparison)
         {
@@ -369,15 +430,7 @@ namespace DaJet.Scripting
 
                     if (map.TryGetValue(ColumnPurpose.Identity, out ComparisonOperator identity))
                     {
-                        binding = new PropertyDefinition() { Columns = [column] };
-
-                        ColumnReference expression = new()
-                        {
-                            Binding = binding,
-                            Identifier = node.Identifier += ColumnPurpose.Identity.GetSuffix()
-                        };
-
-                        setter(identity, expression);
+                        setter(identity, CreateSingleColumnReference(in node, in column));
                     }
 
                     column = source.GetColumnByPurpose(ColumnPurpose.Tag);
@@ -386,15 +439,7 @@ namespace DaJet.Scripting
                     {
                         if (map.TryGetValue(ColumnPurpose.Tag, out ComparisonOperator tag))
                         {
-                            binding = new PropertyDefinition() { Columns = [column] };
-
-                            ColumnReference expression = new()
-                            {
-                                Binding = binding,
-                                Identifier = node.Identifier += ColumnPurpose.Tag.GetSuffix()
-                            };
-
-                            setter(tag, expression);
+                            setter(tag, CreateSingleColumnReference(in node, in column));
                         }
                     }
 
@@ -404,15 +449,7 @@ namespace DaJet.Scripting
                     {
                         if (map.TryGetValue(ColumnPurpose.TypeCode, out ComparisonOperator typecode))
                         {
-                            binding = new PropertyDefinition() { Columns = [column] };
-
-                            ColumnReference expression = new()
-                            {
-                                Binding = binding,
-                                Identifier = node.Identifier += ColumnPurpose.TypeCode.GetSuffix()
-                            };
-
-                            setter(typecode, expression);
+                            setter(typecode, CreateSingleColumnReference(in node, in column));
                         }
                     }
                 }

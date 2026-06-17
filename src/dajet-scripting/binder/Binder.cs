@@ -491,9 +491,12 @@ namespace DaJet.Scripting
                         }
                         else
                         {
-                            reference.GetColumnIdentifiers(out _, out string columnName);
+                            if (reference.Binding is PropertyDefinition) // Это колонка таблицы базы данных
+                            {
+                                reference.GetColumnIdentifiers(out _, out string columnName);
 
-                            column.Alias = columnName; // Неявная нормализация имён свойств схемы данных
+                                column.Alias = columnName; // Неявная нормализация имён свойств схемы данных
+                            }
                         }
                     }
 
