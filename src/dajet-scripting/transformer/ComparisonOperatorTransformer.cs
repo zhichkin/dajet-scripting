@@ -78,26 +78,27 @@ namespace DaJet.Scripting
 
         private SyntaxNode TransformColumnIsType(in ComparisonOperator comparison)
         {
-            Token _operator;
-            SyntaxNode right = comparison.Expression2;
-
-            if (right is UnaryOperator unary)
-            {
-                _operator = Token.NotEquals;
-                right = unary.Expression;
-            }
-            else
-            {
-                _operator = Token.Equals;
-            }
-
             if (comparison.Expression1 is not ColumnReference left)
             {
                 return null; // no transformation is needed
             }
 
+            SyntaxNode right = comparison.Expression2;
+
+            UnaryOperator unary = right as UnaryOperator; // NOT
+
+            if (unary is not null)
+            {
+                // Выражение вида Регистратор IS NOT Документ.Перемещение
+                // трансформируем в NOT Регистратор IS Документ.Перемещение
+
+                right = unary.Expression;
+            }
+
             if (right is ScalarExpression scalar && scalar.Token == Token.NULL) // _Fld_TYPE IS [NOT] NULL
             {
+                //NOTE: Для сравнения на NULL берём первую колонку свойства составного типа данных
+
                 if (left.Binding is PropertyDefinition property)
                 {
                     left.Binding = new PropertyDefinition()
@@ -109,23 +110,9 @@ namespace DaJet.Scripting
                 {
                     if (derived.Source is not null) // Источник данных - колонка таблицы СУБД
                     {
-                        //TODO: CreateSingleColumnReference !!!
-
                         ColumnDefinition source = derived.Source.Columns[0];
 
-                        left.Identifier = string.Format("{0}_{1}", left.Identifier, source.Purpose.GetSuffix());
-
-                        left.Binding = new PropertyDefinition()
-                        {
-                            Columns = [
-                                new ColumnDefinition()
-                                {
-                                    Name = left.Identifier,
-                                    Type = source.Type,
-                                    Purpose = source.Purpose
-                                }
-                            ]
-                        };
+                        comparison.Expression1 = CreateSingleColumnReference(in left, in source);
                     }
                 }
 
@@ -137,9 +124,25 @@ namespace DaJet.Scripting
                 throw new FormatException($"IS operator: right operand must be a valid data type identifier.");
             }
 
-            comparison.Token = _operator;
+            comparison.Token = Token.Equals; // Преобразуем оператор IS в = (равно)
 
-            return TransformUnionComparison(in comparison);
+            if (unary is not null)
+            {
+                comparison.Expression2 = right;
+            }
+
+            SyntaxNode node = TransformUnionComparison(in comparison); //NOTE: node is GroupOperator
+
+            if (unary is not null)
+            {
+                node = new UnaryOperator()
+                {
+                    Token = Token.NOT,
+                    Expression = node
+                };
+            }
+
+            return node;
         }
         private SyntaxNode TransformUnionComparison(in ComparisonOperator comparison)
         {
@@ -452,6 +455,26 @@ namespace DaJet.Scripting
                             setter(typecode, CreateSingleColumnReference(in node, in column));
                         }
                     }
+                }
+                else // expression
+                {
+                    if (map.TryGetValue(ColumnPurpose.Identity, out ComparisonOperator identity))
+                    {
+                        setter(identity, node);
+                    }
+                }
+            }
+            else if (node.Binding is Entity entity) // enumeration value
+            {
+                if (map.TryGetValue(ColumnPurpose.Identity, out ComparisonOperator identity))
+                {
+                    setter(identity, node);
+
+                    //setter(identity, new ScalarExpression()
+                    //{
+                    //    Token = Token.Uuid,
+                    //    Literal = entity.Identity.ToString()
+                    //});
                 }
             }
         }

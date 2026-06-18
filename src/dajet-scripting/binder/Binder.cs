@@ -489,6 +489,10 @@ namespace DaJet.Scripting
                         {
                             ColumnAliasIsNotDefinedError(); // Выражения должны иметь синоним (имя свойства)
                         }
+                        else if (reference.Binding is Entity) // enumeration value
+                        {
+                            ColumnAliasIsNotDefinedError(); // Скалярное выражение должно иметь синоним (имя свойства)
+                        }
                         else
                         {
                             if (reference.Binding is PropertyDefinition) // Это колонка таблицы базы данных
@@ -771,10 +775,10 @@ namespace DaJet.Scripting
         }
         private void Bind(in ColumnReference node)
         {
-            //if (!TryBindEnumValue(in node))
-            //{
-            //    BindColumn(in node);
-            //}
+            if (TryBindEnumValue(in node))
+            {
+                return; //NOTE: Функция возвращает true только в том случае, когда значение перечисления найдено
+            }
 
             //NOTE: ColumnReference can be bound to either PropertyDefinition (direct) or ColumnExpression (derived)
 
@@ -816,6 +820,59 @@ namespace DaJet.Scripting
             {
                 RegisterBindingError(column.Token, column.Identifier);
             }
+        }
+        private bool TryBindEnumValue(in ColumnReference column)
+        {
+            StringSplitOptions TrimAndRemoveEmpty = StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries;
+
+            Span<Range> names = stackalloc Range[3];
+
+            int count = column.Identifier.Split(names, '.', TrimAndRemoveEmpty);
+
+            if (count != 3) // Перечисление.СтавкиНДС.БезНДС
+            {
+                return false;
+            }
+
+            Scope scope = _scope.Ancestor<UseStatement>();
+
+            if (scope is not null)
+            {
+                if (scope.Owner is UseStatement use)
+                {
+                    Entity entity;
+
+                    try
+                    {
+                        entity = _schema.GetEnumerationEntity(use.Source, column.Identifier);
+                    }
+                    catch
+                    {
+                        entity = Entity.Undefined;
+                    }
+
+                    if (entity.IsUndefined) // Перечисление не найдено
+                    {
+                        RegisterBindingError(column.Token, column.Identifier);
+
+                        return false;
+                    }
+                    else if (entity.IsEmpty) // Значение перечисления не найдено
+                    {
+                        RegisterBindingError(column.Token, column.Identifier);
+
+                        return false;
+                    }
+
+                    // successful binding
+
+                    column.Binding = entity;
+
+                    return true;
+                }
+            }
+
+            return false;
         }
         private void BindColumnToMultipleTables(in ColumnReference column)
         {
@@ -974,23 +1031,6 @@ namespace DaJet.Scripting
                 }
             }
         }
-
-        //private bool TryBindEnumValue(in ColumnReference column)
-        //{
-        //    string[] identifiers = column.Identifier.Split('.', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-
-        //    if (identifiers is null || identifiers.Length != 3) { return false; }
-
-        //    if (_schema is not null && _schema.TryGetEnumValue(column.Identifier, out EnumValue value) && value is not null)
-        //    {
-        //        column.Binding = value;
-        //        column.Token = Token.Enumeration;
-
-        //        return true;
-        //    }
-
-        //    return false;
-        //}
 
         //private void BindColumn(in OutputClause output, in string identifier, in ColumnReference column)
         //{

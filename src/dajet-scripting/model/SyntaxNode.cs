@@ -63,11 +63,13 @@ namespace DaJet.Scripting.Model
             {
                 return Infer(in column);
             }
-
-            //else if (column.Binding is EnumValue)
-            //{
-            //    union.IsUuid = true;
-            //}
+            else if (node.Binding is Entity entity) // Значение перечисления
+            {
+                return new PropertyDefinition()
+                {
+                    Type = DataType.Entity(entity.TypeCode) // scalar value
+                };
+            }
 
             throw new InvalidCastException($"Invalid binding of ColumnReference [{node.Identifier}]");
         }
@@ -211,20 +213,21 @@ namespace DaJet.Scripting.Model
         }
         private static PropertyDefinition Infer(in UnaryOperator node)
         {
+            //NOTE: выполнение логических операторов и, как следствие, возврат булевых значений
+            //NOTE: для колонок, получаемых операцией проекции SELECT, не поддерживается T-SQL
+
+            if (node.Token == Token.NOT) // Логический унарный оператор отрицания
+            {
+                throw new InvalidCastException("Failed to infer data type from unary operator [NOT]");
+            }
+
             PropertyDefinition property = Infer(node.Expression);
 
             if (node.Token == Token.Minus)
             {
                 if (!(property.Type.IsInteger || property.Type.IsDecimal))
                 {
-                    throw new InvalidCastException("Failed to infer data type from UnaryOperator");
-                }
-            }
-            else if (node.Token == Token.NOT)
-            {
-                if (!property.Type.IsBoolean)
-                {
-                    throw new InvalidCastException("Failed to infer data type from UnaryOperator");
+                    throw new InvalidCastException("Failed to infer data type from unary operator [-]");
                 }
             }
 

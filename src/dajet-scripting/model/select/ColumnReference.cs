@@ -5,7 +5,7 @@
         public ColumnReference() { Token = Token.Column; }
         public string Identifier { get; set; } = string.Empty;
         public ColumnExpression Parent { get; set; } // SELECT clause column expressions
-        public object Binding { get; set; } // PropertyDefinition | ColumnExpression
+        public object Binding { get; set; } // PropertyDefinition | ColumnExpression | Entity (enumeration value)
         public string GetName()
         {
             string[] names = Identifier.Split('.', StringSplitOptions.RemoveEmptyEntries);

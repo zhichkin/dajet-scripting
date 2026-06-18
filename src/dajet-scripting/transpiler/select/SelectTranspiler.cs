@@ -282,11 +282,27 @@ namespace DaJet.Scripting
                     }
                 }
             }
+            else if (node.Binding is Entity) // enumeration value
+            {
+                VisitEnumValue(in node, in script);
+            }
+        }
+        protected virtual void VisitEnumValue(in ColumnReference node, in StringBuilder script)
+        {
+            if (node.Binding is not Entity value)
+            {
+                return;
+            }
 
-            //else if (node.Binding is EnumValue value)
-            //{
-            //    Visit(in value, in script);
-            //}
+            script.Append($"0x{LexerHelper.GetUuidHexLiteral(value.Identity)}");
+
+            if (node.Parent is ColumnExpression parent) // SELECT clause column
+            {
+                if (!string.IsNullOrEmpty(parent.Alias))
+                {
+                    script.Append(" AS ").Append(parent.Alias);
+                }
+            }
         }
 
         protected virtual void Visit(in TableExpression node, in StringBuilder script)
@@ -708,17 +724,6 @@ namespace DaJet.Scripting
 
             _statement.Input.Add(node);
         }
-
-        //protected virtual void Visit(in EnumValue node, in StringBuilder script)
-        //{
-        //    script.Append($"0x{ParserHelper.GetUuidHexLiteral(node.Uuid)}");
-        //}
-
-        //protected override void Visit(in EnumValue node, in StringBuilder script)
-        //{
-        //    script.Append($"CAST(E'\\\\x{ParserHelper.GetUuidHexLiteral(node.Uuid)}' AS bytea)");
-        //}
-
         protected virtual void Visit(in FunctionExpression node, in StringBuilder script)
         {
             if (SqlFunctions.TryGet(node.Token, out Function function))

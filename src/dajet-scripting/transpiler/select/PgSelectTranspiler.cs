@@ -300,6 +300,23 @@ namespace DaJet.Scripting
                 throw new InvalidOperationException($"Unknown function name: {node.Name}");
             }
         }
+        protected override void VisitEnumValue(in ColumnReference node, in StringBuilder script)
+        {
+            if (node.Binding is not Entity value)
+            {
+                return;
+            }
+
+            script.Append($"E'\\\\x{LexerHelper.GetUuidHexLiteral(value.Identity)}'::bytea");
+            
+            if (node.Parent is ColumnExpression parent) // SELECT clause column
+            {
+                if (!string.IsNullOrEmpty(parent.Alias))
+                {
+                    script.Append(" AS ").Append(parent.Alias);
+                }
+            }
+        }
 
         protected override void Visit(in TableVariableExpression node, in StringBuilder script)
         {
