@@ -1,6 +1,7 @@
 ﻿using DaJet.Data;
 using DaJet.Scripting.Host;
 using DaJet.Scripting.Model;
+using DaJet.TypeSystem;
 using Npgsql;
 
 namespace DaJet.Scripting
@@ -11,7 +12,7 @@ namespace DaJet.Scripting
         private readonly ScriptContext _context;
         private readonly PgDataSourceScope _dataSource;
         
-        private readonly bool _outputIsObject;
+        private readonly DataType _outputType;
         private readonly string _outputVariable;
         public PgSelectProcessor(in ScriptContext context, in SelectStatement statement)
         {
@@ -33,18 +34,7 @@ namespace DaJet.Scripting
                 {
                     if (variable.Binding is DeclareStatement declare)
                     {
-                        if (declare.Type.IsObject)
-                        {
-                            _outputIsObject = true;
-                        }
-                        else if (declare.Type.IsArray)
-                        {
-                            _outputIsObject = false;
-                        }
-                        else
-                        {
-                            //TODO: scalar values
-                        }
+                        _outputType = declare.Type;
                     }
                 }
             }
@@ -55,23 +45,40 @@ namespace DaJet.Scripting
 
             int outputCount = _mapper.OutputSchema.Properties.Count;
 
-            //THINK: DataSourceScope scope = _context.GetDataSource();
-
             using (NpgsqlCommand command = _dataSource.CreateCommand())
             {
                 command.CommandText = _mapper.CommandText;
 
                 _mapper.ProcessInput(in command);
 
+                //if (_outputType.IsUndefined)
+                //{
+                //    int recordsAffected = command.ExecuteNonQuery(); // SELECT INTO #<temporary table>
+                //}
+
                 using (NpgsqlDataReader reader = command.ExecuteReader())
                 {
-                    while (reader.Read())
+                    if (_outputType.IsArray)
                     {
-                        Dictionary<string, object> record = new(outputCount);
+                        while (reader.Read()) // select all rows
+                        {
+                            Dictionary<string, object> record = new(outputCount);
 
-                        _mapper.ProcessOutput(in reader, in record);
+                            _mapper.ProcessOutput(in reader, in record);
 
-                        table.Add(record);
+                            table.Add(record);
+                        }
+                    }
+                    else
+                    {
+                        if (reader.Read()) // select single row
+                        {
+                            Dictionary<string, object> record = new(outputCount);
+
+                            _mapper.ProcessOutput(in reader, in record);
+
+                            table.Add(record);
+                        }
                     }
 
                     reader.Close();
@@ -82,21 +89,44 @@ namespace DaJet.Scripting
         }
         private void SetOutputValue(in List<Dictionary<string, object>> table)
         {
-            if (_outputVariable is not null)
+            if (_outputType.IsUndefined)
             {
-                object value;
+                return;
+            }
 
-                if (_outputIsObject)
+            object value;
+
+            if (_outputType.IsArray)
+            {
+                value = table;
+
+            }
+            else if (_outputType.IsObject)
+            {
+                value = table.Count > 0 ? table[0] : [];
+            }
+            else // scalar value
+            {
+                Dictionary<string, object> record = null;
+
+                if (table.Count > 0)
                 {
-                    value = table.Count > 0 ? table[0] : null;
+                    record = table[0];
+                }
+
+                if (record is null)
+                {
+                    value = _outputType.DefaultValue();
                 }
                 else
                 {
-                    value = table;
+                    value = record.Count > 0
+                        ? record.First().Value
+                        : _outputType.DefaultValue();
                 }
-
-                _context.SetValue(in _outputVariable, in value);
             }
+
+            _context.SetValue(in _outputVariable, in value);
         }
         public override void Dispose()
         {

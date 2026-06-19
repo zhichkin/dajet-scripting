@@ -17,9 +17,24 @@
         public GroupClause Group { get; set; }
         public HavingClause Having { get; set; }
         public OrderClause Order { get; set; }
-        
+        public bool IsIntoScalar()
+        {
+            if (Into is IntoClause into)
+            {
+                if (into.Value is VariableReference variable)
+                {
+                    if (variable.Binding is DeclareStatement declare)
+                    {
+                        return !(declare.Type.IsArray || declare.Type.IsObject);
+                    }
+                }
+            }
+
+            return false;
+        }
+
         // PG = FOR UPDATE SKIP LOCKED
         // MS = WITH (ROWLOCK, READPAST)
-        public string Hints { get; set; }
+        public string Options { get; set; }
     }
 }

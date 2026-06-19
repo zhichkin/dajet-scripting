@@ -61,7 +61,7 @@ namespace DaJet.Host
             MetadataProvider.Add("PG_TEST", DataSourceType.PostgreSql, in PG_TEST);
 
             string source;
-            string scriptPath = "enum\\union_column.djs";
+            string scriptPath = "scalar\\select.djs";
             string filePath = Path.Combine(AppContext.BaseDirectory, "scripts", scriptPath);
 
             using (StreamReader reader = new(filePath, Encoding.UTF8))

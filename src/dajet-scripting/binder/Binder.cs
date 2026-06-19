@@ -339,11 +339,11 @@ namespace DaJet.Scripting
 
             Bind(node.Expression); //NOTE: SelectExpression | TableUnionOperator
 
-            BindIntoClause(in node);
+            BindOutputSchema(in node);
 
             _scope = _scope.CloseScope();
         }
-        private void BindIntoClause(in SelectStatement select)
+        private void BindOutputSchema(in SelectStatement select)
         {
             //NOTE: INTO columns are derived from the host SELECT expression
             //NOTE: SELECT columns are bound already
@@ -352,19 +352,11 @@ namespace DaJet.Scripting
 
             if (into is null) { return; }
 
-            if (into.Table is not null) 
-            {
-                //TODO: temporary table
-            }
-            else
-            {
-                Bind(into.Value); // script variable
-            }
-
             // Define and apply schema to object or array variable
 
             if (into.Value is VariableReference variable &&
-                variable.Binding is DeclareStatement declare)
+                variable.Binding is DeclareStatement declare &&
+                (declare.Type.IsArray || declare.Type.IsObject))
             {
                 DefineStatement schema = select.InferSchema();
 
@@ -467,11 +459,14 @@ namespace DaJet.Scripting
             if (node.Where is not null) { Bind(node.Where); }
             if (node.Group is not null) { Bind(node.Group); }
             if (node.Having is not null) { Bind(node.Having); }
-
+            if (node.Into is not null) { Bind(node.Into.Value); }
+            
             ColumnExpression column;
             List<ColumnExpression> columns = node.Columns;
             int count = columns.Count;
             Dictionary<string, ColumnExpression> aliases = new(count);
+
+            bool ignoreAlias = node.Into is not null && node.IsIntoScalar(); // SELECT COUNT(*) INTO @integer
 
             for (int i = 0; i < count; i++)
             {
@@ -485,11 +480,17 @@ namespace DaJet.Scripting
                     {
                         if (column.Expression is not ColumnReference reference)
                         {
-                            ColumnAliasIsNotDefinedError(); // Выражения должны иметь синоним (имя свойства)
+                            if (!ignoreAlias)
+                            {
+                                ColumnAliasIsNotDefinedError(); // Выражения должны иметь синоним (имя свойства)
+                            }
                         }
                         else if (reference.Binding is Entity) // enumeration value
                         {
-                            ColumnAliasIsNotDefinedError(); // Скалярное выражение должно иметь синоним (имя свойства)
+                            if (!ignoreAlias)
+                            {
+                                ColumnAliasIsNotDefinedError(); // Скалярное выражение должно иметь синоним (имя свойства)
+                            }
                         }
                         else
                         {

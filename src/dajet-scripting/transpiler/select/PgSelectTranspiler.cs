@@ -56,11 +56,6 @@ namespace DaJet.Scripting
             if (node.Having is not null) { Visit(node.Having, in script); }
             if (node.Order is not null) { Visit(node.Order, in script); }
             if (node.Top is not null) { Visit(node.Top, in script); }
-
-            if (!string.IsNullOrEmpty(node.Hints))
-            {
-                script.AppendLine().Append(node.Hints);
-            }
         }
         protected override void Visit(in TopClause node, in StringBuilder script)
         {

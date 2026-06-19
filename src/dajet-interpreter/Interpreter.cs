@@ -62,7 +62,72 @@ namespace DaJet.Scripting
         }
         public override void SetValue(in string name, in object value)
         {
-            _data[name] = value;
+            if (_data.TryGetValue(name, out object target))
+            {
+                if (target is not Union)
+                {
+                    _data[name] = value;
+                }
+                else
+                {
+                    if (value is null)
+                    {
+                        _data[name] = Union.Undefined;
+                    }
+                    else if (value is bool boolean)
+                    {
+                        _data[name] = new Union.CaseBoolean(boolean);
+                    }
+                    else if (value is decimal number)
+                    {
+                        _data[name] = new Union.CaseDecimal(number);
+                    }
+                    else if (value is DateTime datetime)
+                    {
+                        _data[name] = new Union.CaseDateTime(datetime);
+                    }
+                    else if (value is string text)
+                    {
+                        _data[name] = new Union.CaseString(text);
+                    }
+                    else if (value is Entity entity)
+                    {
+                        _data[name] = new Union.CaseEntity(entity);
+                    }
+                    else
+                    {
+                        _data[name] = value;
+                    }
+                }
+            }
+
+            //ref object pointer = ref CollectionsMarshal.GetValueRefOrNullRef(_data, name);
+
+            //if (Unsafe.IsNullRef(ref pointer)) // Ключ не найден
+            //{
+            //    _data.Add(name, value); // На всякий случай: этого не должно быть
+            //}
+            //else if (pointer is null) // Ключ найден, но его значение равно null
+            //{
+            //    _data[name] = value;
+            //}
+            //else if (pointer is Union)
+            //{
+            //    if (value is null) { pointer = new Union.CaseUndefined(); }
+            //    else if (value is bool boolean) { pointer = new Union.CaseBoolean(boolean); }
+            //    else if (value is decimal number) { pointer = new Union.CaseDecimal(number); }
+            //    else if (value is DateTime datetime) { pointer = new Union.CaseDateTime(datetime); }
+            //    else if (value is string text) { pointer = new Union.CaseString(text); }
+            //    else if (value is Entity entity) { pointer = new Union.CaseEntity(entity); }
+            //    else
+            //    {
+            //        pointer = value;
+            //    }
+            //}
+            //else
+            //{
+            //    _data[name] = value;
+            //}
         }
         
         public object Execute()
@@ -145,22 +210,7 @@ namespace DaJet.Scripting
                 }
             }
 
-            if (value is null) // set default value
-            {
-                DataType type = statement.Type;
-
-                if (type.IsBoolean) { value = false; }
-                else if (type.IsDecimal) { value = 0M; }
-                else if (type.IsInteger) { value = type.Size == 4 ? 0 : 0L; }
-                else if (type.IsDateTime) { value = DateTime.MinValue; }
-                else if (type.IsString) { value = string.Empty; }
-                else if (type.IsBinary) { value = Array.Empty<byte>(); }
-                else if (type.IsUuid) { value = Guid.Empty; }
-                else if (type.IsEntity) { value = Entity.Undefined; }
-                else if (type.IsUnion) { value = Union.Undefined; }
-                else if (type.IsObject) { value = new Dictionary<string, object>(); }
-                else if (type.IsArray) { value = new List<Dictionary<string, object>>(); }
-            }
+            value ??= statement.Type.DefaultValue();
 
             _data.Add(name, value);
 
