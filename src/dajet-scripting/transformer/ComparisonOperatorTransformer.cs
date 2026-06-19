@@ -203,9 +203,7 @@ namespace DaJet.Scripting
         }
         private static ColumnReference CreateSingleColumnReference(in ColumnReference column, in ColumnDefinition source)
         {
-            column.GetColumnIdentifiers(out _, out string columnName);
-
-            columnName = string.Format("{0}_{1}", columnName, source.Purpose.GetSuffix());
+            string columnName = string.Format("{0}_{1}", column.ColumnName, source.Purpose.GetSuffix());
 
             string identifier = string.Format("{0}_{1}", column.Identifier, source.Purpose.GetSuffix());
 

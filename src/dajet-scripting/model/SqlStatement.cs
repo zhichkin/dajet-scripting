@@ -44,9 +44,7 @@ namespace DaJet.Scripting.Model
                     }
                     else if (column.Expression is ColumnReference field)
                     {
-                        field.GetColumnIdentifiers(out _, out string columnName);
-
-                        property.Name = columnName;
+                        property.Name = field.ColumnName;
                     }
 
                     schema.Properties.Add(property);
@@ -67,9 +65,7 @@ namespace DaJet.Scripting.Model
                 }
                 else if (column.Expression is ColumnReference field)
                 {
-                    field.GetColumnIdentifiers(out _, out string columnName);
-
-                    property.Name = columnName;
+                    property.Name = field.ColumnName;
                 }
                 else if (!string.IsNullOrEmpty(source.Name))
                 {
@@ -120,9 +116,7 @@ namespace DaJet.Scripting.Model
                     }
                     else if (column.Expression is ColumnReference field)
                     {
-                        field.GetColumnIdentifiers(out _, out string columnName);
-
-                        property.Name = columnName;
+                        property.Name = field.ColumnName;
                     }
 
                     entity.Properties.Add(property);
@@ -147,9 +141,7 @@ namespace DaJet.Scripting.Model
                 }
                 else if (column.Expression is ColumnReference field)
                 {
-                    field.GetColumnIdentifiers(out _, out string columnName);
-
-                    property.Name = columnName;
+                    property.Name = field.ColumnName;
                 }
                 else if (!string.IsNullOrEmpty(source.Name))
                 {

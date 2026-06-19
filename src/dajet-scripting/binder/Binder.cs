@@ -414,12 +414,10 @@ namespace DaJet.Scripting
 
                 if (expression.Expression is ColumnReference column)
                 {
-                    column.GetColumnIdentifiers(out string tableAlias, out string columnName);
-
-                    if (string.IsNullOrEmpty(tableAlias))
+                    if (string.IsNullOrEmpty(column.TableAlias))
                     {
                         // Check for special SELECT ... ORDER BY <alias> case
-                        if (aliases.TryGetValue(columnName, out ColumnExpression property))
+                        if (aliases.TryGetValue(column.ColumnName, out ColumnExpression property))
                         {
                             column.Binding = property; // successful binding
                         }
@@ -497,9 +495,7 @@ namespace DaJet.Scripting
                         {
                             if (reference.Binding is PropertyDefinition) // Это колонка таблицы базы данных
                             {
-                                reference.GetColumnIdentifiers(out _, out string columnName);
-
-                                column.Alias = columnName; // Неявная нормализация имён свойств схемы данных
+                                column.Alias = reference.ColumnName; // Неявная нормализация имён свойств схемы данных
                             }
                         }
                     }
@@ -567,9 +563,7 @@ namespace DaJet.Scripting
                 {
                     if (order.Expressions[i].Expression is ColumnReference column)
                     {
-                        column.GetColumnIdentifiers(out _, out string columnName);
-
-                        BindColumn(in node, in columnName, in column);
+                        BindColumn(in node, column.ColumnName, in column);
 
                         if (column.Binding is null)
                         {
@@ -798,21 +792,19 @@ namespace DaJet.Scripting
         }
         private void BindColumn(in ColumnReference column)
         {
-            column.GetColumnIdentifiers(out string tableAlias, out string columnName);
-
-            if (string.IsNullOrEmpty(tableAlias)) // Если синоним таблицы не указан
+            if (string.IsNullOrEmpty(column.TableAlias))
             {
-                BindColumnToMultipleTables(in column);
+                BindColumnToMultipleTables(in column); // Если синоним таблицы не указан
             }
             else
             {
-                if (_scope.TryGetTableByAlias(in tableAlias, out object table))
+                if (_scope.TryGetTableByAlias(column.TableAlias, out object table))
                 {
-                    BindColumn(in table, in columnName, in column);
+                    BindColumn(in table, column.ColumnName, in column);
                 }
                 else
                 {
-                    TableAliasIsNotFound(tableAlias, column.Identifier);
+                    TableAliasIsNotFound(column.TableAlias, column.Identifier);
                 }
             }
 
@@ -823,15 +815,9 @@ namespace DaJet.Scripting
         }
         private bool TryBindEnumValue(in ColumnReference column)
         {
-            StringSplitOptions TrimAndRemoveEmpty = StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries;
-
-            Span<Range> names = stackalloc Range[3];
-
-            int count = column.Identifier.Split(names, '.', TrimAndRemoveEmpty);
-
-            if (count != 3) // Перечисление.СтавкиНДС.БезНДС
+            if (string.IsNullOrEmpty(column.ValueName))
             {
-                return false;
+                return false; // Перечисление.СтавкиНДС.БезНДС
             }
 
             Scope scope = _scope.Ancestor<UseStatement>();
@@ -1012,7 +998,7 @@ namespace DaJet.Scripting
                 }
                 else if (expression.Expression is ColumnReference reference)
                 {
-                    reference.GetColumnIdentifiers(out string _, out columnName);
+                    columnName = reference.ColumnName;
                 }
 
                 if (columnName == identifier)
