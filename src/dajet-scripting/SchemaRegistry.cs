@@ -200,7 +200,7 @@ namespace DaJet.Scripting
                 }
                 else // simple type
                 {
-                    propertyType = property.Type.MapToType();
+                    propertyType = property.Type.ToType();
                 }
 
                 CompileProperty(builder, property.Name, propertyType);

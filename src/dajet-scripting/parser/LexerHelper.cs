@@ -1,6 +1,4 @@
-﻿using DaJet.TypeSystem;
-
-namespace DaJet.Scripting
+﻿namespace DaJet.Scripting
 {
     internal static class LexerHelper
     {
@@ -83,7 +81,6 @@ namespace DaJet.Scripting
             { "IGNORE", Token.IGNORE },
             { "TYPE", Token.TYPE },
             { "COLUMN", Token.COLUMN },
-            { "OF", Token.OF },
             { "DROP", Token.DROP },
             { "CONSUME", Token.CONSUME },
             { "STRICT", Token.STRICT },
@@ -200,7 +197,6 @@ namespace DaJet.Scripting
         internal static bool IsAlpha(char character)
         {
             return character == '_' || character == '-'
-                || character == '[' || character == ']'
                 || character == '\'' || character == '\''
                 || character == '=' || character == '@'
                 || character == '.' // multipart identifier
@@ -231,7 +227,6 @@ namespace DaJet.Scripting
         {
             return _function.TryGetValue(identifier, out token);
         }
-
         internal static string GetComparisonLiteral(Token token)
         {
             if (token == Token.IS) { return "IS"; }
@@ -247,7 +242,6 @@ namespace DaJet.Scripting
 
             return token.ToString();
         }
-
         internal static string GetUuidHexLiteral(Guid uuid)
         {
             string value = uuid.ToString("N");
@@ -262,140 +256,5 @@ namespace DaJet.Scripting
 
             // PostgreSql return $"CAST(E'\\\\x{value}' AS bytea)";
         }
-
-        //public static ScalarExpression CreateDefaultScalar(Type type)
-        //{
-        //    string literal = string.Empty;
-        //    TokenType token = TokenType.String;
-
-        //    if (type == typeof(bool))
-        //    {
-        //        literal = "false";
-        //        token = TokenType.Boolean;
-        //    }
-        //    else if (type == typeof(int))
-        //    {
-        //        literal = "0";
-        //        token = TokenType.Integer;
-        //    }
-        //    else if (type == typeof(decimal))
-        //    {
-        //        literal = "0.00";
-        //        token = TokenType.Number;
-        //    }
-        //    else if (type == typeof(DateTime))
-        //    {
-        //        literal = "0001-01-01T00:00:00";
-        //        token = TokenType.DateTime;
-        //    }
-        //    else if (type == typeof(string))
-        //    {
-        //        literal = string.Empty;
-        //        token = TokenType.String;
-        //    }
-        //    else if (type == typeof(byte[]))
-        //    {
-        //        literal = "0x00";
-        //        token = TokenType.Binary;
-        //    }
-        //    else if (type == typeof(Guid))
-        //    {
-        //        literal = "00000000-0000-0000-0000-000000000000";
-        //        token = TokenType.Uuid;
-        //    }
-        //    else if (type == typeof(Entity))
-        //    {
-        //        literal = "{0:00000000-0000-0000-0000-000000000000}";
-        //        token = TokenType.Entity;
-        //    }
-        //    else if (type == typeof(Union))
-        //    {
-        //        literal = "union";
-        //        token = TokenType.Union;
-        //    }
-        //    else if (type == typeof(object))
-        //    {
-        //        literal = "NULL";
-        //        token = TokenType.Object;
-        //    }
-        //    else if (type == typeof(Array))
-        //    {
-        //        literal = "NULL";
-        //        token = TokenType.Array;
-        //    }
-
-        //    return new ScalarExpression() { Token = token, Literal = literal };
-        //}
-        //public static object GetScalarValue(in ScalarExpression scalar)
-        //{
-        //    object value = null;
-        //    string literal = scalar.Literal;
-        //    TokenType token = scalar.Token;
-
-        //    if (token == TokenType.NULL)
-        //    {
-        //        return null;
-        //    }
-        //    else if (token == TokenType.Boolean)
-        //    {
-        //        if (literal.Equals("true", StringComparison.InvariantCultureIgnoreCase))
-        //        {
-        //            value = true;
-        //        }
-        //        else if (literal.Equals("false", StringComparison.InvariantCultureIgnoreCase))
-        //        {
-        //            value = false;
-        //        }
-        //    }
-        //    else if (token == TokenType.Number || token == TokenType.Decimal)
-        //    {
-        //        value = decimal.Parse(literal, CultureInfo.InvariantCulture);
-        //    }
-        //    else if (token == TokenType.Integer)
-        //    {
-        //        value = int.Parse(literal, CultureInfo.InvariantCulture);
-        //    }
-        //    else if (token == TokenType.DateTime)
-        //    {
-        //        value = DateTime.Parse(literal);
-        //    }
-        //    else if (token == TokenType.String)
-        //    {
-        //        value = literal;
-        //    }
-        //    else if (token == TokenType.Uuid)
-        //    {
-        //        value = new Guid(literal);
-        //    }
-        //    else if (token == TokenType.Binary)
-        //    {
-        //        value = DbUtilities.StringToByteArray(literal[2..]); // remove leading 0x
-        //    }
-        //    else if (token == TokenType.Entity)
-        //    {
-        //        // Metadata object reference parameter:
-        //        // DECLARE @product entity = {50:9a1984dc-3084-11ed-9cd7-408d5c93cc8e};
-        //        value = Entity.Parse(scalar.Literal);
-        //    }
-
-        //    return value;
-        //}
-        //public static object GetDefaultValue(in TypeReference identifier)
-        //{
-        //    if (IsDataType(identifier.Identifier, out Type type))
-        //    {
-        //        if (type == typeof(bool)) { return false; }
-        //        else if (type == typeof(int)) { return 0; }
-        //        else if (type == typeof(decimal)) { return 0.00M; }
-        //        else if (type == typeof(DateTime)) { return DateTime.MinValue; }
-        //        else if (type == typeof(string)) { return string.Empty; }
-        //        else if (type == typeof(byte[])) { return Array.Empty<byte>(); }
-        //        else if (type == typeof(Guid)) { return Guid.Empty; }
-        //        else if (type == typeof(Entity)) { return Entity.Undefined; }
-        //        else if (type == typeof(object)) { return null; }
-        //        else if (type == typeof(Array)) { return null; }
-        //    }
-        //    return null;
-        //}
     }
 }

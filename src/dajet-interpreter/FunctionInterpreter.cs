@@ -19,8 +19,8 @@ namespace DaJet.Scripting
         static FunctionInterpreter()
         {
             JsonOptions.Converters.Add(new DataTypeJsonConverter());
+            JsonOptions.Converters.Add(new DataObjectJsonConverter());
             JsonOptions.Converters.Add(new JsonStringEnumConverter());
-            JsonOptions.Converters.Add(new DictionaryJsonConverter());
         }
         internal static object Evaluate(in ExpressionInterpreter context, in FunctionExpression node)
         {

@@ -162,7 +162,7 @@ namespace DaJet.Scripting
         }
         private void Bind(in TypeReference node)
         {
-            if (!node.Type.IsUndefined)
+            if (string.IsNullOrEmpty(node.Schema))
             {
                 return; // Простой тип данных
             }

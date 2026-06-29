@@ -100,34 +100,6 @@ namespace DaJet.Scripting
                     }
                 }
             }
-
-            //ref object pointer = ref CollectionsMarshal.GetValueRefOrNullRef(_data, name);
-
-            //if (Unsafe.IsNullRef(ref pointer)) // Ключ не найден
-            //{
-            //    _data.Add(name, value); // На всякий случай: этого не должно быть
-            //}
-            //else if (pointer is null) // Ключ найден, но его значение равно null
-            //{
-            //    _data[name] = value;
-            //}
-            //else if (pointer is Union)
-            //{
-            //    if (value is null) { pointer = new Union.CaseUndefined(); }
-            //    else if (value is bool boolean) { pointer = new Union.CaseBoolean(boolean); }
-            //    else if (value is decimal number) { pointer = new Union.CaseDecimal(number); }
-            //    else if (value is DateTime datetime) { pointer = new Union.CaseDateTime(datetime); }
-            //    else if (value is string text) { pointer = new Union.CaseString(text); }
-            //    else if (value is Entity entity) { pointer = new Union.CaseEntity(entity); }
-            //    else
-            //    {
-            //        pointer = value;
-            //    }
-            //}
-            //else
-            //{
-            //    _data[name] = value;
-            //}
         }
         
         public object Execute()
@@ -156,6 +128,14 @@ namespace DaJet.Scripting
             }
 
             return value;
+        }
+        public object Execute(in DataObject parameters)
+        {
+            ArgumentNullException.ThrowIfNull(parameters, nameof(parameters));
+
+            _parameters = parameters;
+
+            return Execute();
         }
         public object Execute(in Dictionary<string, object> parameters)
         {
@@ -314,12 +294,9 @@ namespace DaJet.Scripting
 
                 object target = GetValue(members[0]);
 
-                if (target is Dictionary<string, object> _object)
+                if (target is DataObject _object)
                 {
-                    if (!_object.TryAdd(members[1], value))
-                    {
-                        _object[members[1]] = value;
-                    }
+                    _object.SetValue(members[1], value);
                 }
             }
 

@@ -1,4 +1,6 @@
 ﻿using DaJet.Scripting.Model;
+using DaJet.TypeSystem;
+using System.Collections;
 using System.Globalization;
 
 namespace DaJet.Scripting
@@ -19,6 +21,7 @@ namespace DaJet.Scripting
             else if (expression is VariableReference variable) { return Evaluate(in variable); }
             else if (expression is MemberAccessExpression member) { return Evaluate(in member); }
             else if (expression is FunctionExpression function) { return Evaluate(in function); }
+            else if (expression is ValuesExpression array) { return Evaluate(in array); }
             //else if (expression is GroupOperator grouping) { return Evaluate(in grouping); }
             //else if (expression is AdditionOperator addition) { return Evaluate(in addition); }
             //else if (expression is MultiplyOperator multiply) { return Evaluate(in multiply); }
@@ -78,9 +81,9 @@ namespace DaJet.Scripting
 
             if (_data.TryGetValue(members[0], out object value))
             {
-                if (value is Dictionary<string, object> _object)
+                if (value is DataObject data)
                 {
-                    if (_object.TryGetValue(members[1], out value))
+                    if (data.TryGetValue(members[1], out value))
                     {
                         return value;
                     }
@@ -97,6 +100,34 @@ namespace DaJet.Scripting
             }
 
             return FunctionInterpreter.Evaluate(this, in node);
+        }
+        private object Evaluate(in ValuesExpression node)
+        {
+            List<SyntaxNode> values = node.Values;
+
+            if (values.Count == 0)
+            {
+                return new List<object>(); // empty array
+            }
+            
+            SyntaxNode item = values[0];
+
+            DataType type = item.InferType();
+
+            type = DataType.Array(type);
+
+            IList array = type.DefaultValue() as IList;
+
+            for (int i = 0; i < values.Count; i++)
+            {
+                item = values[i];
+
+                object value = Evaluate(item);
+
+                array.Add(value);
+            }
+
+            return array is not null ? array : new List<object>(); // empty array
         }
     }
 }

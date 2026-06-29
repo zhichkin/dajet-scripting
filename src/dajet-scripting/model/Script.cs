@@ -51,6 +51,31 @@ namespace DaJet.Scripting.Model
             }
         }
 
+        //{
+        //  "type": "object",
+        //  "properties": {
+        //    "test": {
+        //      "type": "array",
+        //      "items": { "type": "string" }
+        //    }
+        //  },
+        //  "required": [ "test" ]
+        //}
+
+        //{
+        //  "type": "array",
+        //  "items": {
+        //    "type": "object",
+        //    "properties": {
+        //      "test": {
+        //        "type": "array",
+        //        "items": { "type": "string" }
+        //      }
+        //    },
+        //    "required": [ "test" ]
+        //  }
+        //}
+
         public JsonObject GetInputJsonSchema()
         {
             JsonArray required = new();

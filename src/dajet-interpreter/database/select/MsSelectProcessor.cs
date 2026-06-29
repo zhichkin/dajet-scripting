@@ -3,6 +3,7 @@ using DaJet.Scripting.Host;
 using DaJet.Scripting.Model;
 using DaJet.TypeSystem;
 using Microsoft.Data.SqlClient;
+using System.Collections;
 
 namespace DaJet.Scripting
 {
@@ -41,15 +42,15 @@ namespace DaJet.Scripting
         }
         public override void Process()
         {
-            List<Dictionary<string, object>> table = new();
+            List<DataObject> table = new();
 
             int outputCount = _mapper.OutputSchema.Properties.Count;
 
             using (SqlCommand command = _dataSource.CreateCommand())
             {
-                command.CommandText = _mapper.CommandText;
-
                 _mapper.ProcessInput(in command);
+
+                command.CommandText = _mapper.CommandText;
 
                 //if (_outputType.IsUndefined)
                 //{
@@ -62,7 +63,7 @@ namespace DaJet.Scripting
                     {
                         while (reader.Read()) // select all rows
                         {
-                            Dictionary<string, object> record = new(outputCount);
+                            DataObject record = new(outputCount);
 
                             _mapper.ProcessOutput(in reader, in record);
 
@@ -73,7 +74,7 @@ namespace DaJet.Scripting
                     {
                         if (reader.Read()) // select single row
                         {
-                            Dictionary<string, object> record = new(outputCount);
+                            DataObject record = new(outputCount);
 
                             _mapper.ProcessOutput(in reader, in record);
 
@@ -87,7 +88,7 @@ namespace DaJet.Scripting
 
             SetOutputValue(in table);
         }
-        private void SetOutputValue(in List<Dictionary<string, object>> table)
+        private void SetOutputValue(in List<DataObject> table)
         {
             if (_outputType.IsUndefined)
             {
@@ -98,16 +99,34 @@ namespace DaJet.Scripting
 
             if (_outputType.IsArray)
             {
-                value = table;
+                if (_outputType.IsObject)
+                {
+                    value = table;
+                }
+                else // array of simple type
+                {
+                    value = _outputType.DefaultValue();
 
+                    if (value is IList array)
+                    {
+                        DataObject record;
+
+                        for (int i = 0; i < table.Count; i++)
+                        {
+                            record = table[i];
+
+                            array.Add(record.GetFirstValue());
+                        }
+                    }
+                }
             }
             else if (_outputType.IsObject)
             {
-                value = table.Count > 0 ? table[0] : [];
+                value = table.Count > 0 ? table[0] : new DataObject();
             }
             else // scalar value
             {
-                Dictionary<string, object> record = null;
+                DataObject record = null;
 
                 if (table.Count > 0)
                 {
@@ -120,9 +139,7 @@ namespace DaJet.Scripting
                 }
                 else
                 {
-                    value = record.Count > 0
-                        ? record.First().Value
-                        : _outputType.DefaultValue();
+                    value = record.GetFirstValue();
                 }
             }
 

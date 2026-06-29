@@ -328,7 +328,7 @@ namespace DaJet.Scripting
                 }
                 else // Simple type
                 {
-                    propertyType = property.Type.MapToType();
+                    propertyType = property.Type.ToType();
                 }
 
                 _ = BuildProperty(type, property.Name, propertyType);
@@ -368,7 +368,7 @@ namespace DaJet.Scripting
             }
             else
             {
-                propertyType = variable.Type.MapToType();
+                propertyType = variable.Type.ToType();
             }
 
             if (propertyType is null)

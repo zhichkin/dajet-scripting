@@ -8,6 +8,7 @@ using System.Reflection;
 using System.Text;
 using System.Text.Encodings.Web;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 using System.Text.Unicode;
 
@@ -51,17 +52,18 @@ namespace DaJet.Host
         };
         static void Main(string[] args)
         {
+            JsonOptions.Converters.Add(new EntityJsonConverter());
             JsonOptions.Converters.Add(new DataTypeJsonConverter());
+            JsonOptions.Converters.Add(new DataObjectJsonConverter());
             JsonOptions.Converters.Add(new JsonStringEnumConverter());
-            JsonOptions.Converters.Add(new DictionaryJsonConverter());
-
+            
             MetadataProvider.Add("MS_UNF", DataSourceType.SqlServer, in MS_UNF);
             MetadataProvider.Add("PG_UNF", DataSourceType.PostgreSql, in PG_UNF);
             MetadataProvider.Add("MS_TEST", DataSourceType.SqlServer, in MS_TEST);
             MetadataProvider.Add("PG_TEST", DataSourceType.PostgreSql, in PG_TEST);
 
             string source;
-            string scriptPath = "scalar\\select.djs";
+            string scriptPath = "array\\select.djs";
             string filePath = Path.Combine(AppContext.BaseDirectory, "scripts", scriptPath);
 
             using (StreamReader reader = new(filePath, Encoding.UTF8))
@@ -212,7 +214,7 @@ namespace DaJet.Host
             ScriptProcessor processor = compiler.Compile(in source);
         }
 
-        private static Dictionary<string, object> GetParametersFromJson()
+        private static DataObject GetParametersFromJson()
         {
             string filePath = Path.Combine(AppContext.BaseDirectory, "scripts", "parameters.json");
 
@@ -220,12 +222,12 @@ namespace DaJet.Host
             {
                 string json = reader.ReadToEnd();
 
-                return JsonSerializer.Deserialize<Dictionary<string, object>>(json, JsonOptions);
+                return JsonSerializer.Deserialize<DataObject>(json, JsonOptions);
             }
         }
         private static void ExecuteQuery(in string source)
         {
-            //Dictionary<string, object> parameters = new()
+            //DataObject parameters = new()
             //{
             //    { "Булево", true },
             //    { "ЦелоеЧисло", 12345 },
@@ -240,15 +242,29 @@ namespace DaJet.Host
 
             //parameters = GetParametersFromJson();
 
-            Dictionary<string, object> parameters = new();
+            string json;
+
+            DataObject parameters = new();
+
+            parameters.SetValue("Массив", new List<string>() { "MS-01", "MS-02", "MS-03" });
 
             Script script = new ScriptBuilder().FromSource(in source).Build();
+
+            Console.WriteLine("INPUT SCHEMA");
+            JsonObject input = script.GetInputJsonSchema();
+            json = JsonSerializer.Serialize(input, JsonOptions);
+            Console.WriteLine(json);
+            Console.WriteLine("---");
+
+            Console.WriteLine("OUTPUT SCHEMA");
+            JsonObject output = script.GetOutputJsonSchema();
+            json = JsonSerializer.Serialize(output, JsonOptions);
+            Console.WriteLine(json);
+            Console.WriteLine("---");
 
             Interpreter interpreter = new(in script);
 
             object value = interpreter.Execute(in parameters);
-
-            string json;
 
             if (value is null)
             {

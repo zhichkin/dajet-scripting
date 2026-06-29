@@ -29,12 +29,15 @@ namespace DaJet.Scripting
         private readonly SqlStatement _statement;
         private readonly EntityDefinition _outputSchema;
         private readonly Dictionary<ColumnDefinition, int> _ordinals = new();
+        private string _commandText;
         public MsDataMapper(in ScriptContext context, in SqlStatement statement)
         {
             _context = context;
             _statement = statement;
             _yearOffset = statement.YearOffset;
             _outputSchema = statement.InferEntity();
+            
+            _commandText = _statement.Sql;
             
             PrepareOutputColumnOrdinals();
         }
@@ -61,7 +64,7 @@ namespace DaJet.Scripting
                 }
             }
         }
-        public string CommandText { get { return _statement.Sql; } }
+        public string CommandText { get { return _commandText; } private set { _commandText = value; } }
         public EntityDefinition OutputSchema { get { return _outputSchema; } }
 
         public void ProcessInput(in SqlCommand command)
@@ -82,6 +85,10 @@ namespace DaJet.Scripting
                 {
                     command.Parameters.AddWithValue(name, boolean ? TRUE : FALSE);
                 }
+                else if (value is decimal)
+                {
+                    command.Parameters.AddWithValue(name, value);
+                }
                 else if (value is int int32)
                 {
                     if (input is FunctionExpression function && function.Name == nameof(TYPEOF))
@@ -99,10 +106,18 @@ namespace DaJet.Scripting
                 {
                     command.Parameters.AddWithValue(name, int64);
                 }
-                else if (value is DateTime dateTime)
+                else if (value is DateTime date)
                 {
-                    dateTime = dateTime.AddYears(_yearOffset);
-                    command.Parameters.AddWithValue(name, dateTime).SqlDbType = SqlDbType.DateTime2;
+                    date = date.AddYears(_yearOffset);
+                    command.Parameters.AddWithValue(name, date).SqlDbType = SqlDbType.DateTime2;
+                }
+                else if (value is string text)
+                {
+                    command.Parameters.AddWithValue(name, text);
+                }
+                else if (value is byte[] binary)
+                {
+                    command.Parameters.AddWithValue(name, binary);
                 }
                 else if (value is Guid uuid)
                 {
@@ -112,39 +127,262 @@ namespace DaJet.Scripting
                 {
                     command.Parameters.AddWithValue(name, entity.Identity.ToByteArray());
                 }
-                else // decimal, string, byte[]
+                else if (value is List<bool> array_boolean)
                 {
-                    command.Parameters.AddWithValue(name, value);
+                    InputArrayOfBoolean(in command, in name, in array_boolean);
+                }
+                else if (value is List<decimal> array_decimal)
+                {
+                    InputArrayOfDecimal(in command, in name, in array_decimal);
+                }
+                else if (value is List<int> array_int32)
+                {
+                    InputArrayOfInt32(in command, in name, in array_int32);
+                }
+                else if (value is List<long> array_int64)
+                {
+                    InputArrayOfInt64(in command, in name, in array_int64);
+                }
+                else if (value is List<DateTime> array_date)
+                {
+                    InputArrayOfDateTime(in command, in name, in array_date);
+                }
+                else if (value is List<string> array_string)
+                {
+                    InputArrayOfString(in command, in name, in array_string);
+                }
+                else if (value is List<byte[]> array_binary)
+                {
+                    InputArrayOfBinary(in command, in name, in array_binary);
+                }
+                else if (value is List<Guid> array_uuid)
+                {
+                    InputArrayOfUuid(in command, in name, in array_uuid);
+                }
+                else if (value is List<Entity> array_entity)
+                {
+                    InputArrayOfEntity(in command, in name, in array_entity);
                 }
             }
         }
+        private void InputArrayOfBoolean(in SqlCommand command, in string parameterName, in List<bool> array)
+        {
+            string name;
+            bool value;
+            string parameters = string.Empty;
 
-        public void ProcessOutput(in SqlDataReader reader, in Dictionary<string, object> record)
+            for (int p = 0; p < array.Count; p++)
+            {
+                name = string.Format("{0}_{1}", parameterName, p);
+
+                value = array[p];
+
+                command.Parameters.AddWithValue(name, value ? TRUE : FALSE);
+
+                if (p > 0) { parameters += ", "; }
+
+                parameters += name;
+            }
+
+            _commandText = _commandText.Replace(parameterName, parameters);
+        }
+        private void InputArrayOfDecimal(in SqlCommand command, in string parameterName, in List<decimal> array)
+        {
+            string name;
+            decimal value;
+            string parameters = string.Empty;
+
+            for (int p = 0; p < array.Count; p++)
+            {
+                name = string.Format("{0}_{1}", parameterName, p);
+
+                value = array[p];
+
+                command.Parameters.AddWithValue(name, value);
+
+                if (p > 0) { parameters += ", "; }
+
+                parameters += name;
+            }
+
+            _commandText = _commandText.Replace(parameterName, parameters);
+        }
+        private void InputArrayOfInt32(in SqlCommand command, in string parameterName, in List<int> array)
+        {
+            string name;
+            int value;
+            string parameters = string.Empty;
+
+            for (int p = 0; p < array.Count; p++)
+            {
+                name = string.Format("{0}_{1}", parameterName, p);
+
+                value = array[p];
+
+                command.Parameters.AddWithValue(name, value);
+
+                if (p > 0) { parameters += ", "; }
+
+                parameters += name;
+            }
+
+            _commandText = _commandText.Replace(parameterName, parameters);
+        }
+        private void InputArrayOfInt64(in SqlCommand command, in string parameterName, in List<long> array)
+        {
+            string name;
+            long value;
+            string parameters = string.Empty;
+
+            for (int p = 0; p < array.Count; p++)
+            {
+                name = string.Format("{0}_{1}", parameterName, p);
+
+                value = array[p];
+
+                command.Parameters.AddWithValue(name, value);
+
+                if (p > 0) { parameters += ", "; }
+
+                parameters += name;
+            }
+
+            _commandText = _commandText.Replace(parameterName, parameters);
+        }
+        private void InputArrayOfDateTime(in SqlCommand command, in string parameterName, in List<DateTime> array)
+        {
+            string name;
+            DateTime value;
+            string parameters = string.Empty;
+
+            for (int p = 0; p < array.Count; p++)
+            {
+                name = string.Format("{0}_{1}", parameterName, p);
+
+                value = array[p];
+
+                value = value.AddYears(_yearOffset);
+
+                command.Parameters.AddWithValue(name, value).SqlDbType = SqlDbType.DateTime2;
+
+                if (p > 0) { parameters += ", "; }
+
+                parameters += name;
+            }
+
+            _commandText = _commandText.Replace(parameterName, parameters);
+        }
+        private void InputArrayOfString(in SqlCommand command, in string parameterName, in List<string> array)
+        {
+            string name;
+            string value;
+            string parameters = string.Empty;
+
+            for (int p = 0; p < array.Count; p++)
+            {
+                name = string.Format("{0}_{1}", parameterName, p);
+
+                value = array[p];
+
+                command.Parameters.AddWithValue(name, value);
+
+                if (p > 0) { parameters += ", "; }
+
+                parameters += name;
+            }
+
+            _commandText = _commandText.Replace(parameterName, parameters);
+        }
+        private void InputArrayOfBinary(in SqlCommand command, in string parameterName, in List<byte[]> array)
+        {
+            string name;
+            byte[] value;
+            string parameters = string.Empty;
+
+            for (int p = 0; p < array.Count; p++)
+            {
+                name = string.Format("{0}_{1}", parameterName, p);
+
+                value = array[p];
+
+                command.Parameters.AddWithValue(name, value);
+
+                if (p > 0) { parameters += ", "; }
+
+                parameters += name;
+            }
+
+            _commandText = _commandText.Replace(parameterName, parameters);
+        }
+        private void InputArrayOfUuid(in SqlCommand command, in string parameterName, in List<Guid> array)
+        {
+            string name;
+            Guid value;
+            string parameters = string.Empty;
+
+            for (int p = 0; p < array.Count; p++)
+            {
+                name = string.Format("{0}_{1}", parameterName, p);
+
+                value = array[p];
+
+                command.Parameters.AddWithValue(name, value.ToByteArray());
+
+                if (p > 0) { parameters += ", "; }
+
+                parameters += name;
+            }
+
+            _commandText = _commandText.Replace(parameterName, parameters);
+        }
+        private void InputArrayOfEntity(in SqlCommand command, in string parameterName, in List<Entity> array)
+        {
+            string name;
+            Entity value;
+            string parameters = string.Empty;
+
+            for (int p = 0; p < array.Count; p++)
+            {
+                name = string.Format("{0}_{1}", parameterName, p);
+
+                value = array[p];
+
+                command.Parameters.AddWithValue(name, value.Identity.ToByteArray());
+
+                if (p > 0) { parameters += ", "; }
+
+                parameters += name;
+            }
+
+            _commandText = _commandText.Replace(parameterName, parameters);
+        }
+
+        public void ProcessOutput(in SqlDataReader reader, in DataObject record)
         {
             foreach (PropertyDefinition property in _outputSchema.Properties)
             {
                 DataType type = property.Type;
 
-                if (type.IsUnion) { record.Add(property.Name, GetUnion(in reader, in property)); }
-                else if (type.IsBoolean) { record.Add(property.Name, GetBoolean(in reader, in property)); }
-                else if (type.IsDecimal) { record.Add(property.Name, GetDecimal(in reader, in property)); }
-                else if (type.IsDateTime) { record.Add(property.Name, GetDateTime(in reader, in property)); }
-                else if (type.IsString) { record.Add(property.Name, GetString(in reader, in property)); }
-                else if (type.IsBinary) { record.Add(property.Name, GetBinary(in reader, in property)); }
-                else if (type.IsUuid) { record.Add(property.Name, GetUuid(in reader, in property)); }
+                if (type.IsUnion) { record.SetValue(property.Name, GetUnion(in reader, in property)); }
+                else if (type.IsBoolean) { record.SetValue(property.Name, GetBoolean(in reader, in property)); }
+                else if (type.IsDecimal) { record.SetValue(property.Name, GetDecimal(in reader, in property)); }
+                else if (type.IsDateTime) { record.SetValue(property.Name, GetDateTime(in reader, in property)); }
+                else if (type.IsString) { record.SetValue(property.Name, GetString(in reader, in property)); }
+                else if (type.IsBinary) { record.SetValue(property.Name, GetBinary(in reader, in property)); }
+                else if (type.IsUuid) { record.SetValue(property.Name, GetUuid(in reader, in property)); }
                 else if (type.IsEntity)
                 {
-                    record.Add(property.Name, GetEntity(in reader, in property));
+                    record.SetValue(property.Name, GetEntity(in reader, in property));
                 }
                 else if (type.IsInteger)
                 {
                     if (type.Size == 4)
                     {
-                        record.Add(property.Name, GetInt32(in reader, in property));
+                        record.SetValue(property.Name, GetInt32(in reader, in property));
                     }
                     else
                     {
-                        record.Add(property.Name, GetInt64(in reader, in property));
+                        record.SetValue(property.Name, GetInt64(in reader, in property));
                     }
                 }
             }

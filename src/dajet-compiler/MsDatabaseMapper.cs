@@ -1047,7 +1047,7 @@ namespace DaJet.Scripting
         {
             MethodInfo setAccessor = target.GetSetMethod();
 
-            if (output.Type.IsReferenceOnlyUnion)
+            if (output.Type.IsEntityUnion)
             {
                 IL.Emit(OpCodes.Ldloc_0); // output variable reference
                 IL.Emit(OpCodes.Ldsfld, EntityUndefined); // property value to assign

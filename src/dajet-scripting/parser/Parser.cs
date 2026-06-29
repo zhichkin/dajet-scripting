@@ -101,10 +101,17 @@ namespace DaJet.Scripting
                 }
             }
         }
-		#endregion
+        #endregion
 
-		#region "DATA SCHEMA DEFINITION AND VARIABLE DECLARATION STATEMENTS"
-		private DeclareStatement declare_statement()
+        #region "DATA SCHEMA DEFINITION AND VARIABLE DECLARATION STATEMENTS"
+
+        // DECLARE @variable <type> [(<qualifiers>|<type>)]
+        // CAST(column AS <type>)
+        // CREATE SEQUENCE <name> AS <type>
+        // WHERE Регистратор IS Документ.Приход
+        // TypeReference type() function
+
+        private DeclareStatement declare_statement()
 		{
 			DeclareStatement declare = new();
 
@@ -114,10 +121,8 @@ namespace DaJet.Scripting
 			{
 				throw new FormatException("Variable identifier expected.");
 			}
-			else
-			{
-				declare.Identifier = Previous().Value;
-			}
+			
+            declare.Identifier = Previous().Value;
 
 			if (Match(Token.AS))
 			{
@@ -128,36 +133,34 @@ namespace DaJet.Scripting
 			{
 				throw new FormatException("Variable data type identifier expected.");
 			}
-			else
-			{
-				declare.Type = datatype();
-			}
+			
+            declare.Type = datatype(out string schema);
+
+            declare.Schema = schema; // user-defined object type
 
 			if (Match(Token.Equals))
 			{
-				if (Match(Token.Boolean, Token.Number, Token.String, Token.Binary, Token.Entity))
-				{
-					declare.Initializer = scalar();
-				}
-				else if (Check(Token.SELECT))
-				{
-					declare.Initializer = union();
-				}
-				else
-				{
-					throw new FormatException("Variable initializer expression expected.");
-				}
-			}
-			else if (Match(Token.OF))
-			{
-				if (!Match(Token.Identifier))
-				{
-					throw new FormatException("[DECLARE][OF] Type identifier expected.");
-				}
-				else
-				{
-					declare.Schema = Previous().Value;
-				}
+                if (Match(Token.Boolean, Token.Number, Token.String, Token.Binary, Token.Entity))
+                {
+                    declare.Initializer = scalar();
+                }
+                else if (Match(Token.OpenSquareBracket))
+                {
+                    declare.Initializer = new ValuesExpression() { Values = array_of_values() };
+
+                    if (!Match(Token.CloseSquareBracket))
+                    {
+                        throw new FormatException("Close square bracket expected.");
+                    }
+                }
+                else if (Check(Token.SELECT))
+                {
+                    declare.Initializer = union();
+                }
+                else
+                {
+                    throw new FormatException("Variable initializer expression is invalid.");
+                }
 			}
 
 			if (Match(Token.EndOfStatement)) { /* IGNORE */ }
@@ -166,31 +169,60 @@ namespace DaJet.Scripting
 
 			return declare;
 		}
-        private DataType datatype()
+        private DataType datatype(out string schema)
         {
+            schema = string.Empty;
+
             string identifier = Previous().Value;
 
-            if (identifier == "boolean") { return DataType.Boolean; }
-            else if (identifier == "decimal") { return ParseDecimal(); }
+            DataType type = DataType.FromName(identifier);
+
+            if (type == DataType.Undefined)
+            {
+                // WHERE Регистратор IS Документ.Приход
+                // DECLARE @variable array(<UDT>)
+                // DECLARE @variable object(<UDT>)
+
+                schema = identifier; // database or user-defined object type
+
+                return DataType.Object;
+            }
+
+            if (type.IsDecimal) { return ParseDecimal(); }
+            else if (type.IsInteger) { return ParseInteger(); }
+            else if (type.IsString) { return ParseString(); }
+            else if (type.IsBinary) { return ParseBinary(); }
+            else if (type.IsEntity) { return DataType.Entity(); }
+            else if (type.IsUnion) { return ParseUnion(); }
+            else if (type.IsArray) { return ParseArray(out schema); }
+            else if (type.IsObject) { return ParseObject(out schema); }
+
+            return type; // boolean, datetime, uuid
+        }
+        private DataType array_type(in string identifier)
+        {
+            DataType type = DataType.FromName(identifier);
+
+            if (type.IsArray || type.IsObject)
+            {
+                throw new FormatException($"[DECLARE][ARRAY] Item type '{identifier}' is invalid.");
+            }
+
+            if (identifier == "decimal") { return ParseDecimal(); }
             else if (identifier == "integer") { return ParseInteger(); }
-            else if (identifier == "datetime") { return DataType.DateTime; }
-            else if (identifier == "date") { return DataType.Date; }
-            else if (identifier == "time") { return DataType.Time; }
             else if (identifier == "string") { return ParseString(); }
             else if (identifier == "binary") { return ParseBinary(); }
-            else if (identifier == "uuid") { return DataType.Uuid(); }
             else if (identifier == "entity") { return DataType.Entity(); }
-            else if (identifier == "object") { return DataType.Object; }
-            else if (identifier == "array") { return DataType.Array; }
             else if (identifier == "union") { return ParseUnion(); }
+            
+            return type; // boolean, datetime, uuid, undefined
 
-            throw new FormatException($"Unexpected data type identifier [{identifier}].");
         }
         private DataType ParseDecimal()
         {
             if (!Match(Token.OpenRoundBracket))
             {
-                return DataType.Decimal(16, 4);
+                return DataType.Decimal();
             }
 
             byte precision = 8, scale = 0;
@@ -361,12 +393,73 @@ namespace DaJet.Scripting
 
             if (count == 1)
             {
-                throw new FormatException("Union type should have more then 1 data type.");
+                throw new FormatException("Union type must have more then 1 data type qualified.");
             }
 
             if (!Match(Token.CloseRoundBracket)) { throw new FormatException("Close round bracket expected."); }
 
             return new DataType(types, qualifiers, size, precision, scale);
+        }
+        private DataType ParseArray(out string schema)
+        {
+            schema = string.Empty;
+
+            if (!Match(Token.OpenRoundBracket))
+            {
+                return DataType.Array(); // Array of objects without data schema defined
+            }
+
+            if (!Match(Token.Identifier))
+            {
+                throw new FormatException("[DECLARE][ARRAY] Item type identifier expected.");
+            }
+
+            string identifier = Previous().Value;
+
+            if (identifier == "array")
+            {
+                throw new FormatException("[DECLARE][ARRAY] Item type 'array' is invalid.");
+            }
+
+            if (identifier == "object")
+            {
+                throw new FormatException($"[DECLARE][ARRAY] Item type incorrect syntax 'array(object)'. Use 'array(<UDT>)' instead.");
+            }
+
+            if (!Match(Token.CloseRoundBracket)) { throw new FormatException("[DECLARE][ARRAY] Close round bracket expected."); }
+
+            DataType item = array_type(in identifier);
+
+            if (!item.IsUndefined)
+            {
+                return DataType.Array(item); // Array of simple types
+            }
+
+            schema = identifier; // User-defined data schema
+
+            return DataType.Array(); // Array of user-defined object type
+        }
+        private DataType ParseObject(out string schema)
+        {
+            schema = string.Empty;
+
+            if (!Match(Token.OpenRoundBracket))
+            {
+                return DataType.Object; // Object without data schema defined
+            }
+
+            if (!Match(Token.Identifier))
+            {
+                throw new FormatException("[DECLARE][OBJECT] Type identifier expected.");
+            }
+
+            string identifier = Previous().Value;
+
+            if (!Match(Token.CloseRoundBracket)) { throw new FormatException("[DECLARE][OBJECT] Close round bracket expected."); }
+
+            schema = identifier; // User-defined data schema
+
+            return DataType.Object;
         }
         private int ParseUnionDataType(ref DataTypeFlags types, ref QualifierFlags qualifiers, ref ushort size, ref byte precision, ref byte scale)
         {
@@ -416,7 +509,7 @@ namespace DaJet.Scripting
             }
             else
             {
-                throw new FormatException("Union data type identifier expected.");
+                throw new FormatException($"Union data type invalid identifier: [{identifier}]");
             }
 
             return 1;
@@ -425,7 +518,7 @@ namespace DaJet.Scripting
         {
             if (!Match(Token.OpenRoundBracket))
             {
-                precision = 15; scale = 2; return;
+                precision = 10; scale = 0; return;
             }
             
             if (!Match(Token.Number))
@@ -492,7 +585,18 @@ namespace DaJet.Scripting
 
             if (!Match(Token.CloseRoundBracket)) { throw new FormatException("Close round bracket expected."); }
         }
-		private SyntaxNode import_statement()
+
+        private TypeReference type_reference()
+        {
+            TypeReference type = new()
+            {
+                Type = datatype(out string schema),
+                Schema = schema
+            };
+
+            return type;
+        }
+        private SyntaxNode import_statement()
 		{
 			if (!Match(Token.IMPORT))
 			{
@@ -568,21 +672,11 @@ namespace DaJet.Scripting
 				throw new FormatException("Data type identifier expected");
 			}
 
-			property.Type = datatype();
+            property.Type = datatype(out string schema);
 
-            if (Match(Token.OF))
-            {
-                if (Match(Token.Identifier))
-                {
-                    property.Schema = Previous().Value;
-                }
-                else
-                {
-                    throw new FormatException("[DEFINE][OF] Property schema identifier expected");
-                }
-            }
+            property.Schema = schema; // user-defined object type
 
-			return property;
+            return property;
 		}
 		private ColumnDefinition column_definition()
 		{
@@ -592,9 +686,14 @@ namespace DaJet.Scripting
 
 			if (!Match(Token.Identifier)) { throw new FormatException("Data type identifier expected."); }
 
-			column.Type = datatype();
+            column.Type = datatype(out string schema);
 
-			return column;
+            if (column.Type.IsArray || column.Type.IsObject)
+            {
+                throw new FormatException($"[COLUMN] Database column data type {column.Type} is not allowed.");
+            }
+
+            return column;
 		}
 		#endregion
 
@@ -633,6 +732,15 @@ namespace DaJet.Scripting
             if (Check(Token.SELECT))
             {
                 statement.Initializer = union();
+            }
+            else if (Match(Token.OpenSquareBracket))
+            {
+                statement.Initializer = new ValuesExpression() { Values = array_of_values() };
+
+                if (!Match(Token.CloseSquareBracket))
+                {
+                    throw new FormatException("[SET] Close square bracket expected.");
+                }
             }
             else
             {
@@ -1246,12 +1354,12 @@ namespace DaJet.Scripting
 
             string identifier = Previous().Value;
 
-            if (!Match(Token.OF))
-            {
-                throw new FormatException("OF keyword expected.");
-            }
+            //if (!Match(Token.OF))
+            //{
+            //    throw new FormatException("OF keyword expected.");
+            //}
 
-            if (!Match(Token.Identifier)) { throw new FormatException("Type identifier expected."); }
+            //if (!Match(Token.Identifier)) { throw new FormatException("Type identifier expected."); }
 
             return new CreateTableStatement()
             {
@@ -1632,15 +1740,15 @@ namespace DaJet.Scripting
 
                 Token modifier = Token.Array;
 
-                if (_operator == Token.APPEND)  //THINK: make "array" & "object" keywords !?
+                if (_operator == Token.APPEND)  //THINK: make "ARRAY" and "OBJECT" keywords !?
                 {
-                    if (Match(Token.Identifier) && ParserHelper.IsDataType(Previous().Value, out Type type))
+                    if (Match(Token.Identifier) && DataType.TryParse(Previous().Value.ToLower(), out DataType type, out string schema))
                     {
-                        if (type == typeof(Array))
+                        if (type.IsArray)
                         {
                             modifier = Token.Array;
                         }
-                        else if (type == typeof(object))
+                        else if (type.IsObject)
                         {
                             modifier = Token.Object;
                         }
@@ -2235,11 +2343,11 @@ namespace DaJet.Scripting
                 }
                 else if (Match(Token.Identifier))
                 {
-                    unary.Expression = type();
+                    unary.Expression = type_reference();
                 }
                 else
                 {
-                    throw new FormatException($"NULL or type identifier expected.");
+                    throw new FormatException($"[IS] NULL or type identifier expected.");
                 }
 
                 return unary;
@@ -2250,10 +2358,10 @@ namespace DaJet.Scripting
             }
             else if (Match(Token.Identifier))
             {
-                return type();
+                return type_reference();
             }
 
-            throw new FormatException($"NOT token, NULL or type identifier expected.");
+            throw new FormatException($"[IS] NOT token, NULL or type identifier expected.");
         }
         private SyntaxNode addition()
         {
@@ -2383,21 +2491,6 @@ namespace DaJet.Scripting
 
             throw new FormatException($"Unknown expression: {Previous()}");
         }
-        private TypeReference type()
-        {
-            TypeReference type = new();
-
-            try
-            {
-                type.Type = datatype();
-            }
-            catch
-            {
-                type.Schema = Previous().Value;
-            }
-
-            return type;
-        }
         private SyntaxNode star()
         {
             return new StarExpression();
@@ -2454,18 +2547,12 @@ namespace DaJet.Scripting
         {
             string identifier = Previous().Value;
 
-            if (ParserHelper.IsDataType(identifier, out _)) // language built-in data type
-            {
-                return type();
-                //TODO: user-defined data type [Справочник.Номенклатура] derived from [entity]
-                //NOTE: Важен контекст! FROM <table> и другие ...
-                //Failed to bind [Column: Справочник.Номенклатура]
-            }
-            else if (LexerHelper.IsFunction(identifier, out Token token))
+            if (LexerHelper.IsFunction(identifier, out Token token))
             {
                 return function(token, identifier); // language built-in function
             }
-            else if (Check(Token.OpenRoundBracket)) //TODO: check UDF.TryGet !!!
+            
+            if (Check(Token.OpenRoundBracket)) //TODO: check UDF.TryGet !?
             {
                 return function(Token.UDF, identifier); // user-defined function
             }
@@ -2665,7 +2752,7 @@ namespace DaJet.Scripting
             }
             else
             {
-                function.Parameters.Add(type());
+                function.Parameters.Add(type_reference());
             }
 
             if (!Match(Token.CloseRoundBracket))
@@ -3096,7 +3183,7 @@ namespace DaJet.Scripting
             {
                 if (!Match(Token.Identifier)) { throw new FormatException("Data type identifier expected."); }
 
-                statement.DataType = type();
+                statement.DataType = type_reference();
             }
             
             if (Match(Token.START))
