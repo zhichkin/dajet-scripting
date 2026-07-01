@@ -64,7 +64,7 @@ namespace DaJet.Scripting
                 }
             }
         }
-        public string CommandText { get { return _commandText; } private set { _commandText = value; } }
+        public string CommandText { get { return _commandText; } }
         public EntityDefinition OutputSchema { get { return _outputSchema; } }
 
         public void ProcessInput(in SqlCommand command)

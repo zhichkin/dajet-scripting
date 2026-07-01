@@ -113,11 +113,11 @@ namespace DaJet.Scripting
                         NpgsqlDbType = NpgsqlDbType.Bigint
                     });
                 }
-                else if (value is DateTime dateTime)
+                else if (value is DateTime date)
                 {
                     command.Parameters.Add(new NpgsqlParameter<DateTime>()
                     {
-                        TypedValue = dateTime.AddYears(_yearOffset),
+                        TypedValue = date.AddYears(_yearOffset),
                         NpgsqlDbType = NpgsqlDbType.Timestamp
                     });
                 }
@@ -153,6 +153,100 @@ namespace DaJet.Scripting
                         NpgsqlDbType = NpgsqlDbType.Bytea
                     });
                 }
+                else if (value is List<bool> array_boolean)
+                {
+                    command.Parameters.Add(new NpgsqlParameter<List<bool>>()
+                    {
+                        TypedValue = array_boolean,
+                        NpgsqlDbType = NpgsqlDbType.Array | NpgsqlDbType.Boolean
+                    });
+                }
+                else if (value is List<decimal> array_decimal)
+                {
+                    command.Parameters.Add(new NpgsqlParameter<List<decimal>>()
+                    {
+                        TypedValue = array_decimal,
+                        NpgsqlDbType = NpgsqlDbType.Array | NpgsqlDbType.Numeric
+                    });
+                }
+                else if (value is List<int> array_int32)
+                {
+                    command.Parameters.Add(new NpgsqlParameter<List<int>>()
+                    {
+                        TypedValue = array_int32,
+                        NpgsqlDbType = NpgsqlDbType.Array | NpgsqlDbType.Integer
+                    });
+                }
+                else if (value is List<long> array_int64)
+                {
+                    command.Parameters.Add(new NpgsqlParameter<List<long>>()
+                    {
+                        TypedValue = array_int64,
+                        NpgsqlDbType = NpgsqlDbType.Array | NpgsqlDbType.Bigint
+                    });
+                }
+                else if (value is List<DateTime> array_date)
+                {
+                    if (_yearOffset > 0)
+                    {
+                        for (int i = 0; i < array_date.Count; i++)
+                        {
+                            array_date[i] = array_date[i].AddYears(_yearOffset);
+                        }
+                    }
+
+                    command.Parameters.Add(new NpgsqlParameter<List<DateTime>>()
+                    {
+                        TypedValue = array_date,
+                        NpgsqlDbType = NpgsqlDbType.Array | NpgsqlDbType.Timestamp
+                    });
+                }
+                else if (value is List<string> array_string)
+                {
+                    command.Parameters.Add(new NpgsqlParameter<List<string>>()
+                    {
+                        TypedValue = array_string,
+                        NpgsqlDbType = NpgsqlDbType.Array | NpgsqlDbType.Varchar
+                    });
+                }
+                else if (value is List<byte[]> array_binary)
+                {
+                    command.Parameters.Add(new NpgsqlParameter<List<byte[]>>()
+                    {
+                        TypedValue = array_binary,
+                        NpgsqlDbType = NpgsqlDbType.Array | NpgsqlDbType.Bytea
+                    });
+                }
+                else if (value is List<Guid> array_uuid)
+                {
+                    List<byte[]> array_bytea = new(array_uuid.Count);
+
+                    foreach (Guid guid in array_uuid)
+                    {
+                        array_bytea.Add(guid.ToByteArray());
+                    }
+
+                    command.Parameters.Add(new NpgsqlParameter<List<byte[]>>()
+                    {
+                        TypedValue = array_bytea,
+                        NpgsqlDbType = NpgsqlDbType.Array | NpgsqlDbType.Bytea
+                    });
+                }
+                else if (value is List<Entity> array_entity)
+                {
+                    List<byte[]> array_identity = new(array_entity.Count);
+
+                    foreach (Entity identity in array_entity)
+                    {
+                        array_identity.Add(identity.Identity.ToByteArray());
+                    }
+
+                    command.Parameters.Add(new NpgsqlParameter<List<byte[]>>()
+                    {
+                        TypedValue = array_identity,
+                        NpgsqlDbType = NpgsqlDbType.Array | NpgsqlDbType.Bytea
+                    });
+                }
                 else
                 {
                     throw new InvalidOperationException($"Unsupported parameter type [{value.GetType()}] = [{value}]");
@@ -160,32 +254,32 @@ namespace DaJet.Scripting
             }
         }
 
-        public void ProcessOutput(in NpgsqlDataReader reader, in Dictionary<string, object> record)
+        public void ProcessOutput(in NpgsqlDataReader reader, in DataObject record)
         {
             foreach (PropertyDefinition property in _outputSchema.Properties)
             {
                 DataType type = property.Type;
 
-                if (type.IsUnion) { record.Add(property.Name, GetUnion(in reader, in property)); }
-                else if (type.IsBoolean) { record.Add(property.Name, GetBoolean(in reader, in property)); }
-                else if (type.IsDecimal) { record.Add(property.Name, GetDecimal(in reader, in property)); }
-                else if (type.IsDateTime) { record.Add(property.Name, GetDateTime(in reader, in property)); }
-                else if (type.IsString) { record.Add(property.Name, GetString(in reader, in property)); }
-                else if (type.IsBinary) { record.Add(property.Name, GetBinary(in reader, in property)); }
-                else if (type.IsUuid) { record.Add(property.Name, GetUuid(in reader, in property)); }
+                if (type.IsUnion) { record.SetValue(property.Name, GetUnion(in reader, in property)); }
+                else if (type.IsBoolean) { record.SetValue(property.Name, GetBoolean(in reader, in property)); }
+                else if (type.IsDecimal) { record.SetValue(property.Name, GetDecimal(in reader, in property)); }
+                else if (type.IsDateTime) { record.SetValue(property.Name, GetDateTime(in reader, in property)); }
+                else if (type.IsString) { record.SetValue(property.Name, GetString(in reader, in property)); }
+                else if (type.IsBinary) { record.SetValue(property.Name, GetBinary(in reader, in property)); }
+                else if (type.IsUuid) { record.SetValue(property.Name, GetUuid(in reader, in property)); }
                 else if (type.IsEntity)
                 {
-                    record.Add(property.Name, GetEntity(in reader, in property));
+                    record.SetValue(property.Name, GetEntity(in reader, in property));
                 }
                 else if (type.IsInteger)
                 {
                     if (type.Size == 4)
                     {
-                        record.Add(property.Name, GetInt32(in reader, in property));
+                        record.SetValue(property.Name, GetInt32(in reader, in property));
                     }
                     else
                     {
-                        record.Add(property.Name, GetInt64(in reader, in property));
+                        record.SetValue(property.Name, GetInt64(in reader, in property));
                     }
                 }
             }

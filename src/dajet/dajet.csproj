@@ -14,7 +14,10 @@
   </ItemGroup>
 
   <ItemGroup>
-    <None Update="scripts\array\select.djs">
+    <None Update="scripts\array\pg_select.djs">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Update="scripts\array\ms_select.djs">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
     <None Update="scripts\benchmark.djs">

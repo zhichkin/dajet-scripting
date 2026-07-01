@@ -11,6 +11,7 @@ namespace DaJet.Scripting
         {
             return string.Format("${0}", GetParametersCount() + 1);
         }
+
         protected override void Visit(in SelectStatement node, in StringBuilder script)
         {
             script.AppendLine();
@@ -229,7 +230,14 @@ namespace DaJet.Scripting
 
             if (node.Binding is DeclareStatement declare && declare.Type.IsString)
             {
-                parameter += "::mvarchar";
+                if (declare.Type.IsArray)
+                {
+                    parameter += "::mvarchar[]";
+                }
+                else
+                {
+                    parameter += "::mvarchar";
+                }
             }
 
             script.Append(parameter);
@@ -328,6 +336,70 @@ namespace DaJet.Scripting
             base.Visit(in node, in script);
 
             script.Append(';').AppendLine();
+        }
+
+        protected override void Visit(in ComparisonOperator node, in StringBuilder script)
+        {
+            Visit(node.Expression1, in script);
+
+            if (node.Modifier == Token.NOT)
+            {
+                script.Append(" NOT ");
+            }
+            else
+            {
+                script.Append(' ');
+            }
+
+            script.Append(LexerHelper.GetComparisonLiteral(node.Token));
+
+            script.Append(' ');
+
+            if (node.Modifier == Token.ALL)
+            {
+                script.Append("ALL ");
+            }
+            else if (node.Modifier == Token.ANY)
+            {
+                script.Append("ANY ");
+            }
+
+            if (node.Token == Token.IN && node.Expression2 is ValuesExpression values)
+            {
+                script.Append('(');
+
+                SyntaxNode value = values.Values[0];
+
+                if (value is VariableReference variable &&
+                    variable.Binding is DeclareStatement declare &&
+                    declare.Type.IsArray)
+                {
+                    //NOTE: alternative : <expression> = ANY ($array::mvarchar[])
+
+                    script.Append("SELECT unnest(");
+
+                    Visit(in value, in script);
+
+                    script.Append(')');
+                }
+                else
+                {
+                    for (int i = 0; i < values.Values.Count; i++)
+                    {
+                        value = values.Values[i];
+
+                        if (i > 0) { script.Append(", "); }
+
+                        Visit(in value, in script);
+                    }
+                }
+
+                script.Append(')');
+            }
+            else
+            {
+                Visit(node.Expression2, in script);
+            }
         }
     }
 }

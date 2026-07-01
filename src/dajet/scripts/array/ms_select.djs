@@ -9,7 +9,7 @@ PRIVATE @Таблица array
 PRIVATE @Объект object
 PRIVATE @Список array(entity)
 
---SET @Массив = ['MS-04','MS-05','MS-07']
+SET @Массив = ['MS-04','MS-05','MS-07']
 --SET @Массив = [@Код01, @Код02, @Код03]
 
 USE 'MS_TEST'
@@ -17,7 +17,7 @@ USE 'MS_TEST'
   SELECT Ссылка
     INTO @Список
     FROM Справочник.Номенклатура
-   WHERE Код IN (@Массив)
+   WHERE Код IN (@Массив) OR Код = @Код03 OR Код IN (@Массив)
 
   SELECT Ссылка, Код, Наименование
     INTO @Таблица
