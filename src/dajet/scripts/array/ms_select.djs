@@ -1,4 +1,8 @@
 
+DECLARE @ДатаВремя datetime
+DECLARE @Ссылка entity
+DECLARE @Идентификатор uuid
+
 DECLARE @Массив array(string) = ['MS-03','MS-06','MS-09']
 
 DECLARE @Код01 string = 'MS-01'
@@ -17,7 +21,7 @@ USE 'MS_TEST'
   SELECT Ссылка
     INTO @Список
     FROM Справочник.Номенклатура
-   WHERE Код IN (@Массив) OR Код = @Код03 OR Код IN (@Массив)
+   WHERE Код IN (@Массив)
 
   SELECT Ссылка, Код, Наименование
     INTO @Таблица
@@ -27,4 +31,4 @@ USE 'MS_TEST'
 
 END
 
-RETURN @Список --@Таблица
+RETURN @Таблица --@Список

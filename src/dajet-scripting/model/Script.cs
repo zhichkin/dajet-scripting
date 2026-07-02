@@ -51,31 +51,6 @@ namespace DaJet.Scripting.Model
             }
         }
 
-        //{
-        //  "type": "object",
-        //  "properties": {
-        //    "test": {
-        //      "type": "array",
-        //      "items": { "type": "string" }
-        //    }
-        //  },
-        //  "required": [ "test" ]
-        //}
-
-        //{
-        //  "type": "array",
-        //  "items": {
-        //    "type": "object",
-        //    "properties": {
-        //      "test": {
-        //        "type": "array",
-        //        "items": { "type": "string" }
-        //      }
-        //    },
-        //    "required": [ "test" ]
-        //  }
-        //}
-
         public JsonObject GetInputJsonSchema()
         {
             JsonArray required = new();
@@ -95,38 +70,21 @@ namespace DaJet.Scripting.Model
                 {
                     DataType type = declare.Type;
 
+                    if (type.IsObject)
+                    {
+                        continue; // object input parameters is not supported ?!
+                    }
+
                     string name = declare.Identifier.TrimStart('@');
 
-                    if (type.IsBoolean)
+                    if (declare.Initializer is null)
                     {
                         required.Add(name);
-                        properties.Add(name, new JsonObject() { ["type"] = "boolean" });
                     }
-                    else if (type.IsInteger || type.IsDecimal)
-                    {
-                        required.Add(name);
-                        properties.Add(name, new JsonObject() { ["type"] = "number" });
-                    }
-                    else if (type.IsDateTime)
-                    {
-                        required.Add(name);
-                        properties.Add(name, new JsonObject() { ["type"] = "string", ["format"] = "date-time" });
-                    }
-                    else if (type.IsString)
-                    {
-                        required.Add(name);
-                        properties.Add(name, new JsonObject() { ["type"] = "string" });
-                    }
-                    else if (type.IsUuid)
-                    {
-                        required.Add(name);
-                        properties.Add(name, new JsonObject() { ["type"] = "string", ["format"] = "uuid" });
-                    }
-                    else if (type.IsEntity) // {integer:uuid}
-                    {
-                        required.Add(name);
-                        properties.Add(name, new JsonObject() { ["type"] = "string", ["pattern"] = "^{\\d+:[0-9A-Fa-f]{8}-([0-9A-Fa-f]{4}-){3}[0-9A-Fa-f]{12}}$" });
-                    }
+
+                    JsonObject jsonType = GetTypeJsonSchema(type);
+
+                    properties.Add(name, jsonType);
                 }
             }
 
@@ -160,50 +118,106 @@ namespace DaJet.Scripting.Model
                 string name = property.Name;
                 DataType type = property.Type;
 
-                if (type.IsBoolean)
-                {
-                    required.Add(name);
-                    properties.Add(name, new JsonObject() { ["type"] = "boolean" });
-                }
-                else if (type.IsInteger || type.IsDecimal)
-                {
-                    required.Add(name);
-                    properties.Add(name, new JsonObject() { ["type"] = "number" });
-                }
-                else if (type.IsDateTime)
-                {
-                    required.Add(name);
-                    properties.Add(name, new JsonObject() { ["type"] = "string", ["format"] = "date-time" });
-                }
-                else if (type.IsString)
-                {
-                    required.Add(name);
-                    properties.Add(name, new JsonObject() { ["type"] = "string" });
-                }
-                else if (type.IsUuid)
-                {
-                    required.Add(name);
-                    properties.Add(name, new JsonObject() { ["type"] = "string", ["format"] = "uuid" });
-                }
-                else if (type.IsEntity) // {integer:uuid}
-                {
-                    required.Add(name);
-                    properties.Add(name, new JsonObject() { ["type"] = "string", ["pattern"] = "^{\\d+:[0-9A-Fa-f]{8}-([0-9A-Fa-f]{4}-){3}[0-9A-Fa-f]{12}}$" });
-                }
-                else if (type.IsUnion)
-                {
-                    //TODO: "name": { "oneOf": [
-                    // { "type": "string", "format": "date-time" },
-                    // { "type": "string", "format": "uuid" },
-                    // { "type": "string", "pattern": "^{\\d+:[0-9A-Fa-f]{8}-([0-9A-Fa-f]{4}-){3}[0-9A-Fa-f]{12}}$" },
-                    // { "type": "string", },
-                    // { "type": "boolean" },
-                    // { "type": "number"  }
-                    //]
-                }
+                required.Add(name);
+                properties.Add(name, GetTypeJsonSchema(type));
             }
 
             return output;
+        }
+        private static JsonObject GetTypeJsonSchema(DataType type)
+        {
+            JsonObject json = new();
+
+            if (type.IsObject)
+            {
+                json.Add("type", "object");
+            }
+            else if (type.IsUnion)
+            {
+                if (type.IsEntityUnion)
+                {
+                    json.Add("type", "string");
+                    json.Add("pattern", "^{\\d+:[0-9A-Fa-f]{8}-([0-9A-Fa-f]{4}-){3}[0-9A-Fa-f]{12}}$");
+                }
+                else
+                {
+                    JsonArray union = new();
+
+                    if (type.IsDateTime)
+                    {
+                        union.Add(new JsonObject() { ["type"] = "string", ["format"] = "date-time" });
+                    }
+
+                    if (type.IsEntity)
+                    {
+                        union.Add(new JsonObject()
+                        {
+                            ["type"] = "string",
+                            ["pattern"] = "\"^{\\\\d+:[0-9A-Fa-f]{8}-([0-9A-Fa-f]{4}-){3}[0-9A-Fa-f]{12}}$\""
+                        });
+                    }
+
+                    if (type.IsString)
+                    {
+                        union.Add(new JsonObject() { ["type"] = "string" });
+                    }
+
+                    if (type.IsBoolean)
+                    {
+                        union.Add(new JsonObject() { ["type"] = "boolean" });
+                    }
+
+                    if (type.IsDecimal)
+                    {
+                        union.Add(new JsonObject() { ["type"] = "number" });
+                    }
+
+                    json.Add("oneOf", union);
+                }
+            }
+            else if (type.IsBoolean)
+            {
+                json.Add("type", "boolean");
+            }
+            else if (type.IsDecimal || type.IsInteger)
+            {
+                json.Add("type", "number");
+            }
+            else if (type.IsDateTime)
+            {
+                json.Add("type", "string");
+                json.Add("format", "date-time");
+            }
+            else if (type.IsString)
+            {
+                json.Add("type", "string");
+            }
+            else if (type.IsBinary)
+            {
+                json.Add("type", "string");
+                json.Add("contentEncoding", "base64");
+            }
+            else if (type.IsUuid)
+            {
+                json.Add("type", "string");
+                json.Add("format", "uuid");
+            }
+            else if (type.IsEntity) // {integer:uuid}
+            {
+                json.Add("type", "string");
+                json.Add("pattern", "^{\\d+:[0-9A-Fa-f]{8}-([0-9A-Fa-f]{4}-){3}[0-9A-Fa-f]{12}}$");
+            }
+
+            if (type.IsArray)
+            {
+                json = new JsonObject()
+                {
+                    ["type"] = "array",
+                    ["items"] = json
+                };
+            }
+            
+            return json;
         }
 
         public DefineStatement GetInputSchema()
@@ -336,47 +350,18 @@ namespace DaJet.Scripting.Model
 
             DataType type = declare.Type;
 
-            if (type.IsObject || type.IsArray)
+            if (type.IsObject)
             {
                 return declare.Binding; // complex type
             }
 
             DefineStatement schema = new(); // simple type
 
-            DefineProperty property = new() { Name = "value" };
-
-            if (type.IsBoolean)
+            DefineProperty property = new()
             {
-                property.Type = DataType.Boolean;
-            }
-            else if (type.IsInteger)
-            {
-                property.Type = DataType.Integer();
-            }
-            else if (type.IsDecimal)
-            {
-                property.Type = DataType.Decimal();
-            }
-            else if (type.IsDateTime)
-            {
-                property.Type = DataType.DateTime;
-            }
-            else if (type.IsString)
-            {
-                property.Type = DataType.String();
-            }
-            else if (type.IsUuid)
-            {
-                property.Type = DataType.Uuid();
-            }
-            else if (type.IsEntity)
-            {
-                property.Type = DataType.Entity();
-            }
-            else
-            {
-                property.Type = DataType.String();
-            }
+                Name = type.IsArray ? "array" : "value",
+                Type = type
+            };
 
             schema.Properties.Add(property);
 
