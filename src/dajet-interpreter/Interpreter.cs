@@ -3,6 +3,7 @@ using DaJet.Metadata;
 using DaJet.Scripting.Host;
 using DaJet.Scripting.Model;
 using DaJet.TypeSystem;
+using System.Diagnostics;
 
 namespace DaJet.Scripting
 {
@@ -16,6 +17,12 @@ namespace DaJet.Scripting
 
         private object _returnValue = null; // output value
         private Dictionary<string, object> _parameters = new(); // input parameters
+
+        private ExitCode _exit;
+        private DateTime _start;
+        private long _timestamp1;
+        private long _timestamp2;
+
         public Interpreter(in Script script)
         {
             ArgumentNullException.ThrowIfNull(script, nameof(script));
@@ -24,6 +31,20 @@ namespace DaJet.Scripting
 
             _context = new ExpressionInterpreter(in _data);
         }
+        public ScriptStatus Status
+        {
+            get
+            {
+                long duration = _timestamp2 == 0L ?_timestamp2 : _timestamp2 - _timestamp1;
+
+                duration = duration == 0L ? duration : duration / TimeSpan.TicksPerMillisecond;
+
+                DateTime finish = duration == 0L ? DateTime.MinValue : _start.AddMilliseconds(duration);
+
+                return new ScriptStatus(_exit, _start, finish, duration);
+            }
+        }
+        public void Cancel() { Dispose(); }
         private void Dispose()
         {
             foreach (DataSourceScope source in _sources)
@@ -101,16 +122,39 @@ namespace DaJet.Scripting
                 }
             }
         }
-        
+
+        public void Configure(CancellationToken cancellation)
+        {
+            Cancellation = cancellation;
+        }
+        public void SetParameters(in DataObject parameters)
+        {
+            ArgumentNullException.ThrowIfNull(parameters, nameof(parameters));
+
+            _parameters = parameters;
+        }
+        public void SetParameters(in Dictionary<string, object> parameters)
+        {
+            ArgumentNullException.ThrowIfNull(parameters, nameof(parameters));
+
+            _parameters = parameters;
+        }
+
         public object Execute()
         {
+            _exit = ExitCode.Running;
+            _start = DateTime.UtcNow;
+            _timestamp1 = Stopwatch.GetTimestamp();
+
             object value = null;
+
+            ExitCode code = ExitCode.None;
 
             try
             {
                 foreach (SyntaxNode node in _script.Statements)
                 {
-                    ExitCode code = Execute(in node);
+                    code = Execute(in node);
 
                     if (code == ExitCode.Return)
                     {
@@ -122,28 +166,28 @@ namespace DaJet.Scripting
                     }
                 }
             }
+            catch
+            {
+                code = ExitCode.Faulted; throw;
+            }
             finally
             {
                 Dispose();
             }
 
+            _exit = code;
+
+            _timestamp2 = Stopwatch.GetTimestamp();
+
             return value;
         }
         public object Execute(in DataObject parameters)
         {
-            ArgumentNullException.ThrowIfNull(parameters, nameof(parameters));
-
-            _parameters = parameters;
-
-            return Execute();
+            SetParameters(in parameters); return Execute();
         }
         public object Execute(in Dictionary<string, object> parameters)
         {
-            ArgumentNullException.ThrowIfNull(parameters, nameof(parameters));
-
-            _parameters = parameters;
-
-            return Execute();
+            SetParameters(in parameters); return Execute();
         }
         private ExitCode Execute(in SyntaxNode node)
         {

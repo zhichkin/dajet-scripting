@@ -2,6 +2,7 @@
 using DaJet.Json;
 using DaJet.Metadata;
 using DaJet.Scripting;
+using DaJet.Scripting.Host;
 using DaJet.Scripting.Model;
 using DaJet.TypeSystem;
 using System.Reflection;
@@ -62,6 +63,10 @@ namespace DaJet.Host
             MetadataProvider.Add("MS_TEST", DataSourceType.SqlServer, in MS_TEST);
             MetadataProvider.Add("PG_TEST", DataSourceType.PostgreSql, in PG_TEST);
 
+            ScriptHost host = new();
+            host.InitializeFromFiles();
+            ExecuteScriptAsync(in host);
+            
             string source;
             string scriptPath = "array\\ms_select.djs";
             string filePath = Path.Combine(AppContext.BaseDirectory, "scripts", scriptPath);
@@ -278,6 +283,35 @@ namespace DaJet.Host
             {
                 json = JsonSerializer.Serialize(value, value.GetType(), JsonOptions);
             }
+
+            Console.WriteLine(json);
+        }
+
+        private static void ExecuteScriptAsync(in ScriptHost host)
+        {
+            Task<object> task = host.Run("select/simple.djs");
+
+            //task.Wait();
+
+            List<ScriptStatus> monitor = host.GetExecutingTasks();
+
+            foreach (ScriptStatus status in monitor)
+            {
+                Console.WriteLine(status);
+            }
+
+            task.Wait();
+
+            monitor = host.GetExecutingTasks();
+
+            foreach (ScriptStatus status in monitor)
+            {
+                Console.WriteLine(status);
+            }
+
+            object value = host.GetResult(task.Id); // get result by name ?
+
+            string json = JsonSerializer.Serialize(value, value.GetType(), JsonOptions);
 
             Console.WriteLine(json);
         }

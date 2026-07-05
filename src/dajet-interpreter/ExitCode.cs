@@ -1,8 +1,11 @@
 ﻿namespace DaJet.Scripting
 {
-    internal enum ExitCode : byte
+    public enum ExitCode : byte
     {
+        None,
+        Running,
         Success,
+        Faulted,
         Return,
         Continue,
         Break,

@@ -22,8 +22,7 @@ namespace DaJet.Scripting.Host
         }
         [JsonIgnore] public static ScriptSettings Default { get; }
         [JsonPropertyName("name")] public string Name { get; set; } = string.Empty;
-        [JsonPropertyName("mode")] public RunMode Mode { get; set; }
-
+        
         public static ScriptSettings Create(in string filePath)
         {
             if (!File.Exists(filePath))

@@ -1,6 +1,7 @@
 <Solution>
   <Project Path="benchmark/benchmark.csproj" Id="75739da3-42b5-4fc8-a0fd-de5eea6c54ff" />
   <Project Path="dajet-compiler/dajet-compiler.csproj" Id="3aee5a39-5c95-476a-a221-72498788b9e4" />
+  <Project Path="dajet-host/dajet-host.csproj" Id="7fafdeb4-7f47-42d2-affc-8d8fe6eb5446" />
   <Project Path="dajet-interpreter/dajet-interpreter.csproj" Id="724ccee2-a46a-471f-8708-f3872298af1d" />
   <Project Path="dajet-scripting/dajet-scripting.csproj" />
   <Project Path="dajet/dajet.csproj" Id="b26d4b8a-8e88-49f9-842b-4cc1292ba4af" />
