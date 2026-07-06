@@ -4,7 +4,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.Unicode;
 
-namespace DaJet.Scripting.Host
+namespace DaJet.Host
 {
     public sealed class ScriptSettings
     {

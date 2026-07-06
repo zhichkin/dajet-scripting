@@ -1,5 +1,4 @@
 ﻿using DaJet.Data;
-using DaJet.Scripting.Host;
 using DaJet.Scripting.Model;
 using DaJet.TypeSystem;
 using Microsoft.Data.SqlClient;

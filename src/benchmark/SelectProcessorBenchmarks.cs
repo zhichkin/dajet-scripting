@@ -2,6 +2,7 @@
 using BenchmarkDotNet.Configs;
 using BenchmarkDotNet.Jobs;
 using DaJet.Data;
+using DaJet.Host;
 using DaJet.Metadata;
 using DaJet.Scripting;
 using DaJet.Scripting.Model;
@@ -35,12 +36,16 @@ namespace benchmark
         private static Interpreter _ms_executor;
         private static Interpreter _pg_executor;
         private static ScriptProcessor _processor;
+        private static DaJetHost _host;
 
         [GlobalSetup]
         public void GlobalSetup()
         {
             MetadataProvider.Add("MS_TEST", DataSourceType.SqlServer, in MS_TEST);
             MetadataProvider.Add("PG_TEST", DataSourceType.PostgreSql, in PG_TEST);
+
+            _host = new DaJetHost();
+            _host.InitializeFromFiles();
 
             string ms_file = Path.Combine(AppContext.BaseDirectory, "scripts", "ms_simple.djs");
             Script ms_script = new ScriptBuilder().FromFile(in ms_file).Build();
@@ -101,6 +106,26 @@ namespace benchmark
         public object PG_Interpreter()
         {
             return _pg_executor.Execute();
+        }
+
+        [Benchmark(Description = "MS Host")]
+        public object MS_Host_Async()
+        {
+            Task<object> task = _host.RunAsync("ms_simple.djs");
+
+            task.Wait();
+
+            return task.Result;
+        }
+
+        [Benchmark(Description = "PG Host")]
+        public object PG_Host_Async()
+        {
+            Task<object> task = _host.RunAsync("pg_simple.djs");
+
+            task.Wait();
+
+            return task.Result;
         }
     }
 }

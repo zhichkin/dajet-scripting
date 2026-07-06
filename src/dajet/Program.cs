@@ -2,7 +2,6 @@
 using DaJet.Json;
 using DaJet.Metadata;
 using DaJet.Scripting;
-using DaJet.Scripting.Host;
 using DaJet.Scripting.Model;
 using DaJet.TypeSystem;
 using System.Reflection;
@@ -63,7 +62,7 @@ namespace DaJet.Host
             MetadataProvider.Add("MS_TEST", DataSourceType.SqlServer, in MS_TEST);
             MetadataProvider.Add("PG_TEST", DataSourceType.PostgreSql, in PG_TEST);
 
-            ScriptHost host = new();
+            DaJetHost host = new();
             host.InitializeFromFiles();
             ExecuteScriptAsync(in host);
             
@@ -80,7 +79,7 @@ namespace DaJet.Host
             Console.WriteLine(source);
             Console.WriteLine("----");
 
-            ExecuteQuery(in source);
+            ExecuteQuery(in host, in source);
 
             //Transpile(in source);
             
@@ -230,7 +229,7 @@ namespace DaJet.Host
                 return JsonSerializer.Deserialize<DataObject>(json, JsonOptions);
             }
         }
-        private static void ExecuteQuery(in string source)
+        private static void ExecuteQuery(in DaJetHost host, in string source)
         {
             //DataObject parameters = new()
             //{
@@ -267,9 +266,21 @@ namespace DaJet.Host
             Console.WriteLine(json);
             Console.WriteLine("---");
 
-            Interpreter interpreter = new(in script);
+            //Interpreter interpreter = new(in script);
 
-            object value = interpreter.Execute(in parameters);
+            //object value = interpreter.Execute(in parameters);
+
+            //object value = host.Run("array/ms_select.djs", in parameters);
+
+            Task<object> task = host.RunAsync("array/ms_select.djs", in parameters);
+
+            task.Wait();
+
+            ScriptStatus status = host.GetStatus(task.Id);
+
+            Console.WriteLine(status.ToString());
+
+            object value = task.Result;
 
             if (value is null)
             {
@@ -287,9 +298,9 @@ namespace DaJet.Host
             Console.WriteLine(json);
         }
 
-        private static void ExecuteScriptAsync(in ScriptHost host)
+        private static void ExecuteScriptAsync(in DaJetHost host)
         {
-            Task<object> task = host.Run("select/simple.djs");
+            Task<object> task = host.RunAsync("select/simple.djs");
 
             //task.Wait();
 

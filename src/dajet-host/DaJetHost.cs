@@ -1,13 +1,13 @@
-﻿using DaJet.Host;
+﻿using DaJet.Scripting;
 using DaJet.Scripting.Model;
 using DaJet.TypeSystem;
 using DaJet.Utilities;
 using System.Collections.Concurrent;
 using System.Text;
 
-namespace DaJet.Scripting.Host
+namespace DaJet.Host
 {
-    public sealed class ScriptHost
+    public sealed class DaJetHost
     {
         private readonly ConcurrentDictionary<string, Script> _scripts = new(StringComparer.OrdinalIgnoreCase);
         private readonly ConcurrentDictionary<string, ScriptSettings> _settings = new(StringComparer.OrdinalIgnoreCase);
@@ -81,27 +81,74 @@ namespace DaJet.Scripting.Host
             return _settings.TryGetValue(key, out entry);
         }
 
-        private readonly ConcurrentDictionary<int, ScriptExecutor> _executors = new();
-        public Task<object> Run(in string key, in DataObject parameters = null, TaskCreationOptions options = TaskCreationOptions.None)
+        private readonly ConcurrentDictionary<int, AsyncExecutor> _executors = new();
+        public object Run(in string key, in DataObject parameters = null)
         {
-            if (_scripts.TryGetValue(key, out Script script))
+            if (!_scripts.TryGetValue(key, out Script script))
             {
-                ScriptExecutor executor = new(in script);
-
-                Task<object> task = executor.ExecuteAsync(in parameters, options);
-
-                _ = _executors.TryAdd(task.Id, executor);
-
-                _ = task.ContinueWith(Remove);
-
-                return task;
+                throw new FileNotFoundException("Script not found", key);
             }
 
-            return null;
+            return Run(in script, in parameters);
         }
+        public object Run(in Script script, in DataObject parameters = null)
+        {
+            Interpreter interpreter = new(in script);
+
+            if (parameters is null)
+            {
+                return interpreter.Execute();
+            }
+            else
+            {
+                return interpreter.Execute(in parameters);
+            }
+        }
+        public Task<object> RunAsync(in string key, in DataObject parameters = null, TaskCreationOptions options = TaskCreationOptions.None)
+        {
+            if (!_scripts.TryGetValue(key, out Script script))
+            {
+                throw new FileNotFoundException("Script not found", key);
+            }
+
+            return RunAsync(in script, in parameters, options);
+        }
+        public Task<object> RunAsync(in Script script, in DataObject parameters = null, TaskCreationOptions options = TaskCreationOptions.None)
+        {
+            AsyncExecutor executor = new(in script);
+
+            Task<object> task = executor.ExecuteAsync(in parameters, options);
+
+            _ = _executors.TryAdd(task.Id, executor);
+
+            _ = task.ContinueWith(Remove);
+
+            return task;
+        }
+        private void Remove(Task<object> task)
+        {
+            Task.Delay(TimeSpan.FromMinutes(1)).Wait(); //FIXME
+
+            if (_executors.TryRemove(task.Id, out AsyncExecutor executor))
+            {
+                executor.Dispose();
+            }
+        }
+        public ScriptStatus Cancel(int taskId)
+        {
+            if (_executors.TryGetValue(taskId, out AsyncExecutor executor))
+            {
+                executor.Cancel();
+
+                return executor.GetStatus();
+            }
+
+            return ScriptStatus.Default;
+        }
+
         public object GetResult(int taskId)
         {
-            if (_executors.TryGetValue(taskId, out ScriptExecutor executor))
+            if (_executors.TryGetValue(taskId, out AsyncExecutor executor))
             {
                 return executor.GetResult();
             }
@@ -110,20 +157,13 @@ namespace DaJet.Scripting.Host
         }
         public ScriptStatus GetStatus(int taskId)
         {
-            if (_executors.TryGetValue(taskId, out ScriptExecutor executor))
+            if (_executors.TryGetValue(taskId, out AsyncExecutor executor))
             {
                 return executor.GetStatus();
             }
 
             return ScriptStatus.Default;
         }
-        private void Remove(Task<object> task)
-        {
-            Task.Delay(TimeSpan.FromMinutes(1)).Wait(); //FIXME
-
-            _ = _executors.TryRemove(task.Id, out _);
-        }
-        
         public List<ScriptStatus> GetExecutingTasks()
         {
             List<ScriptStatus> list = new();

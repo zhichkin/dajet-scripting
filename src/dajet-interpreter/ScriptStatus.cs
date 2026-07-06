@@ -16,7 +16,7 @@
         public long Duration { get; }
         public override string ToString()
         {
-            return $"[{Code}] {Start:yyyy-MM-dd HH:mm:ss:fff} - {Finish:yyyy-MM-dd HH:mm:ss:fff} {{{Duration}}}";
+            return $"[{Code}] {Start:yyyy-MM-dd HH:mm:ss:fff} - {Finish:yyyy-MM-dd HH:mm:ss:fff} {{{Duration} ms}}";
         }
     }
 }

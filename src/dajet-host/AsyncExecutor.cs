@@ -4,7 +4,7 @@ using DaJet.TypeSystem;
 
 namespace DaJet.Host
 {
-    public sealed class ScriptExecutor : IDisposable, IAsyncDisposable
+    internal sealed class AsyncExecutor : IDisposable, IAsyncDisposable
     {
         private int _state;
         private const int STATE_IS_READY = 0;
@@ -20,7 +20,7 @@ namespace DaJet.Host
         private CancellationTokenRegistration _ctr;
 
         private readonly Interpreter _interpreter;
-        public ScriptExecutor(in Script script)
+        internal AsyncExecutor(in Script script)
         {
             _interpreter = new Interpreter(in script);
         }
@@ -39,7 +39,7 @@ namespace DaJet.Host
                 _interpreter.SetParameters(in parameters);
             }
         }
-        public Task<object> ExecuteAsync(in DataObject parameters = null, TaskCreationOptions options = TaskCreationOptions.None)
+        internal Task<object> ExecuteAsync(in DataObject parameters = null, TaskCreationOptions options = TaskCreationOptions.None)
         {
             if (!CanExecute)
             {
@@ -59,20 +59,20 @@ namespace DaJet.Host
             
             return _task;
         }
-        public ScriptStatus GetStatus()
+        internal ScriptStatus GetStatus()
         {
             return _interpreter.Status;
         }
-        public object GetResult()
+        internal object GetResult()
         {
             return _task?.Result;
         }
-        public void Cancel() { Dispose(); }
+        internal void Cancel() { Dispose(); }
         private void CancellationHandler()
         {
             _interpreter.Cancel();
         }
-        public void Dispose()
+        internal void Dispose()
         {
             if (CanDispose)
             {
@@ -90,7 +90,8 @@ namespace DaJet.Host
                 SetReady(); // instances of this class can be reused
             }
         }
-        public ValueTask DisposeAsync()
+        void IDisposable.Dispose() { Dispose(); }
+        ValueTask IAsyncDisposable.DisposeAsync()
         {
             try
             {

@@ -1,7 +1,7 @@
 ﻿using DaJet.Data;
 using DaJet.Scripting.Model;
 
-namespace DaJet.Scripting.Host
+namespace DaJet.Scripting
 {
     public abstract class ScriptContext
     {
