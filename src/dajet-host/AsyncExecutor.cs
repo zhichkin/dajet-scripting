@@ -59,14 +59,6 @@ namespace DaJet.Host
             
             return _task;
         }
-        internal ScriptStatus GetStatus()
-        {
-            return _interpreter.Status;
-        }
-        internal object GetResult()
-        {
-            return _task?.Result;
-        }
         internal void Cancel() { Dispose(); }
         private void CancellationHandler()
         {

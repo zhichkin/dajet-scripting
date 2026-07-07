@@ -2,7 +2,6 @@
 using DaJet.Metadata;
 using DaJet.Scripting.Model;
 using DaJet.TypeSystem;
-using System.Diagnostics;
 
 namespace DaJet.Scripting
 {
@@ -16,12 +15,6 @@ namespace DaJet.Scripting
 
         private object _returnValue = null; // output value
         private Dictionary<string, object> _parameters = new(); // input parameters
-
-        private ExitCode _exit;
-        private DateTime _start;
-        private long _timestamp1;
-        private long _timestamp2;
-
         public Interpreter(in Script script)
         {
             ArgumentNullException.ThrowIfNull(script, nameof(script));
@@ -29,19 +22,6 @@ namespace DaJet.Scripting
             _script = script;
 
             _context = new ExpressionInterpreter(in _data);
-        }
-        public ScriptStatus Status
-        {
-            get
-            {
-                long duration = _timestamp2 == 0L ?_timestamp2 : _timestamp2 - _timestamp1;
-
-                duration = duration == 0L ? duration : duration / TimeSpan.TicksPerMillisecond;
-
-                DateTime finish = duration == 0L ? DateTime.MinValue : _start.AddMilliseconds(duration);
-
-                return new ScriptStatus(_exit, _start, finish, duration);
-            }
         }
         public void Cancel() { Dispose(); }
         private void Dispose()
@@ -141,13 +121,9 @@ namespace DaJet.Scripting
 
         public object Execute()
         {
-            _exit = ExitCode.Running;
-            _start = DateTime.UtcNow;
-            _timestamp1 = Stopwatch.GetTimestamp();
-
             object value = null;
 
-            ExitCode code = ExitCode.None;
+            ExitCode code;
 
             try
             {
@@ -165,6 +141,10 @@ namespace DaJet.Scripting
                     }
                 }
             }
+            catch (OperationCanceledException)
+            {
+                code = ExitCode.Cancel; throw;
+            }
             catch
             {
                 code = ExitCode.Faulted; throw;
@@ -173,10 +153,6 @@ namespace DaJet.Scripting
             {
                 Dispose();
             }
-
-            _exit = code;
-
-            _timestamp2 = Stopwatch.GetTimestamp();
 
             return value;
         }

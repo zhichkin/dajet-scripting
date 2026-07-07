@@ -76,9 +76,13 @@ namespace DaJet.Host
             }
         }
 
-        public bool TryGet(in string key, out ScriptSettings entry)
+        public bool TryGet(in string key, out Script script)
         {
-            return _settings.TryGetValue(key, out entry);
+            return _scripts.TryGetValue(key, out script);
+        }
+        public bool TryGet(in string key, out ScriptSettings settings)
+        {
+            return _settings.TryGetValue(key, out settings);
         }
 
         private readonly ConcurrentDictionary<int, AsyncExecutor> _executors = new();
@@ -121,63 +125,23 @@ namespace DaJet.Host
 
             _ = _executors.TryAdd(task.Id, executor);
 
-            _ = task.ContinueWith(Remove);
+            _ = task.ContinueWith(DisposeExecutor);
 
             return task;
         }
-        private void Remove(Task<object> task)
+        private void DisposeExecutor(Task<object> task)
         {
-            Task.Delay(TimeSpan.FromMinutes(1)).Wait(); //FIXME
-
             if (_executors.TryRemove(task.Id, out AsyncExecutor executor))
             {
                 executor.Dispose();
             }
         }
-        public ScriptStatus Cancel(int taskId)
+        public void Cancel(int task)
         {
-            if (_executors.TryGetValue(taskId, out AsyncExecutor executor))
+            if (_executors.TryRemove(task, out AsyncExecutor executor))
             {
                 executor.Cancel();
-
-                return executor.GetStatus();
             }
-
-            return ScriptStatus.Default;
-        }
-
-        public object GetResult(int taskId)
-        {
-            if (_executors.TryGetValue(taskId, out AsyncExecutor executor))
-            {
-                return executor.GetResult();
-            }
-
-            return null;
-        }
-        public ScriptStatus GetStatus(int taskId)
-        {
-            if (_executors.TryGetValue(taskId, out AsyncExecutor executor))
-            {
-                return executor.GetStatus();
-            }
-
-            return ScriptStatus.Default;
-        }
-        public List<ScriptStatus> GetExecutingTasks()
-        {
-            List<ScriptStatus> list = new();
-
-            ScriptStatus status;
-
-            foreach (var item in _executors)
-            {
-                status = item.Value.GetStatus();
-
-                list.Add(status);
-            }
-
-            return list;
         }
     }
 }

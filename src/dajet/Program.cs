@@ -65,32 +65,10 @@ namespace DaJet.Host
             DaJetHost host = new();
             host.InitializeFromFiles();
             ExecuteScriptAsync(in host);
-            
-            string source;
-            string scriptPath = "array\\ms_select.djs";
-            string filePath = Path.Combine(AppContext.BaseDirectory, "scripts", scriptPath);
 
-            using (StreamReader reader = new(filePath, Encoding.UTF8))
-            {
-                source = reader.ReadToEnd();
-            }
+            //ExecuteScriptSync(in host);
 
-            Console.WriteLine(filePath);
-            Console.WriteLine(source);
-            Console.WriteLine("----");
-
-            ExecuteQuery(in host, in source);
-
-            //Transpile(in source);
-            
-            //CompileAndRun(in source);
-
-            //for (int i = 0; i < 1000; i++)
-            //{
-            //    ProfileCompiler(in source);
-            //}
-
-            //ExecuteRunner();
+            Thread.Sleep(TimeSpan.FromSeconds(3));
         }
         private static void ExecuteRunner()
         {
@@ -229,22 +207,20 @@ namespace DaJet.Host
                 return JsonSerializer.Deserialize<DataObject>(json, JsonOptions);
             }
         }
-        private static void ExecuteQuery(in DaJetHost host, in string source)
+        private static void ExecuteScriptSync(in DaJetHost host)
         {
-            //DataObject parameters = new()
-            //{
-            //    { "Булево", true },
-            //    { "ЦелоеЧисло", 12345 },
-            //    { "БольшоеЧисло", 12345L },
-            //    { "ДесятичноеЧисло", 12.34M },
-            //    { "ДатаВремя", DateTime.Now },
-            //    { "Строка", "000000002" },
-            //    { "ДвоичноеЧисло", Convert.FromBase64String("DEADBEEF") },
-            //    { "Идентификатор", new Guid("41F517C5-BC81-45E6-A9E8-7A2C8F573117") },
-            //    { "ПустаяСсылка", Entity.Undefined }
-            //};
+            string source;
+            string scriptPath = "array\\ms_select.djs";
+            string filePath = Path.Combine(AppContext.BaseDirectory, "scripts", scriptPath);
 
-            //parameters = GetParametersFromJson();
+            using (StreamReader reader = new(filePath, Encoding.UTF8))
+            {
+                source = reader.ReadToEnd();
+            }
+
+            Console.WriteLine(filePath);
+            Console.WriteLine(source);
+            Console.WriteLine("----");
 
             string json;
 
@@ -265,22 +241,8 @@ namespace DaJet.Host
             json = JsonSerializer.Serialize(output, JsonOptions);
             Console.WriteLine(json);
             Console.WriteLine("---");
-
-            //Interpreter interpreter = new(in script);
-
-            //object value = interpreter.Execute(in parameters);
-
-            //object value = host.Run("array/ms_select.djs", in parameters);
-
-            Task<object> task = host.RunAsync("array/ms_select.djs", in parameters);
-
-            task.Wait();
-
-            ScriptStatus status = host.GetStatus(task.Id);
-
-            Console.WriteLine(status.ToString());
-
-            object value = task.Result;
+            
+            object value = host.Run("array/ms_select.djs", in parameters);
 
             if (value is null)
             {
@@ -301,30 +263,44 @@ namespace DaJet.Host
         private static void ExecuteScriptAsync(in DaJetHost host)
         {
             Task<object> task = host.RunAsync("select/simple.djs");
+            
+            _ = task.ContinueWith(ShowAsyncResult);
+            
+            //host.Cancel(task.Id);
 
             //task.Wait();
 
-            List<ScriptStatus> monitor = host.GetExecutingTasks();
+            //object value = task.Result;
 
-            foreach (ScriptStatus status in monitor)
+            //string json = JsonSerializer.Serialize(value, value.GetType(), JsonOptions);
+
+            //Console.WriteLine(json);
+        }
+        private static void ShowAsyncResult(Task<object> task)
+        {
+            if (task.IsCompletedSuccessfully)
             {
-                Console.WriteLine(status);
+                object value = task.Result;
+
+                if (value is not null)
+                {
+                    string json = JsonSerializer.Serialize(value, value.GetType(), JsonOptions);
+
+                    Console.WriteLine(json);
+                }
+                else
+                {
+                    Console.WriteLine($"Task [{task.Id}] returned null value.");
+                }
             }
-
-            task.Wait();
-
-            monitor = host.GetExecutingTasks();
-
-            foreach (ScriptStatus status in monitor)
+            else if (task.IsCanceled)
             {
-                Console.WriteLine(status);
+                Console.WriteLine($"Task [{task.Id}] is canceled.");
             }
-
-            object value = host.GetResult(task.Id); // get result by name ?
-
-            string json = JsonSerializer.Serialize(value, value.GetType(), JsonOptions);
-
-            Console.WriteLine(json);
+            else
+            {
+                Console.WriteLine($"Task [{task.Id}] is faulted: {task.Exception?.Message}");
+            }
         }
     }
 }
