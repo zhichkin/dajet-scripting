@@ -21,8 +21,6 @@ namespace DaJet.Host
             JsonOptions.Converters.Add(new JsonStringEnumConverter(JsonNamingPolicy.CamelCase));
         }
         [JsonIgnore] public static ScriptSettings Default { get; }
-        [JsonPropertyName("name")] public string Name { get; set; } = string.Empty;
-        
         public static ScriptSettings Create(in string filePath)
         {
             if (!File.Exists(filePath))
@@ -50,5 +48,10 @@ namespace DaJet.Host
 
             return settings;
         }
+        
+        [JsonPropertyName("name")] public string Name { get; set; } = string.Empty;
+        [JsonPropertyName("service")] public bool Service { get; set; } // Call, Auto
+        [JsonPropertyName("durable")] public bool Durable { get; set; } // long running
+        [JsonPropertyName("singleton")] public bool Singleton { get; set; } // only one at a time
     }
 }

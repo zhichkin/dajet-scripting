@@ -44,8 +44,7 @@ namespace benchmark
             MetadataProvider.Add("MS_TEST", DataSourceType.SqlServer, in MS_TEST);
             MetadataProvider.Add("PG_TEST", DataSourceType.PostgreSql, in PG_TEST);
 
-            _host = new DaJetHost();
-            _host.InitializeFromFiles();
+            _host = DaJetHost.Create("scritps");
 
             string ms_file = Path.Combine(AppContext.BaseDirectory, "scripts", "ms_simple.djs");
             Script ms_script = new ScriptBuilder().FromFile(in ms_file).Build();
