@@ -26,6 +26,22 @@ namespace DaJet.Host
         public DaJetHost(in string catalog) { RootName = catalog; }
         public string RootName { get; } = "scripts";
         public string RootPath { get { return Path.Combine(AppContext.BaseDirectory, RootName); } }
+        private string GetKeyFromFileName(in string fullPath)
+        {
+            string relativePath = Path.GetRelativePath(RootPath, fullPath);
+
+            if (OperatingSystem.IsWindows())
+            {
+                relativePath = relativePath.Replace('\\', '/');
+            }
+
+            if (relativePath.StartsWith('/'))
+            {
+                relativePath = relativePath.TrimStart('/');
+            }
+
+            return relativePath;
+        }
 
         private Channel<FileSystemEventArgs> _events;
         private CancellationToken _cancellationToken;
@@ -41,15 +57,20 @@ namespace DaJet.Host
 
             return this;
         }
+        public DaJetHost Run(CancellationToken cancellationToken)
+        {
+            _cancellationToken = cancellationToken; return Run();
+        }
 
         #region "FILE SYSTEM WATCHER"
+        private static readonly ScriptBuilder _builder = new();
         private bool TryInitializeFileSystemWatcher()
         {
             bool success = false;
 
             try
             {
-                _fileSystemWatcher = new FileSystemWatcher(RootPath, string.Empty)
+                _fileSystemWatcher = new FileSystemWatcher(RootPath, "*.djs")
                 {
                     InternalBufferSize = 65536,
                     IncludeSubdirectories = true,
@@ -80,6 +101,8 @@ namespace DaJet.Host
             {
                 DisposeFileSystemWatcher();
             }
+
+            FileLogger.Default.Write("File system watcher initialized successfully");
 
             return success;
         }
@@ -151,7 +174,7 @@ namespace DaJet.Host
 
                 try
                 {
-                    FileLogger.Default.Write($"Script catalog watcher delay 30 seconds ...");
+                    FileLogger.Default.Write($"File system watcher delay 30 seconds ...");
 
                     await Task.Delay(TimeSpan.FromSeconds(30), _cancellationToken);
                 }
@@ -163,12 +186,8 @@ namespace DaJet.Host
         }
         private async ValueTask ProcessScriptCatalogEvents()
         {
-            FileLogger.Default.Write("Waiting for file system events ...");
-
             while (await _events.Reader.WaitToReadAsync(_cancellationToken))
             {
-                FileLogger.Default.Write("Processing file system events ...");
-
                 while (_events.Reader.TryRead(out FileSystemEventArgs _event))
                 {
                     if (_cancellationToken.IsCancellationRequested)
@@ -178,23 +197,126 @@ namespace DaJet.Host
 
                     if (_event.ChangeType == WatcherChangeTypes.Created)
                     {
-                        FileLogger.Default.Write($"Created: {_event.FullPath}");
+                        CreateFileEvent(in _event);
                     }
                     else if (_event.ChangeType == WatcherChangeTypes.Changed)
                     {
-                        FileLogger.Default.Write($"Changed: {_event.FullPath}");
+                        ChangeFileEvent(in _event);
                     }
                     else if (_event.ChangeType == WatcherChangeTypes.Deleted)
                     {
-                        FileLogger.Default.Write($"Deleted: {_event.FullPath}");
+                        DeleteFileEvent(in _event);
                     }
                     else if (_event.ChangeType == WatcherChangeTypes.Renamed)
                     {
-                        FileLogger.Default.Write($"Renamed: {_event.FullPath}");
+                        RenameFileEvent(in _event);
                     }
-
-                    FileLogger.Default.Write($"Processed {_event.FullPath} successfully");
                 }
+            }
+        }
+        private void CreateFileEvent(in FileSystemEventArgs _event)
+        {
+            if (!File.Exists(_event.FullPath))
+            {
+                return;
+            }
+
+            if (Path.GetExtension(_event.FullPath) != ".djs")
+            {
+                return;
+            }
+
+            string keyToCreate = GetKeyFromFileName(_event.FullPath);
+
+            try
+            {
+                Script script = _builder.FromFile(_event.FullPath).Build();
+
+                AddOrUpdate(in keyToCreate, in script);
+
+                FileLogger.Default.Write($"Created: {keyToCreate}");
+            }
+            catch (Exception error)
+            {
+                FileLogger.Default.Write($"Created: failed to process {keyToCreate}");
+                FileLogger.Default.Write(ExceptionHelper.GetErrorMessage(error));
+            }
+        }
+        private void ChangeFileEvent(in FileSystemEventArgs _event)
+        {
+            if (!File.Exists(_event.FullPath))
+            {
+                return;
+            }
+
+            if (Path.GetExtension(_event.FullPath) != ".djs")
+            {
+                return;
+            }
+
+            string keyToUpdate = GetKeyFromFileName(_event.FullPath);
+
+            try
+            {
+                Script script = _builder.FromFile(_event.FullPath).Build();
+
+                AddOrUpdate(in keyToUpdate, in script);
+
+                FileLogger.Default.Write($"Changed: {keyToUpdate}");
+            }
+            catch (Exception error)
+            {
+                FileLogger.Default.Write($"Changed: failed to process {keyToUpdate}");
+                FileLogger.Default.Write(ExceptionHelper.GetErrorMessage(error));
+            }
+        }
+        private void DeleteFileEvent(in FileSystemEventArgs _event)
+        {
+            if (Path.GetExtension(_event.FullPath) != ".djs")
+            {
+                return;
+            }
+
+            string keyToDelete = GetKeyFromFileName(_event.FullPath);
+
+            _ = _scripts.TryRemove(keyToDelete, out _);
+
+            FileLogger.Default.Write($"Deleted: {keyToDelete}");
+        }
+        private void RenameFileEvent(in FileSystemEventArgs _event)
+        {
+            if (_event is not RenamedEventArgs renamed)
+            {
+                return;
+            }
+
+            if (!File.Exists(renamed.FullPath))
+            {
+                return;
+            }
+
+            if (Path.GetExtension(renamed.FullPath) != ".djs")
+            {
+                return;
+            }
+
+            string keyToCreate = GetKeyFromFileName(renamed.FullPath);
+            string keyToRemove = GetKeyFromFileName(renamed.OldFullPath);
+            
+            try
+            {
+                Script script = _builder.FromFile(renamed.FullPath).Build();
+
+                _ = _scripts.TryRemove(keyToRemove, out _);
+
+                AddOrUpdate(in keyToCreate, in script);
+
+                FileLogger.Default.Write($"Renamed: {keyToRemove} > {keyToCreate}");
+            }
+            catch (Exception error)
+            {
+                FileLogger.Default.Write($"Renamed: failed to process {keyToRemove}");
+                FileLogger.Default.Write(ExceptionHelper.GetErrorMessage(error));
             }
         }
         #endregion
@@ -313,7 +435,7 @@ namespace DaJet.Host
 
             return script;
         }
-        public Script AddOrUpdate(in string key)
+        public void AddOrUpdate(in string key, in Script script)
         {
             bool locked = false;
 
@@ -321,14 +443,10 @@ namespace DaJet.Host
             {
                 Monitor.Enter(_cache_lock, ref locked);
 
-                Script script = CreateScript(in key);
-
                 if (!_scripts.TryAdd(key, script))
                 {
                     _scripts[key] = script;
                 }
-
-                return script;
             }
             finally
             {

@@ -52,6 +52,7 @@ namespace DaJet.Host
         [JsonPropertyName("name")] public string Name { get; set; } = string.Empty;
         [JsonPropertyName("service")] public bool Service { get; set; } // Call, Auto
         [JsonPropertyName("durable")] public bool Durable { get; set; } // long running
+        [JsonPropertyName("logger")] public bool Logger { get; set; } // has own private log
         [JsonPropertyName("singleton")] public bool Singleton { get; set; } // only one at a time
     }
 }

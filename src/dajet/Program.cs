@@ -70,6 +70,11 @@ namespace DaJet.Host
 
             Console.WriteLine("Press any key to continue ...");
             ConsoleKeyInfo key = Console.ReadKey(false);
+
+            if (key.KeyChar == 'r')
+            {
+                ExecuteScriptAsync(in host);
+            }
         }
         private static void ExecuteRunner()
         {
