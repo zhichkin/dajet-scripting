@@ -4,7 +4,7 @@ using DaJet.TypeSystem;
 
 namespace DaJet.Host
 {
-    internal sealed class AsyncExecutor : IDisposable, IAsyncDisposable
+    public sealed class AsyncExecutor : IDisposable, IAsyncDisposable
     {
         private int _state;
         private const int STATE_IS_READY = 0;
@@ -20,7 +20,7 @@ namespace DaJet.Host
         private CancellationTokenRegistration _ctr;
 
         private readonly Interpreter _interpreter;
-        internal AsyncExecutor(in Script script)
+        public AsyncExecutor(in Script script)
         {
             _interpreter = new Interpreter(in script);
         }
@@ -39,7 +39,21 @@ namespace DaJet.Host
                 _interpreter.SetParameters(in parameters);
             }
         }
-        internal Task<object> ExecuteAsync(in DataObject parameters = null, TaskCreationOptions options = TaskCreationOptions.None)
+
+        public Task<object> ExecuteAsync()
+        {
+            if (!CanExecute)
+            {
+                return null;
+            }
+
+            Configure();
+
+            _task = Task.Factory.StartNew(_interpreter.Execute, _token);
+
+            return _task;
+        }
+        public Task<object> ExecuteAsync(in DataObject parameters)
         {
             if (!CanExecute)
             {
@@ -48,23 +62,43 @@ namespace DaJet.Host
 
             Configure(in parameters);
 
-            if (options == TaskCreationOptions.None)
-            {
-                _task = Task.Factory.StartNew(_interpreter.Execute, _token);
-            }
-            else
-            {
-                _task = Task.Factory.StartNew(_interpreter.Execute, _token, options, TaskScheduler.Default);
-            }
-            
+            _task = Task.Factory.StartNew(_interpreter.Execute, _token);
+
             return _task;
         }
-        internal void Cancel() { Dispose(); }
+        public Task<object> ExecuteAsync(TaskCreationOptions options)
+        {
+            if (!CanExecute)
+            {
+                return null;
+            }
+
+            Configure();
+
+            _task = Task.Factory.StartNew(_interpreter.Execute, _token, options, TaskScheduler.Default);
+
+            return _task;
+        }
+        public Task<object> ExecuteAsync(in DataObject parameters, TaskCreationOptions options)
+        {
+            if (!CanExecute)
+            {
+                return null;
+            }
+
+            Configure(in parameters);
+
+            _task = Task.Factory.StartNew(_interpreter.Execute, _token, options, TaskScheduler.Default);
+
+            return _task;
+        }
+
+        public void Cancel() { Dispose(); }
         private void CancellationHandler()
         {
             _interpreter.Cancel();
         }
-        internal void Dispose()
+        public void Dispose()
         {
             if (CanDispose)
             {

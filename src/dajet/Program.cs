@@ -66,6 +66,8 @@ namespace DaJet.Host
 
             ExecuteScriptAsync(in host);
 
+            ExecuteLongRunningScriptAsync(in host);
+
             //ExecuteScriptSync(in host);
 
             Console.WriteLine("Press any key to continue ...");
@@ -269,6 +271,30 @@ namespace DaJet.Host
         private static void ExecuteScriptAsync(in DaJetHost host)
         {
             Task<object> task = host.RunAsync("select/simple.djs");
+
+            Task show = task.ContinueWith(ShowAsyncResult);
+
+            //host.Cancel(task.Id);
+
+            show.Wait();
+
+            //object value = task.Result;
+
+            //string json = JsonSerializer.Serialize(value, value.GetType(), JsonOptions);
+
+            //Console.WriteLine(json);
+        }
+        private static void ExecuteLongRunningScriptAsync(in DaJetHost host)
+        {
+            if (!host.TryGetOrCreate("select/simple.djs", out Script script, out string error))
+            {
+                Console.WriteLine(error); return;
+            }
+
+            DataObject parameters = new();
+            parameters.SetValue("Код", "MS-01");
+
+            Task<object> task = host.RunLongTask(in script, in parameters);
 
             Task show = task.ContinueWith(ShowAsyncResult);
 

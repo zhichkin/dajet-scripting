@@ -4,7 +4,6 @@ using DaJet.TypeSystem;
 using DaJet.Utilities;
 using System.Collections.Concurrent;
 using System.Text;
-using System.Threading.Channels;
 
 namespace DaJet.Host
 {
@@ -18,10 +17,10 @@ namespace DaJet.Host
         {
             return new DaJetHost(in catalog);
         }
+        private static readonly ScriptBuilder _builder = new();
 
         private readonly object _cache_lock = new();
         private readonly ConcurrentDictionary<string, Script> _scripts = new(StringComparer.OrdinalIgnoreCase);
-        private readonly ConcurrentDictionary<string, ScriptSettings> _settings = new(StringComparer.OrdinalIgnoreCase);
         public DaJetHost() { }
         public DaJetHost(in string catalog) { RootName = catalog; }
         public string RootName { get; } = "scripts";
@@ -43,34 +42,22 @@ namespace DaJet.Host
             return relativePath;
         }
 
-        private Channel<FileSystemEventArgs> _events;
-        private CancellationToken _cancellationToken;
-        private FileSystemWatcher _fileSystemWatcher;
+        private FileSystemWatcher _scriptFileWatcher;
         public DaJetHost Run()
         {
-            if (TryInitializeFileSystemWatcher())
-            {
-                _events = Channel.CreateBounded<FileSystemEventArgs>(128);
-
-                _ = Task.Factory.StartNew(ObserveScriptCatalog, TaskCreationOptions.LongRunning);
-            }
+            InitializeScriptFileWatcher();
 
             return this;
         }
-        public DaJetHost Run(CancellationToken cancellationToken)
-        {
-            _cancellationToken = cancellationToken; return Run();
-        }
 
-        #region "FILE SYSTEM WATCHER"
-        private static readonly ScriptBuilder _builder = new();
-        private bool TryInitializeFileSystemWatcher()
+        #region "SCRIPT FILE WATCHER"
+        private void InitializeScriptFileWatcher()
         {
             bool success = false;
 
             try
             {
-                _fileSystemWatcher = new FileSystemWatcher(RootPath, "*.djs")
+                _scriptFileWatcher = new FileSystemWatcher(RootPath, "*.djs")
                 {
                     InternalBufferSize = 65536,
                     IncludeSubdirectories = true,
@@ -79,12 +66,12 @@ namespace DaJet.Host
                     | NotifyFilters.LastWrite
                     | NotifyFilters.FileName
                 };
-                _fileSystemWatcher.Created += FileSystemEvent;
-                _fileSystemWatcher.Changed += FileSystemEvent;
-                _fileSystemWatcher.Deleted += FileSystemEvent;
-                _fileSystemWatcher.Renamed += FileSystemEvent;
-                _fileSystemWatcher.Error += ResetFileSystemWatcher;
-                _fileSystemWatcher.EnableRaisingEvents = true;
+                _scriptFileWatcher.Created += CreateScriptFileEvent;
+                _scriptFileWatcher.Changed += ChangeScriptFileEvent;
+                _scriptFileWatcher.Deleted += DeleteScriptFileEvent;
+                _scriptFileWatcher.Renamed += RenameScriptFileEvent;
+                _scriptFileWatcher.Error += ResetScriptFileWatcher;
+                _scriptFileWatcher.EnableRaisingEvents = true;
 
                 success = true;
             }
@@ -99,25 +86,23 @@ namespace DaJet.Host
 
             if (!success)
             {
-                DisposeFileSystemWatcher();
+                DisposeScriptFileWatcher();
             }
 
-            FileLogger.Default.Write("File system watcher initialized successfully");
-
-            return success;
+            FileLogger.Default.Write($"Script file watcher initialized on {RootName}");
         }
-        private void DisposeFileSystemWatcher()
+        private void DisposeScriptFileWatcher()
         {
             try
             {
-                if (_fileSystemWatcher is not null)
+                if (_scriptFileWatcher is not null)
                 {
-                    _fileSystemWatcher.Created -= FileSystemEvent;
-                    _fileSystemWatcher.Changed -= FileSystemEvent;
-                    _fileSystemWatcher.Deleted -= FileSystemEvent;
-                    _fileSystemWatcher.Renamed -= FileSystemEvent;
-                    _fileSystemWatcher.Error -= ResetFileSystemWatcher;
-                    _fileSystemWatcher.Dispose();
+                    _scriptFileWatcher.Created -= CreateScriptFileEvent;
+                    _scriptFileWatcher.Changed -= ChangeScriptFileEvent;
+                    _scriptFileWatcher.Deleted -= DeleteScriptFileEvent;
+                    _scriptFileWatcher.Renamed -= RenameScriptFileEvent;
+                    _scriptFileWatcher.Error -= ResetScriptFileWatcher;
+                    _scriptFileWatcher.Dispose();
                 }
             }
             catch (Exception error)
@@ -126,12 +111,12 @@ namespace DaJet.Host
             }
             finally
             {
-                _fileSystemWatcher = null;
+                _scriptFileWatcher = null;
             }
         }
-        private void ResetFileSystemWatcher(object sender, ErrorEventArgs args)
+        private void ResetScriptFileWatcher(object sender, ErrorEventArgs args)
         {
-            FileLogger.Default.Write("Trying to reset file system watcher ...");
+            FileLogger.Default.Write("Trying to reset script file watcher ...");
 
             Exception error = args.GetException();
 
@@ -144,93 +129,22 @@ namespace DaJet.Host
                 FileLogger.Default.Write("Reason: undefined");
             }
             
-            DisposeFileSystemWatcher();
+            DisposeScriptFileWatcher();
 
-            if (TryInitializeFileSystemWatcher())
-            {
-                FileLogger.Default.Write("File system watcher is reset successfully.");
-            }
-            else
-            {
-                FileLogger.Default.Write("Failed to reset file system watcher.");
-            }
+            InitializeScriptFileWatcher();
         }
-        private void FileSystemEvent(object sender, FileSystemEventArgs args)
+        private void CreateScriptFileEvent(object sender, FileSystemEventArgs args)
         {
-            _ = _events.Writer.TryWrite(args);
-        }
-        private async Task ObserveScriptCatalog()
-        {
-            while (!_cancellationToken.IsCancellationRequested)
-            {
-                try
-                {
-                    await ProcessScriptCatalogEvents();
-                }
-                catch (Exception error)
-                {
-                    FileLogger.Default.Write(ExceptionHelper.GetErrorMessageAndStackTrace(error));
-                }
-
-                try
-                {
-                    FileLogger.Default.Write($"File system watcher delay 30 seconds ...");
-
-                    await Task.Delay(TimeSpan.FromSeconds(30), _cancellationToken);
-                }
-                catch // (OperationCanceledException)
-                {
-                    // do nothing - host shutdown requested
-                }
-            }
-        }
-        private async ValueTask ProcessScriptCatalogEvents()
-        {
-            while (await _events.Reader.WaitToReadAsync(_cancellationToken))
-            {
-                while (_events.Reader.TryRead(out FileSystemEventArgs _event))
-                {
-                    if (_cancellationToken.IsCancellationRequested)
-                    {
-                        return; // Сервис остановлен принудительно
-                    }
-
-                    if (_event.ChangeType == WatcherChangeTypes.Created)
-                    {
-                        CreateFileEvent(in _event);
-                    }
-                    else if (_event.ChangeType == WatcherChangeTypes.Changed)
-                    {
-                        ChangeFileEvent(in _event);
-                    }
-                    else if (_event.ChangeType == WatcherChangeTypes.Deleted)
-                    {
-                        DeleteFileEvent(in _event);
-                    }
-                    else if (_event.ChangeType == WatcherChangeTypes.Renamed)
-                    {
-                        RenameFileEvent(in _event);
-                    }
-                }
-            }
-        }
-        private void CreateFileEvent(in FileSystemEventArgs _event)
-        {
-            if (!File.Exists(_event.FullPath))
+            if (!File.Exists(args.FullPath))
             {
                 return;
             }
 
-            if (Path.GetExtension(_event.FullPath) != ".djs")
-            {
-                return;
-            }
-
-            string keyToCreate = GetKeyFromFileName(_event.FullPath);
+            string keyToCreate = GetKeyFromFileName(args.FullPath);
 
             try
             {
-                Script script = _builder.FromFile(_event.FullPath).Build();
+                Script script = CreateScriptFromFile(args.FullPath);
 
                 AddOrUpdate(in keyToCreate, in script);
 
@@ -242,23 +156,18 @@ namespace DaJet.Host
                 FileLogger.Default.Write(ExceptionHelper.GetErrorMessage(error));
             }
         }
-        private void ChangeFileEvent(in FileSystemEventArgs _event)
+        private void ChangeScriptFileEvent(object sender, FileSystemEventArgs args)
         {
-            if (!File.Exists(_event.FullPath))
+            if (!File.Exists(args.FullPath))
             {
                 return;
             }
 
-            if (Path.GetExtension(_event.FullPath) != ".djs")
-            {
-                return;
-            }
-
-            string keyToUpdate = GetKeyFromFileName(_event.FullPath);
+            string keyToUpdate = GetKeyFromFileName(args.FullPath);
 
             try
             {
-                Script script = _builder.FromFile(_event.FullPath).Build();
+                Script script = CreateScriptFromFile(args.FullPath);
 
                 AddOrUpdate(in keyToUpdate, in script);
 
@@ -270,22 +179,17 @@ namespace DaJet.Host
                 FileLogger.Default.Write(ExceptionHelper.GetErrorMessage(error));
             }
         }
-        private void DeleteFileEvent(in FileSystemEventArgs _event)
+        private void DeleteScriptFileEvent(object sender, FileSystemEventArgs args)
         {
-            if (Path.GetExtension(_event.FullPath) != ".djs")
-            {
-                return;
-            }
-
-            string keyToDelete = GetKeyFromFileName(_event.FullPath);
+            string keyToDelete = GetKeyFromFileName(args.FullPath);
 
             _ = _scripts.TryRemove(keyToDelete, out _);
 
             FileLogger.Default.Write($"Deleted: {keyToDelete}");
         }
-        private void RenameFileEvent(in FileSystemEventArgs _event)
+        private void RenameScriptFileEvent(object sender, FileSystemEventArgs args)
         {
-            if (_event is not RenamedEventArgs renamed)
+            if (args is not RenamedEventArgs renamed)
             {
                 return;
             }
@@ -295,17 +199,12 @@ namespace DaJet.Host
                 return;
             }
 
-            if (Path.GetExtension(renamed.FullPath) != ".djs")
-            {
-                return;
-            }
-
             string keyToCreate = GetKeyFromFileName(renamed.FullPath);
             string keyToRemove = GetKeyFromFileName(renamed.OldFullPath);
             
             try
             {
-                Script script = _builder.FromFile(renamed.FullPath).Build();
+                Script script = CreateScriptFromFile(args.FullPath);
 
                 _ = _scripts.TryRemove(keyToRemove, out _);
 
@@ -344,14 +243,8 @@ namespace DaJet.Host
         }
         private void InitializeScript(in string scriptPath)
         {
-            string fileName = Path.GetFileName(scriptPath);
-
-            string settingsPath = Path.ChangeExtension(scriptPath, "json");
-
             try
             {
-                ScriptSettings entry = ScriptSettings.Create(in settingsPath);
-
                 string sourceCode = null;
 
                 using (StreamReader reader = new(scriptPath, Encoding.UTF8))
@@ -359,47 +252,30 @@ namespace DaJet.Host
                     sourceCode = reader.ReadToEnd();
                 }
 
-                string relativePath = Path.GetRelativePath(RootPath, scriptPath);
+                string key = GetKeyFromFileName(in scriptPath);
 
-                if (OperatingSystem.IsWindows())
-                {
-                    relativePath = relativePath.Replace('\\', '/');
+                Script script = _builder.FromSource(in sourceCode).Build();
 
-                    if (relativePath.StartsWith('/'))
-                    {
-                        relativePath = relativePath.TrimStart('/');
-                    }
-                }
-
-                Script script = new ScriptBuilder().FromSource(in sourceCode).Build();
-
-                _scripts.TryAdd(relativePath, script);
-
-                _settings.TryAdd(relativePath, entry);
+                _scripts.TryAdd(key, script);
             }
             catch (Exception error)
             {
-                FileLogger.Default.Write($"[HOST][ERROR] Failed to load {fileName}");
+                FileLogger.Default.Write($"[HOST][ERROR] Failed to load {scriptPath}");
                 FileLogger.Default.Write(ExceptionHelper.GetErrorMessageAndStackTrace(error));
             }
         }
 
         private Script CreateScript(in string key)
         {
-            //string settingsPath = Path.Combine(RootPath, key, ".json");
-
-            //ScriptSettings settings = ScriptSettings.Create(in settingsPath);
-
-            string scriptPath = Path.Combine(RootPath, key);
-
-            if (!Path.HasExtension(scriptPath))
-            {
-                scriptPath = Path.Combine(scriptPath, ".djs");
-            }
+            string filePath = Path.Combine(RootPath, key);
             
-            return new ScriptBuilder().FromFile(in scriptPath).Build();
+            return CreateScriptFromFile(in filePath);
         }
-        public Script GetOrCreate(in string key)
+        private Script CreateScriptFromFile(in string filePath)
+        {
+            return _builder.FromFile(in filePath).Build();
+        }
+        private Script GetOrCreate(in string key)
         {
             Script script;
 
@@ -435,7 +311,7 @@ namespace DaJet.Host
 
             return script;
         }
-        public void AddOrUpdate(in string key, in Script script)
+        private void AddOrUpdate(in string key, in Script script)
         {
             bool locked = false;
 
@@ -456,16 +332,23 @@ namespace DaJet.Host
                 }
             }
         }
-
-        public bool TryGet(in string key, out Script script)
+        public bool TryGetOrCreate(in string key, out Script script, out string error)
         {
-            return _scripts.TryGetValue(key, out script);
-        }
-        public bool TryGet(in string key, out ScriptSettings settings)
-        {
-            return _settings.TryGetValue(key, out settings);
-        }
+            error = null;
+            script = null;
 
+            try
+            {
+                script = GetOrCreate(in key);
+            }
+            catch (Exception exception)
+            {
+                error = ExceptionHelper.GetErrorMessage(exception);
+            }
+
+            return script is not null;
+        }
+        
         private readonly ConcurrentDictionary<int, AsyncExecutor> _executors = new();
         public object Run(in string key, in DataObject parameters = null)
         {
@@ -486,17 +369,53 @@ namespace DaJet.Host
                 return interpreter.Execute(in parameters);
             }
         }
-        public Task<object> RunAsync(in string key, in DataObject parameters = null, TaskCreationOptions options = TaskCreationOptions.None)
+        public Task<object> RunAsync(in string key, in DataObject parameters = null)
         {
             Script script = GetOrCreate(in key);
 
-            return RunAsync(in script, in parameters, options);
+            return RunAsync(in script, in parameters);
         }
-        public Task<object> RunAsync(in Script script, in DataObject parameters = null, TaskCreationOptions options = TaskCreationOptions.None)
+        public Task<object> RunAsync(in Script script, in DataObject parameters = null)
         {
             AsyncExecutor executor = new(in script);
 
-            Task<object> task = executor.ExecuteAsync(in parameters, options);
+            Task<object> task;
+
+            if (parameters is null)
+            {
+                task = executor.ExecuteAsync();
+            }
+            else
+            {
+                task = executor.ExecuteAsync(in parameters);
+            }
+            
+            _ = _executors.TryAdd(task.Id, executor);
+
+            _ = task.ContinueWith(DisposeExecutor);
+
+            return task;
+        }
+        public Task<object> RunLongTask(in string key, in DataObject parameters = null)
+        {
+            Script script = GetOrCreate(in key);
+
+            return RunLongTask(in script, in parameters);
+        }
+        public Task<object> RunLongTask(in Script script, in DataObject parameters = null)
+        {
+            AsyncExecutor executor = new(in script);
+
+            Task<object> task;
+
+            if (parameters is null)
+            {
+                task = executor.ExecuteAsync(TaskCreationOptions.LongRunning);
+            }
+            else
+            {
+                task = executor.ExecuteAsync(in parameters, TaskCreationOptions.LongRunning);
+            }
 
             _ = _executors.TryAdd(task.Id, executor);
 
