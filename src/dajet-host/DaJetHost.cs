@@ -45,9 +45,62 @@ namespace DaJet.Host
         private FileSystemWatcher _scriptFileWatcher;
         public DaJetHost Run()
         {
-            InitializeScriptFileWatcher();
+            Startup();
 
+            InitializeScriptFileWatcher();
+            
             return this;
+        }
+        private void Startup()
+        {
+            if (!Directory.Exists(RootPath))
+            {
+                return;
+            }
+
+            StartupScripts(RootPath);
+        }
+        private void StartupScripts(in string catalogPath)
+        {
+            foreach (string scriptPath in Directory.EnumerateFiles(catalogPath, "*.djs"))
+            {
+                StartupScript(in scriptPath);
+            }
+
+            foreach (string nestedCatalog in Directory.EnumerateDirectories(catalogPath))
+            {
+                StartupScripts(in nestedCatalog);
+            }
+        }
+        private void StartupScript(in string scriptPath)
+        {
+            string key = GetKeyFromFileName(in scriptPath);
+
+            try
+            {
+                string sourceCode = null;
+
+                using (StreamReader reader = new(scriptPath, Encoding.UTF8))
+                {
+                    sourceCode = reader.ReadToEnd();
+                }
+
+                Script script = _builder.FromSource(in sourceCode).Parse();
+
+                if (script.RunAtStartup)
+                {
+                    script = _builder.FromScript(in script).Build();
+
+                    _ = RunAsync(in script);
+
+                    FileLogger.Default.Write($"[STARTUP][SUCCESS] {key}");
+                }
+            }
+            catch (Exception error)
+            {
+                FileLogger.Default.Write($"[STARTUP][ERROR] {key}");
+                FileLogger.Default.Write(ExceptionHelper.GetErrorMessageAndStackTrace(error));
+            }
         }
 
         #region "SCRIPT FILE WATCHER"
@@ -220,51 +273,6 @@ namespace DaJet.Host
         }
         #endregion
 
-        private void InitializeFromFiles()
-        {
-            if (!Directory.Exists(RootPath))
-            {
-                return;
-            }
-
-            InitializeScripts(RootPath);
-        }
-        private void InitializeScripts(in string catalogPath)
-        {
-            foreach (string scriptPath in Directory.EnumerateFiles(catalogPath, "*.djs"))
-            {
-                InitializeScript(in scriptPath);
-            }
-
-            foreach (string nestedCatalog in Directory.EnumerateDirectories(catalogPath))
-            {
-                InitializeScripts(in nestedCatalog);
-            }
-        }
-        private void InitializeScript(in string scriptPath)
-        {
-            try
-            {
-                string sourceCode = null;
-
-                using (StreamReader reader = new(scriptPath, Encoding.UTF8))
-                {
-                    sourceCode = reader.ReadToEnd();
-                }
-
-                string key = GetKeyFromFileName(in scriptPath);
-
-                Script script = _builder.FromSource(in sourceCode).Build();
-
-                _scripts.TryAdd(key, script);
-            }
-            catch (Exception error)
-            {
-                FileLogger.Default.Write($"[HOST][ERROR] Failed to load {scriptPath}");
-                FileLogger.Default.Write(ExceptionHelper.GetErrorMessageAndStackTrace(error));
-            }
-        }
-
         private Script CreateScript(in string key)
         {
             string filePath = Path.Combine(RootPath, key);
@@ -377,8 +385,13 @@ namespace DaJet.Host
         }
         public Task<object> RunAsync(in Script script, in DataObject parameters = null)
         {
-            AsyncExecutor executor = new(in script);
+            if (script.IsLongRunning)
+            {
+                return RunLongTask(in script, in parameters);
+            }
 
+            AsyncExecutor executor = new(in script);
+            
             Task<object> task;
 
             if (parameters is null)
@@ -436,6 +449,18 @@ namespace DaJet.Host
             {
                 executor.Cancel();
             }
+        }
+
+        public List<string> DisplayRunningTasks()
+        {
+            List<string> display = new(_executors.Count);
+
+            foreach (var item in _executors)
+            {
+                display.Add(item.Value.ToString());
+            }
+
+            return display;
         }
     }
 }

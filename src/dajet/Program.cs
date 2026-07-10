@@ -68,9 +68,12 @@ namespace DaJet.Host
 
             ExecuteLongRunningScriptAsync(in host);
 
+            DisplayRunningTasks(in host);
+
             //ExecuteScriptSync(in host);
 
             Console.WriteLine("Press any key to continue ...");
+
             ConsoleKeyInfo key = Console.ReadKey(false);
 
             if (key.KeyChar == 'r')
@@ -276,7 +279,7 @@ namespace DaJet.Host
 
             //host.Cancel(task.Id);
 
-            show.Wait();
+            //show.Wait();
 
             //object value = task.Result;
 
@@ -300,7 +303,7 @@ namespace DaJet.Host
 
             //host.Cancel(task.Id);
 
-            show.Wait();
+            //show.Wait();
 
             //object value = task.Result;
 
@@ -333,6 +336,20 @@ namespace DaJet.Host
             {
                 Console.WriteLine($"Task [{task.Id}] is faulted: {task.Exception?.Message}");
             }
+        }
+
+        private static void DisplayRunningTasks(in DaJetHost host)
+        {
+            List<string> display = host.DisplayRunningTasks();
+
+            Console.WriteLine();
+
+            foreach (string task in display)
+            {
+                Console.WriteLine(task);
+            }
+
+            Console.WriteLine();
         }
     }
 }

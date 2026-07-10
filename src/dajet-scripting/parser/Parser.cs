@@ -5,14 +5,16 @@ namespace DaJet.Scripting
 {
     public sealed class Parser
     {
+        private Script _script;
         private int _current = 0;
         private Lexeme _token = null;
         private List<Lexeme> _tokens = null;
         private List<Lexeme> _ignore = null; // test and debug purposes
-        public bool TryParse(in string script, out Script tree, out string error)
+        public bool TryParse(in string script, out Script model, out string error)
         {
-            tree = new();
+            model = null;
             error = string.Empty;
+            _script = new Script();
 
             Lexer lexer = new();
 
@@ -31,16 +33,20 @@ namespace DaJet.Scripting
 
                     if (node is not null)
                     {
-                        tree.Statements.Add(node);
+                        _script.Statements.Add(node);
                     }
                 }
+
+                model = _script;
             }
             catch (Exception exception)
             {
                 error = ExceptionHelper.GetErrorMessage(exception);
             }
 
-            return string.IsNullOrWhiteSpace(error);
+            _script = null;
+
+            return model is not null;
         }
 
         #region "UTILITY FUNCTIONS"
@@ -705,6 +711,50 @@ namespace DaJet.Scripting
                 Text = Previous().Value
             };
         }
+        private DirectiveStatement directive()
+        {
+            DirectiveStatement pragma = new();
+
+            if (Match(Token.STARTUP))
+            {
+                pragma.Token = Token.STARTUP;
+                
+                _script.RunAtStartup = true;
+            }
+            else if (Match(Token.LONG_TASK))
+            {
+                pragma.Token = Token.LONG_TASK;
+
+                _script.IsLongRunning = true;
+            }
+            else if (Match(Token.DISPLAY))
+            {
+                pragma.Token = Token.DISPLAY;
+
+                if (!Match(Token.OpenRoundBracket))
+                {
+                    throw new FormatException("[DISPLAY] open round bracket expected");
+                }
+
+                if (!Match(Token.String))
+                {
+                    throw new FormatException("[DISPLAY] display text expected");
+                }
+
+                _script.Display = Previous().Value;
+
+                if (!Match(Token.CloseRoundBracket))
+                {
+                    throw new FormatException("[DISPLAY] close round bracket expected");
+                }
+            }
+            else
+            {
+                throw new FormatException("[#] STARTUP or LONG_TASK expected");
+            }
+
+            return pragma;
+        }
         private SyntaxNode assignment()
         {
             AssignmentOperator statement = new();
@@ -917,6 +967,7 @@ namespace DaJet.Scripting
         private SyntaxNode statement()
         {
             if (Match(Token.Comment)) { return comment(); }
+            else if (Match(Token.Sharp)) { return directive(); }
             else if (Match(Token.DECLARE, Token.PRIVATE)) { return declare_statement(); }
             else if (Match(Token.SET)) { return assignment(); }
             else if (Match(Token.USE)) { return use_statement(); }

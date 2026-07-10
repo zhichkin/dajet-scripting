@@ -18,7 +18,7 @@ namespace DaJet.Scripting
 
             _steps.Add(FromFileStep);
 
-            _steps.Add(Parse);
+            _steps.Add(ParseStep);
 
             return this;
         }
@@ -28,7 +28,7 @@ namespace DaJet.Scripting
 
             _steps.Clear();
 
-            _steps.Add(Parse);
+            _steps.Add(ParseStep);
 
             return this;
         }
@@ -52,15 +52,17 @@ namespace DaJet.Scripting
                 _source = reader.ReadToEnd();
             }
         }
-        private void Parse()
+        private void ParseStep()
         {
             if (!new Parser().TryParse(in _source, out _script, out string error))
             {
                 throw new InvalidOperationException(error);
             }
         }
-        private void Register()
+        private void RegisterStep()
         {
+            // import schema definitions
+
             List<DefineStatement> definitions = new();
 
             foreach (SyntaxNode node in _script.Statements)
@@ -76,7 +78,7 @@ namespace DaJet.Scripting
                 throw new InvalidOperationException(error);
             }
         }
-        private void Bind()
+        private void BindStep()
         {
             ISchemaProvider provider = new CacheableSchemaProvider();
 
@@ -85,7 +87,7 @@ namespace DaJet.Scripting
                 throw new InvalidOperationException(string.Join('\n', errors));
             }
         }
-        private void Transpile()
+        private void TranspileStep()
         {
             if (!new Transpiler().TryTranspile(in _script, out List<string> errors))
             {
@@ -96,15 +98,24 @@ namespace DaJet.Scripting
         {
             //THINK: _steps.Add(Register); // import schema definitions
 
-            _steps.Add(Bind);
+            _steps.Add(BindStep);
 
-            _steps.Add(Transpile);
+            _steps.Add(TranspileStep);
 
             foreach (Action step in _steps)
             {
                 step();
             }
             
+            return _script;
+        }
+        public Script Parse()
+        {
+            foreach (Action step in _steps)
+            {
+                step();
+            }
+
             return _script;
         }
     }

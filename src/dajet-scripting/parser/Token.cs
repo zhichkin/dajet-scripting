@@ -2,6 +2,9 @@
 {
     public enum Token
     {
+        // host direcives
+        DISPLAY, STARTUP, LONG_TASK,
+
         Ignore, Script, Comment, Comma, EndOfStatement, USE, IF, WHILE, BREAK, CONTINUE, RETURN, PRINT,
 
         TRY, CATCH, FINALLY, THROW, SLEEP, DEFAULT, TASK, WORK, SYNC, WAIT, TIMEOUT,
@@ -27,7 +30,7 @@
 
         OpenRoundBracket, CloseRoundBracket, OpenCurlyBracket, CloseCurlyBracket, OpenSquareBracket, CloseSquareBracket,
         
-        Plus, Minus, Divide, Modulo, Multiply,
+        Sharp, Plus, Minus, Divide, Modulo, Multiply,
 
         CREATE, TABLE, TEMPORARY, VARIABLE, DROP, DEFINE, TYPE, PROPERTY, COLUMN,
         

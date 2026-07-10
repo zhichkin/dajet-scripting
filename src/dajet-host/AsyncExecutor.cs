@@ -14,15 +14,22 @@ namespace DaJet.Host
         private bool CanExecute { get { return Interlocked.CompareExchange(ref _state, STATE_IS_RUNNING, STATE_IS_READY) == STATE_IS_READY; } }
         private bool CanDispose { get { return Interlocked.CompareExchange(ref _state, STATE_DISPOSING, STATE_IS_RUNNING) == STATE_IS_RUNNING; } }
 
+        private int _taskId;
         private Task<object> _task;
         private CancellationToken _token;
         private CancellationTokenSource _cts;
         private CancellationTokenRegistration _ctr;
-
+        
+        private readonly string _display;
         private readonly Interpreter _interpreter;
         public AsyncExecutor(in Script script)
         {
             _interpreter = new Interpreter(in script);
+
+            if (!string.IsNullOrWhiteSpace(script.Display))
+            {
+                _display = script.Display;
+            }
         }
         private void Configure(in DataObject parameters = null)
         {
@@ -51,6 +58,8 @@ namespace DaJet.Host
 
             _task = Task.Factory.StartNew(_interpreter.Execute, _token);
 
+            _taskId = _task.Id;
+
             return _task;
         }
         public Task<object> ExecuteAsync(in DataObject parameters)
@@ -63,6 +72,8 @@ namespace DaJet.Host
             Configure(in parameters);
 
             _task = Task.Factory.StartNew(_interpreter.Execute, _token);
+
+            _taskId = _task.Id;
 
             return _task;
         }
@@ -77,6 +88,8 @@ namespace DaJet.Host
 
             _task = Task.Factory.StartNew(_interpreter.Execute, _token, options, TaskScheduler.Default);
 
+            _taskId = _task.Id;
+
             return _task;
         }
         public Task<object> ExecuteAsync(in DataObject parameters, TaskCreationOptions options)
@@ -89,6 +102,8 @@ namespace DaJet.Host
             Configure(in parameters);
 
             _task = Task.Factory.StartNew(_interpreter.Execute, _token, options, TaskScheduler.Default);
+
+            _taskId = _task.Id;
 
             return _task;
         }
@@ -113,6 +128,8 @@ namespace DaJet.Host
                     _cts.Dispose(); // dispose executor cancellation token source
                 }
 
+                _taskId = 0;
+
                 SetReady(); // instances of this class can be reused
             }
         }
@@ -129,6 +146,11 @@ namespace DaJet.Host
             {
                 return ValueTask.FromException(error);
             }
+        }
+
+        public override string ToString()
+        {
+            return string.Format("[{0}] {1}", _taskId, _display is not null ? _display : "noname");
         }
     }
 }

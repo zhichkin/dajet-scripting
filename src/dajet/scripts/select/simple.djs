@@ -1,3 +1,6 @@
+# STARTUP
+# LONG_TASK
+# DISPLAY ('select-simple.djs')
 
 DECLARE @Код string = 'MS-07'
 

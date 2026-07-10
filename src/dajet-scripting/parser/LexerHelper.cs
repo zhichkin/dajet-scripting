@@ -120,7 +120,10 @@
             { "WAIT", Token.WAIT },
             { "TIMEOUT", Token.TIMEOUT },
             { "MODIFY", Token.MODIFY },
-            { "DEFINE", Token.DEFINE }
+            { "DEFINE", Token.DEFINE },
+            { "DISPLAY", Token.DISPLAY },
+            { "STARTUP", Token.STARTUP },
+            { "LONG_TASK", Token.LONG_TASK }
         };
         private static Dictionary<string, Token> _function = new()
         {

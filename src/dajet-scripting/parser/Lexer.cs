@@ -49,6 +49,12 @@ namespace DaJet.Scripting
                 {
                     // ignore
                 }
+                else if (_char == '#')
+                {
+                    _start = _position;
+                    _lexeme.Append(_char);
+                    AddToken(Token.Sharp);
+                }
                 else if (_char == '+')
                 {
                     _start = _position;
