@@ -715,30 +715,7 @@ namespace DaJet.Scripting
         {
             DirectiveStatement pragma = new();
 
-            if (Match(Token.NAME))
-            {
-                pragma.Token = Token.NAME;
-
-                if (!Match(Token.OpenRoundBracket))
-                {
-                    throw new FormatException("[NAME] open round bracket expected");
-                }
-
-                if (!Match(Token.String))
-                {
-                    throw new FormatException("[NAME] name value expected");
-                }
-
-                string name = Previous().Value;
-
-                if (!Match(Token.CloseRoundBracket))
-                {
-                    throw new FormatException("[NAME] close round bracket expected");
-                }
-
-                _script.Name = name;
-            }
-            else if (Match(Token.STARTUP))
+            if (Match(Token.STARTUP))
             {
                 pragma.Token = Token.STARTUP;
                 
@@ -781,7 +758,7 @@ namespace DaJet.Scripting
             }
             else
             {
-                throw new FormatException("[#] NAME, STARTUP, LONG_TASK or SINGLETON expected");
+                throw new FormatException("[#] STARTUP, LONG_TASK or SINGLETON keywords expected");
             }
 
             return pragma;

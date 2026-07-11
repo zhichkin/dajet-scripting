@@ -121,7 +121,6 @@
             { "TIMEOUT", Token.TIMEOUT },
             { "MODIFY", Token.MODIFY },
             { "DEFINE", Token.DEFINE },
-            { "NAME", Token.NAME },
             { "STARTUP", Token.STARTUP },
             { "LONG_TASK", Token.LONG_TASK },
             { "SINGLETON", Token.SINGLETON }

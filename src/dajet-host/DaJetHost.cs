@@ -67,10 +67,7 @@ namespace DaJet.Host
 
                 script = _builder.FromFile(in filePath).Build();
 
-                if (string.IsNullOrEmpty(script.Name))
-                {
-                    script.Name = key;
-                }
+                script.Name = key;
 
                 _ = _scripts.TryAdd(key, script); // add resource to the cache
             }
@@ -92,14 +89,11 @@ namespace DaJet.Host
             {
                 Monitor.Enter(_scripts_lock, ref locked);
 
+                script.Name = key;
+
                 if (!_scripts.TryAdd(key, script))
                 {
                     _scripts[key] = script;
-                }
-
-                if (string.IsNullOrEmpty(script.Name))
-                {
-                    script.Name = key;
                 }
             }
             finally

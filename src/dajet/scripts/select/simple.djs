@@ -1,4 +1,3 @@
-# NAME('select-simple.djs')
 # STARTUP
 # LONG_TASK
 # SINGLETON('1234567890')
