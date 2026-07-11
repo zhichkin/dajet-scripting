@@ -44,7 +44,7 @@ namespace DaJet.Scripting
         {
             if (!File.Exists(_path))
             {
-                throw new InvalidOperationException("Script is not found");
+                throw new InvalidOperationException($"Script is not found: {_path}");
             }
 
             using (StreamReader reader = new(_path, Encoding.UTF8))

@@ -6,9 +6,11 @@ namespace DaJet.Scripting.Model
     public sealed class Script : SyntaxNode
     {
         public Script() { Token = Token.Script; }
-        public string Display { get; internal set; } = string.Empty;
+        public string Name { get; set; } = string.Empty;
         public bool RunAtStartup { get; internal set; }
         public bool IsLongRunning { get; internal set; }
+        public bool IsSingleton { get; internal set; }
+        public string SingletonKey { get; internal set; } = string.Empty;
         public List<SyntaxNode> Statements { get; } = new();
 
         ///<summary>Get the definition of a variable by its name, including the leading @ symbol.</summary>

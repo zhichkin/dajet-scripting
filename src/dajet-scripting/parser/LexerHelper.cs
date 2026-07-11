@@ -2,7 +2,7 @@
 {
     internal static class LexerHelper
     {
-        private static Dictionary<string, Token> _keywords = new()
+        private static Dictionary<string, Token> _keywords = new(StringComparer.Ordinal)
         {
             { "WITH", Token.WITH },
             { "SELECT", Token.SELECT },
@@ -121,11 +121,12 @@
             { "TIMEOUT", Token.TIMEOUT },
             { "MODIFY", Token.MODIFY },
             { "DEFINE", Token.DEFINE },
-            { "DISPLAY", Token.DISPLAY },
+            { "NAME", Token.NAME },
             { "STARTUP", Token.STARTUP },
-            { "LONG_TASK", Token.LONG_TASK }
+            { "LONG_TASK", Token.LONG_TASK },
+            { "SINGLETON", Token.SINGLETON }
         };
-        private static Dictionary<string, Token> _function = new()
+        private static Dictionary<string, Token> _function = new(StringComparer.Ordinal)
         {
             { "SUM", Token.SUM },
             { "MAX", Token.MAX },

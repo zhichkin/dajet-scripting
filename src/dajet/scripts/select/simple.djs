@@ -1,6 +1,7 @@
+# NAME('select-simple.djs')
 # STARTUP
 # LONG_TASK
-# DISPLAY ('select-simple.djs')
+# SINGLETON('1234567890')
 
 DECLARE @Код string = 'MS-07'
 
@@ -14,5 +15,7 @@ USE 'MS_TEST'
    WHERE Код = @Код
 
 END
+
+PRINT JSON(@Таблица)
 
 RETURN @Таблица

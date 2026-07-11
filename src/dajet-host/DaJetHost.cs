@@ -19,13 +19,14 @@ namespace DaJet.Host
         }
         private static readonly ScriptBuilder _builder = new();
 
-        private readonly object _cache_lock = new();
+        private readonly object _scripts_lock = new();
         private readonly ConcurrentDictionary<string, Script> _scripts = new(StringComparer.OrdinalIgnoreCase);
+        private FileSystemWatcher _scriptFileWatcher;
         public DaJetHost() { }
-        public DaJetHost(in string catalog) { RootName = catalog; }
+        public DaJetHost(in string rootName) { RootName = rootName; }
         public string RootName { get; } = "scripts";
         public string RootPath { get { return Path.Combine(AppContext.BaseDirectory, RootName); } }
-        private string GetKeyFromFileName(in string fullPath)
+        public string GetKeyFromFileName(in string fullPath)
         {
             string relativePath = Path.GetRelativePath(RootPath, fullPath);
 
@@ -39,10 +40,8 @@ namespace DaJet.Host
                 relativePath = relativePath.TrimStart('/');
             }
 
-            return relativePath;
+            return relativePath.ToLower();
         }
-
-        private FileSystemWatcher _scriptFileWatcher;
         public DaJetHost Run()
         {
             Startup();
@@ -90,6 +89,8 @@ namespace DaJet.Host
                 if (script.RunAtStartup)
                 {
                     script = _builder.FromScript(in script).Build();
+
+                    AddOrUpdate(in key, in script);
 
                     _ = RunAsync(in script);
 
@@ -296,24 +297,29 @@ namespace DaJet.Host
 
             try
             {
-                Monitor.Enter(_cache_lock, ref locked);
+                Monitor.Enter(_scripts_lock, ref locked);
 
                 if (_scripts.TryGetValue(key, out script))
                 {
                     return script; // double-checking
                 }
 
-                // long path - create new initialized provider
+                // long path - create resource
 
                 script = CreateScript(in key);
 
-                _ = _scripts.TryAdd(key, script); // add provider to the cache
+                if (string.IsNullOrEmpty(script.Name))
+                {
+                    script.Name = key;
+                }
+
+                _ = _scripts.TryAdd(key, script); // add resource to the cache
             }
             finally
             {
                 if (locked)
                 {
-                    Monitor.Exit(_cache_lock);
+                    Monitor.Exit(_scripts_lock);
                 }
             }
 
@@ -325,18 +331,23 @@ namespace DaJet.Host
 
             try
             {
-                Monitor.Enter(_cache_lock, ref locked);
+                Monitor.Enter(_scripts_lock, ref locked);
 
                 if (!_scripts.TryAdd(key, script))
                 {
                     _scripts[key] = script;
+                }
+
+                if (string.IsNullOrEmpty(script.Name))
+                {
+                    script.Name = key;
                 }
             }
             finally
             {
                 if (locked)
                 {
-                    Monitor.Exit(_cache_lock);
+                    Monitor.Exit(_scripts_lock);
                 }
             }
         }
@@ -356,8 +367,9 @@ namespace DaJet.Host
 
             return script is not null;
         }
-        
-        private readonly ConcurrentDictionary<int, AsyncExecutor> _executors = new();
+
+        private readonly ConcurrentDictionary<string, int> _singletons = new(StringComparer.Ordinal);
+        private readonly ConcurrentDictionary<int, AsyncExecutor> _runningTasks = new();
         public object Run(in string key, in DataObject parameters = null)
         {
             Script script = GetOrCreate(in key);
@@ -380,18 +392,27 @@ namespace DaJet.Host
         public Task<object> RunAsync(in string key, in DataObject parameters = null)
         {
             Script script = GetOrCreate(in key);
-
+            
             return RunAsync(in script, in parameters);
         }
         public Task<object> RunAsync(in Script script, in DataObject parameters = null)
         {
+            if (script.IsSingleton)
+            {
+                return RunSingleton(in script, in parameters);
+            }
+
             if (script.IsLongRunning)
             {
                 return RunLongTask(in script, in parameters);
             }
 
+            return RunTask(in script, in parameters);
+        }
+        public Task<object> RunTask(in Script script, in DataObject parameters = null)
+        {
             AsyncExecutor executor = new(in script);
-            
+
             Task<object> task;
 
             if (parameters is null)
@@ -402,17 +423,18 @@ namespace DaJet.Host
             {
                 task = executor.ExecuteAsync(in parameters);
             }
+
+            if (_runningTasks.TryAdd(task.Id, executor))
+            {
+                _ = task.ContinueWith(DisposeExecutor);
+            }
             
-            _ = _executors.TryAdd(task.Id, executor);
-
-            _ = task.ContinueWith(DisposeExecutor);
-
             return task;
         }
         public Task<object> RunLongTask(in string key, in DataObject parameters = null)
         {
             Script script = GetOrCreate(in key);
-
+            
             return RunLongTask(in script, in parameters);
         }
         public Task<object> RunLongTask(in Script script, in DataObject parameters = null)
@@ -430,34 +452,67 @@ namespace DaJet.Host
                 task = executor.ExecuteAsync(in parameters, TaskCreationOptions.LongRunning);
             }
 
-            _ = _executors.TryAdd(task.Id, executor);
+            if (_runningTasks.TryAdd(task.Id, executor))
+            {
+                _ = task.ContinueWith(DisposeExecutor);
+            }
+            
+            return task;
+        }
+        private Task<object> RunSingleton(in Script script, in DataObject parameters = null)
+        {
+            if (!_singletons.TryAdd(script.SingletonKey, 0))
+            {
+                string message = $"Duplicate singleton run: [{script.Name}] {{{script.SingletonKey}}}";
 
-            _ = task.ContinueWith(DisposeExecutor);
+                return Task.FromException<object>(new InvalidOperationException(message));
+            }
+
+            Task<object> task;
+
+            if (script.IsLongRunning)
+            {
+                task = RunLongTask(in script, in parameters);
+            }
+            else
+            {
+                task = RunTask(in script, in parameters);
+            }
+
+            _ = task.ContinueWith(RemoveSingleton, script.SingletonKey);
+
+            _singletons[script.SingletonKey] = task.Id;
 
             return task;
         }
         private void DisposeExecutor(Task<object> task)
         {
-            if (_executors.TryRemove(task.Id, out AsyncExecutor executor))
+            if (_runningTasks.TryRemove(task.Id, out AsyncExecutor executor))
             {
                 executor.Dispose();
             }
         }
+        private void RemoveSingleton(Task<object> task, object state)
+        {
+            if (state is string key)
+            {
+                _ = _singletons.TryRemove(key, out _);
+            }
+        }
         public void Cancel(int task)
         {
-            if (_executors.TryRemove(task, out AsyncExecutor executor))
+            if (_runningTasks.TryRemove(task, out AsyncExecutor executor))
             {
                 executor.Cancel();
             }
         }
-
-        public List<string> DisplayRunningTasks()
+        public List<RunningTaskInfo> GetRunningTasks()
         {
-            List<string> display = new(_executors.Count);
+            List<RunningTaskInfo> display = new(_runningTasks.Count);
 
-            foreach (var item in _executors)
+            foreach (var item in _runningTasks)
             {
-                display.Add(item.Value.ToString());
+                display.Add(item.Value.Descriptor);
             }
 
             return display;

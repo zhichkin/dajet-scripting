@@ -297,7 +297,7 @@ namespace DaJet.Host
             DataObject parameters = new();
             parameters.SetValue("Код", "MS-01");
 
-            Task<object> task = host.RunLongTask(in script, in parameters);
+            Task<object> task = host.RunAsync(in script, in parameters);
 
             Task show = task.ContinueWith(ShowAsyncResult);
 
@@ -321,6 +321,7 @@ namespace DaJet.Host
                 {
                     string json = JsonSerializer.Serialize(value, value.GetType(), JsonOptions);
 
+                    Console.WriteLine($"Task [{task.Id}] return value:");
                     Console.WriteLine(json);
                 }
                 else
@@ -340,11 +341,11 @@ namespace DaJet.Host
 
         private static void DisplayRunningTasks(in DaJetHost host)
         {
-            List<string> display = host.DisplayRunningTasks();
+            List<RunningTaskInfo> tasks = host.GetRunningTasks();
 
             Console.WriteLine();
 
-            foreach (string task in display)
+            foreach (RunningTaskInfo task in tasks)
             {
                 Console.WriteLine(task);
             }

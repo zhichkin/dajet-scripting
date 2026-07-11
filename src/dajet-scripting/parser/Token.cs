@@ -3,7 +3,7 @@
     public enum Token
     {
         // host direcives
-        DISPLAY, STARTUP, LONG_TASK,
+        NAME, STARTUP, LONG_TASK, SINGLETON,
 
         Ignore, Script, Comment, Comma, EndOfStatement, USE, IF, WHILE, BREAK, CONTINUE, RETURN, PRINT,
 

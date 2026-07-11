@@ -6,6 +6,8 @@ namespace DaJet.Host
 {
     public sealed class AsyncExecutor : IDisposable, IAsyncDisposable
     {
+        private static readonly TaskFactory _factory = System.Threading.Tasks.Task.Factory;
+
         private int _state;
         private const int STATE_IS_READY = 0;
         private const int STATE_IS_RUNNING = 1;
@@ -19,18 +21,27 @@ namespace DaJet.Host
         private CancellationToken _token;
         private CancellationTokenSource _cts;
         private CancellationTokenRegistration _ctr;
-        
-        private readonly string _display;
+
+        private readonly Script _script;
         private readonly Interpreter _interpreter;
         public AsyncExecutor(in Script script)
         {
-            _interpreter = new Interpreter(in script);
+            ArgumentNullException.ThrowIfNull(script, nameof(script));
 
-            if (!string.IsNullOrWhiteSpace(script.Display))
+            _script = script;
+
+            _interpreter = new Interpreter(in _script);
+        }
+        public Script Script { get { return _script; } }
+        public Task<object> Task { get { return _task; } }
+        public RunningTaskInfo Descriptor
+        {
+            get
             {
-                _display = script.Display;
+                return new RunningTaskInfo(_taskId, _script.Name, _script.SingletonKey);
             }
         }
+
         private void Configure(in DataObject parameters = null)
         {
             _cts = new CancellationTokenSource();
@@ -46,7 +57,6 @@ namespace DaJet.Host
                 _interpreter.SetParameters(in parameters);
             }
         }
-
         public Task<object> ExecuteAsync()
         {
             if (!CanExecute)
@@ -56,7 +66,7 @@ namespace DaJet.Host
 
             Configure();
 
-            _task = Task.Factory.StartNew(_interpreter.Execute, _token);
+            _task = _factory.StartNew(_interpreter.Execute, _token);
 
             _taskId = _task.Id;
 
@@ -71,7 +81,7 @@ namespace DaJet.Host
 
             Configure(in parameters);
 
-            _task = Task.Factory.StartNew(_interpreter.Execute, _token);
+            _task = _factory.StartNew(_interpreter.Execute, _token);
 
             _taskId = _task.Id;
 
@@ -86,7 +96,7 @@ namespace DaJet.Host
 
             Configure();
 
-            _task = Task.Factory.StartNew(_interpreter.Execute, _token, options, TaskScheduler.Default);
+            _task = _factory.StartNew(_interpreter.Execute, _token, options, TaskScheduler.Default);
 
             _taskId = _task.Id;
 
@@ -101,7 +111,7 @@ namespace DaJet.Host
 
             Configure(in parameters);
 
-            _task = Task.Factory.StartNew(_interpreter.Execute, _token, options, TaskScheduler.Default);
+            _task = _factory.StartNew(_interpreter.Execute, _token, options, TaskScheduler.Default);
 
             _taskId = _task.Id;
 
@@ -148,9 +158,6 @@ namespace DaJet.Host
             }
         }
 
-        public override string ToString()
-        {
-            return string.Format("[{0}] {1}", _taskId, _display is not null ? _display : "noname");
-        }
+        public override string ToString() { return Descriptor.ToString(); }
     }
 }

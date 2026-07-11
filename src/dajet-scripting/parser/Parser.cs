@@ -715,7 +715,30 @@ namespace DaJet.Scripting
         {
             DirectiveStatement pragma = new();
 
-            if (Match(Token.STARTUP))
+            if (Match(Token.NAME))
+            {
+                pragma.Token = Token.NAME;
+
+                if (!Match(Token.OpenRoundBracket))
+                {
+                    throw new FormatException("[NAME] open round bracket expected");
+                }
+
+                if (!Match(Token.String))
+                {
+                    throw new FormatException("[NAME] name value expected");
+                }
+
+                string name = Previous().Value;
+
+                if (!Match(Token.CloseRoundBracket))
+                {
+                    throw new FormatException("[NAME] close round bracket expected");
+                }
+
+                _script.Name = name;
+            }
+            else if (Match(Token.STARTUP))
             {
                 pragma.Token = Token.STARTUP;
                 
@@ -727,30 +750,38 @@ namespace DaJet.Scripting
 
                 _script.IsLongRunning = true;
             }
-            else if (Match(Token.DISPLAY))
+            else if (Match(Token.SINGLETON))
             {
-                pragma.Token = Token.DISPLAY;
+                pragma.Token = Token.SINGLETON;
 
                 if (!Match(Token.OpenRoundBracket))
                 {
-                    throw new FormatException("[DISPLAY] open round bracket expected");
+                    throw new FormatException("[SINGLETON] open round bracket expected");
                 }
 
                 if (!Match(Token.String))
                 {
-                    throw new FormatException("[DISPLAY] display text expected");
+                    throw new FormatException("[SINGLETON] key value expected");
                 }
 
-                _script.Display = Previous().Value;
+                string key = Previous().Value;
 
+                if (string.IsNullOrWhiteSpace(key))
+                {
+                    throw new FormatException("[SINGLETON] key value is empty");
+                }
+                
                 if (!Match(Token.CloseRoundBracket))
                 {
-                    throw new FormatException("[DISPLAY] close round bracket expected");
+                    throw new FormatException("[SINGLETON] close round bracket expected");
                 }
+
+                _script.IsSingleton = true;
+                _script.SingletonKey = key;
             }
             else
             {
-                throw new FormatException("[#] STARTUP or LONG_TASK expected");
+                throw new FormatException("[#] NAME, STARTUP, LONG_TASK or SINGLETON expected");
             }
 
             return pragma;
