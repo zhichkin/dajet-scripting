@@ -21,7 +21,6 @@ namespace DaJet.Host
 
         private readonly object _scripts_lock = new();
         private readonly ConcurrentDictionary<string, Script> _scripts = new(StringComparer.OrdinalIgnoreCase);
-        private FileSystemWatcher _scriptFileWatcher;
         public DaJetHost() { }
         public DaJetHost(in string rootName) { RootName = rootName; }
         public string RootName { get; } = "scripts";
@@ -41,6 +40,91 @@ namespace DaJet.Host
             }
 
             return relativePath.ToLower();
+        }
+        private Script GetOrCreate(in string key)
+        {
+            Script script;
+
+            if (_scripts.TryGetValue(key, out script))
+            {
+                return script;
+            }
+
+            bool locked = false;
+
+            try
+            {
+                Monitor.Enter(_scripts_lock, ref locked);
+
+                if (_scripts.TryGetValue(key, out script))
+                {
+                    return script; // double-checking
+                }
+
+                // long path - create resource
+
+                string filePath = Path.Combine(RootPath, key);
+
+                script = _builder.FromFile(in filePath).Build();
+
+                if (string.IsNullOrEmpty(script.Name))
+                {
+                    script.Name = key;
+                }
+
+                _ = _scripts.TryAdd(key, script); // add resource to the cache
+            }
+            finally
+            {
+                if (locked)
+                {
+                    Monitor.Exit(_scripts_lock);
+                }
+            }
+
+            return script;
+        }
+        private void AddOrUpdate(in string key, in Script script)
+        {
+            bool locked = false;
+
+            try
+            {
+                Monitor.Enter(_scripts_lock, ref locked);
+
+                if (!_scripts.TryAdd(key, script))
+                {
+                    _scripts[key] = script;
+                }
+
+                if (string.IsNullOrEmpty(script.Name))
+                {
+                    script.Name = key;
+                }
+            }
+            finally
+            {
+                if (locked)
+                {
+                    Monitor.Exit(_scripts_lock);
+                }
+            }
+        }
+        public bool TryGetOrCreate(in string key, out Script script, out string error)
+        {
+            error = null;
+            script = null;
+
+            try
+            {
+                script = GetOrCreate(in key);
+            }
+            catch (Exception exception)
+            {
+                error = ExceptionHelper.GetErrorMessage(exception);
+            }
+
+            return script is not null;
         }
         public DaJetHost Run()
         {
@@ -105,6 +189,7 @@ namespace DaJet.Host
         }
 
         #region "SCRIPT FILE WATCHER"
+        private FileSystemWatcher _scriptFileWatcher;
         private void InitializeScriptFileWatcher()
         {
             bool success = false;
@@ -198,7 +283,7 @@ namespace DaJet.Host
 
             try
             {
-                Script script = CreateScriptFromFile(args.FullPath);
+                Script script = _builder.FromFile(args.FullPath).Build();
 
                 AddOrUpdate(in keyToCreate, in script);
 
@@ -221,7 +306,7 @@ namespace DaJet.Host
 
             try
             {
-                Script script = CreateScriptFromFile(args.FullPath);
+                Script script = _builder.FromFile(args.FullPath).Build();
 
                 AddOrUpdate(in keyToUpdate, in script);
 
@@ -258,7 +343,7 @@ namespace DaJet.Host
             
             try
             {
-                Script script = CreateScriptFromFile(args.FullPath);
+                Script script = _builder.FromFile(renamed.FullPath).Build();
 
                 _ = _scripts.TryRemove(keyToRemove, out _);
 
@@ -273,101 +358,7 @@ namespace DaJet.Host
             }
         }
         #endregion
-
-        private Script CreateScript(in string key)
-        {
-            string filePath = Path.Combine(RootPath, key);
-            
-            return CreateScriptFromFile(in filePath);
-        }
-        private Script CreateScriptFromFile(in string filePath)
-        {
-            return _builder.FromFile(in filePath).Build();
-        }
-        private Script GetOrCreate(in string key)
-        {
-            Script script;
-
-            if (_scripts.TryGetValue(key, out script))
-            {
-                return script;
-            }
-
-            bool locked = false;
-
-            try
-            {
-                Monitor.Enter(_scripts_lock, ref locked);
-
-                if (_scripts.TryGetValue(key, out script))
-                {
-                    return script; // double-checking
-                }
-
-                // long path - create resource
-
-                script = CreateScript(in key);
-
-                if (string.IsNullOrEmpty(script.Name))
-                {
-                    script.Name = key;
-                }
-
-                _ = _scripts.TryAdd(key, script); // add resource to the cache
-            }
-            finally
-            {
-                if (locked)
-                {
-                    Monitor.Exit(_scripts_lock);
-                }
-            }
-
-            return script;
-        }
-        private void AddOrUpdate(in string key, in Script script)
-        {
-            bool locked = false;
-
-            try
-            {
-                Monitor.Enter(_scripts_lock, ref locked);
-
-                if (!_scripts.TryAdd(key, script))
-                {
-                    _scripts[key] = script;
-                }
-
-                if (string.IsNullOrEmpty(script.Name))
-                {
-                    script.Name = key;
-                }
-            }
-            finally
-            {
-                if (locked)
-                {
-                    Monitor.Exit(_scripts_lock);
-                }
-            }
-        }
-        public bool TryGetOrCreate(in string key, out Script script, out string error)
-        {
-            error = null;
-            script = null;
-
-            try
-            {
-                script = GetOrCreate(in key);
-            }
-            catch (Exception exception)
-            {
-                error = ExceptionHelper.GetErrorMessage(exception);
-            }
-
-            return script is not null;
-        }
-
+        
         private readonly ConcurrentDictionary<string, int> _singletons = new(StringComparer.Ordinal);
         private readonly ConcurrentDictionary<int, AsyncExecutor> _runningTasks = new();
         public object Run(in string key, in DataObject parameters = null)
