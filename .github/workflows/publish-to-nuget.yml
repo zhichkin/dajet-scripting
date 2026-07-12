@@ -42,6 +42,14 @@ jobs:
         working-directory: src/dajet-interpreter
         run: dotnet pack --configuration Release --no-build --output ../nupkg
 
+      - name: Build DaJet Script Host
+        working-directory: src/dajet-host
+        run: dotnet build --configuration Release
+
+      - name: Pack DaJet Script Host
+        working-directory: src/dajet-host
+        run: dotnet pack --configuration Release --no-build --output ../nupkg
+        
       - name: NuGet login (OIDC)
         uses: NuGet/login@v1
         id: login
