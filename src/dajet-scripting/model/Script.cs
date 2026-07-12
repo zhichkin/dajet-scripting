@@ -6,7 +6,7 @@ namespace DaJet.Scripting.Model
     public sealed class Script : SyntaxNode
     {
         public Script() { Token = Token.Script; }
-        public string Name { get; set; } = string.Empty;
+        public string Path { get; set; } = string.Empty;
         public bool RunAtStartup { get; internal set; }
         public bool IsLongRunning { get; internal set; }
         public bool IsSingleton { get; internal set; }

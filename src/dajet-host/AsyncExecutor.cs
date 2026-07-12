@@ -38,7 +38,7 @@ namespace DaJet.Host
         {
             get
             {
-                return new RunningTaskInfo(_taskId, _script.Name, _script.SingletonKey);
+                return new RunningTaskInfo(_taskId, _script.Path, _script.SingletonKey);
             }
         }
 

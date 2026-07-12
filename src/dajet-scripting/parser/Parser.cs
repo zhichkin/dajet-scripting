@@ -711,31 +711,18 @@ namespace DaJet.Scripting
                 Text = Previous().Value
             };
         }
-        private DirectiveStatement directive()
+        private SyntaxNode directive()
         {
-            DirectiveStatement pragma = new();
-
             if (Match(Token.STARTUP))
             {
-                pragma.Token = Token.STARTUP;
-                
                 _script.RunAtStartup = true;
             }
             else if (Match(Token.LONG_TASK))
             {
-                pragma.Token = Token.LONG_TASK;
-
                 _script.IsLongRunning = true;
             }
             else if (Match(Token.SINGLETON))
             {
-                pragma.Token = Token.SINGLETON;
-
-                if (!Match(Token.OpenRoundBracket))
-                {
-                    throw new FormatException("[SINGLETON] open round bracket expected");
-                }
-
                 if (!Match(Token.String))
                 {
                     throw new FormatException("[SINGLETON] key value expected");
@@ -747,11 +734,6 @@ namespace DaJet.Scripting
                 {
                     throw new FormatException("[SINGLETON] key value is empty");
                 }
-                
-                if (!Match(Token.CloseRoundBracket))
-                {
-                    throw new FormatException("[SINGLETON] close round bracket expected");
-                }
 
                 _script.IsSingleton = true;
                 _script.SingletonKey = key;
@@ -761,7 +743,7 @@ namespace DaJet.Scripting
                 throw new FormatException("[#] STARTUP, LONG_TASK or SINGLETON keywords expected");
             }
 
-            return pragma;
+            return null; // do not add to statements collection
         }
         private SyntaxNode assignment()
         {

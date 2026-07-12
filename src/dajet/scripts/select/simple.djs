@@ -1,6 +1,6 @@
 # STARTUP
 # LONG_TASK
-# SINGLETON('1234567890')
+# SINGLETON 'Select product by code'
 
 DECLARE @Код string = 'MS-07'
 

@@ -25,7 +25,20 @@ namespace DaJet.Host
         public DaJetHost(in string rootName) { RootName = rootName; }
         public string RootName { get; } = "scripts";
         public string RootPath { get { return Path.Combine(AppContext.BaseDirectory, RootName); } }
-        public string GetKeyFromFileName(in string fullPath)
+        public string GetScriptFullPath(in string relativePath)
+        {
+            string fullPath = relativePath;
+
+            if (OperatingSystem.IsWindows())
+            {
+                fullPath = fullPath.Replace('/', '\\');
+            }
+
+            fullPath = Path.Combine(RootPath, fullPath);
+
+            return fullPath;
+        }
+        public string GetScriptRelativePath(in string fullPath)
         {
             string relativePath = Path.GetRelativePath(RootPath, fullPath);
 
@@ -39,13 +52,13 @@ namespace DaJet.Host
                 relativePath = relativePath.TrimStart('/');
             }
 
-            return relativePath.ToLower();
+            return relativePath;
         }
-        private Script GetOrCreate(in string key)
+        private Script GetOrCreate(in string path)
         {
             Script script;
 
-            if (_scripts.TryGetValue(key, out script))
+            if (_scripts.TryGetValue(path, out script))
             {
                 return script;
             }
@@ -56,20 +69,20 @@ namespace DaJet.Host
             {
                 Monitor.Enter(_scripts_lock, ref locked);
 
-                if (_scripts.TryGetValue(key, out script))
+                if (_scripts.TryGetValue(path, out script))
                 {
                     return script; // double-checking
                 }
 
                 // long path - create resource
 
-                string filePath = Path.Combine(RootPath, key);
+                string filePath = GetScriptFullPath(in path);
 
                 script = _builder.FromFile(in filePath).Build();
 
-                script.Name = key;
+                script.Path = path;
 
-                _ = _scripts.TryAdd(key, script); // add resource to the cache
+                _ = _scripts.TryAdd(path, script); // add resource to the cache
             }
             finally
             {
@@ -81,7 +94,7 @@ namespace DaJet.Host
 
             return script;
         }
-        private void AddOrUpdate(in string key, in Script script)
+        private void AddOrUpdate(in string path, in Script script)
         {
             bool locked = false;
 
@@ -89,11 +102,11 @@ namespace DaJet.Host
             {
                 Monitor.Enter(_scripts_lock, ref locked);
 
-                script.Name = key;
+                script.Path = path;
 
-                if (!_scripts.TryAdd(key, script))
+                if (!_scripts.TryAdd(path, script))
                 {
-                    _scripts[key] = script;
+                    _scripts[path] = script;
                 }
             }
             finally
@@ -104,14 +117,14 @@ namespace DaJet.Host
                 }
             }
         }
-        public bool TryGetOrCreate(in string key, out Script script, out string error)
+        public bool TryGetOrCreate(in string path, out Script script, out string error)
         {
             error = null;
             script = null;
 
             try
             {
-                script = GetOrCreate(in key);
+                script = GetOrCreate(in path);
             }
             catch (Exception exception)
             {
@@ -151,7 +164,7 @@ namespace DaJet.Host
         }
         private void StartupScript(in string scriptPath)
         {
-            string key = GetKeyFromFileName(in scriptPath);
+            string path = GetScriptRelativePath(in scriptPath);
 
             try
             {
@@ -168,16 +181,16 @@ namespace DaJet.Host
                 {
                     script = _builder.FromScript(in script).Build();
 
-                    AddOrUpdate(in key, in script);
+                    AddOrUpdate(in path, in script);
 
                     _ = RunAsync(in script);
 
-                    FileLogger.Default.Write($"[STARTUP][SUCCESS] {key}");
+                    FileLogger.Default.Write($"[STARTUP][SUCCESS] {path}");
                 }
             }
             catch (Exception error)
             {
-                FileLogger.Default.Write($"[STARTUP][ERROR] {key}");
+                FileLogger.Default.Write($"[STARTUP][ERROR] {path}");
                 FileLogger.Default.Write(ExceptionHelper.GetErrorMessageAndStackTrace(error));
             }
         }
@@ -222,7 +235,7 @@ namespace DaJet.Host
                 DisposeScriptFileWatcher();
             }
 
-            FileLogger.Default.Write($"Script file watcher initialized on {RootName}");
+            FileLogger.Default.Write($"Script file watcher initialized on '{RootName}'");
         }
         private void DisposeScriptFileWatcher()
         {
@@ -273,19 +286,19 @@ namespace DaJet.Host
                 return;
             }
 
-            string keyToCreate = GetKeyFromFileName(args.FullPath);
+            string pathToCreate = GetScriptRelativePath(args.FullPath);
 
             try
             {
                 Script script = _builder.FromFile(args.FullPath).Build();
 
-                AddOrUpdate(in keyToCreate, in script);
+                AddOrUpdate(in pathToCreate, in script);
 
-                FileLogger.Default.Write($"Created: {keyToCreate}");
+                FileLogger.Default.Write($"Created: {pathToCreate}");
             }
             catch (Exception error)
             {
-                FileLogger.Default.Write($"Created: failed to process {keyToCreate}");
+                FileLogger.Default.Write($"Created: failed to process {pathToCreate}");
                 FileLogger.Default.Write(ExceptionHelper.GetErrorMessage(error));
             }
         }
@@ -296,29 +309,29 @@ namespace DaJet.Host
                 return;
             }
 
-            string keyToUpdate = GetKeyFromFileName(args.FullPath);
+            string pathToUpdate = GetScriptRelativePath(args.FullPath);
 
             try
             {
                 Script script = _builder.FromFile(args.FullPath).Build();
 
-                AddOrUpdate(in keyToUpdate, in script);
+                AddOrUpdate(in pathToUpdate, in script);
 
-                FileLogger.Default.Write($"Changed: {keyToUpdate}");
+                FileLogger.Default.Write($"Changed: {pathToUpdate}");
             }
             catch (Exception error)
             {
-                FileLogger.Default.Write($"Changed: failed to process {keyToUpdate}");
+                FileLogger.Default.Write($"Changed: failed to process {pathToUpdate}");
                 FileLogger.Default.Write(ExceptionHelper.GetErrorMessage(error));
             }
         }
         private void DeleteScriptFileEvent(object sender, FileSystemEventArgs args)
         {
-            string keyToDelete = GetKeyFromFileName(args.FullPath);
+            string pathToDelete = GetScriptRelativePath(args.FullPath);
 
-            _ = _scripts.TryRemove(keyToDelete, out _);
+            _ = _scripts.TryRemove(pathToDelete, out _);
 
-            FileLogger.Default.Write($"Deleted: {keyToDelete}");
+            FileLogger.Default.Write($"Deleted: {pathToDelete}");
         }
         private void RenameScriptFileEvent(object sender, FileSystemEventArgs args)
         {
@@ -332,22 +345,22 @@ namespace DaJet.Host
                 return;
             }
 
-            string keyToCreate = GetKeyFromFileName(renamed.FullPath);
-            string keyToRemove = GetKeyFromFileName(renamed.OldFullPath);
+            string pathToCreate = GetScriptRelativePath(renamed.FullPath);
+            string pathToRemove = GetScriptRelativePath(renamed.OldFullPath);
             
             try
             {
                 Script script = _builder.FromFile(renamed.FullPath).Build();
 
-                _ = _scripts.TryRemove(keyToRemove, out _);
+                _ = _scripts.TryRemove(pathToRemove, out _);
 
-                AddOrUpdate(in keyToCreate, in script);
+                AddOrUpdate(in pathToCreate, in script);
 
-                FileLogger.Default.Write($"Renamed: {keyToRemove} > {keyToCreate}");
+                FileLogger.Default.Write($"Renamed: {pathToRemove} > {pathToCreate}");
             }
             catch (Exception error)
             {
-                FileLogger.Default.Write($"Renamed: failed to process {keyToRemove}");
+                FileLogger.Default.Write($"Renamed: failed to process {pathToRemove}");
                 FileLogger.Default.Write(ExceptionHelper.GetErrorMessage(error));
             }
         }
@@ -355,9 +368,9 @@ namespace DaJet.Host
         
         private readonly ConcurrentDictionary<string, int> _singletons = new(StringComparer.Ordinal);
         private readonly ConcurrentDictionary<int, AsyncExecutor> _runningTasks = new();
-        public object Run(in string key, in DataObject parameters = null)
+        public object Run(in string path, in DataObject parameters = null)
         {
-            Script script = GetOrCreate(in key);
+            Script script = GetOrCreate(in path);
 
             return Run(in script, in parameters);
         }
@@ -374,9 +387,9 @@ namespace DaJet.Host
                 return interpreter.Execute(in parameters);
             }
         }
-        public Task<object> RunAsync(in string key, in DataObject parameters = null)
+        public Task<object> RunAsync(in string path, in DataObject parameters = null)
         {
-            Script script = GetOrCreate(in key);
+            Script script = GetOrCreate(in path);
             
             return RunAsync(in script, in parameters);
         }
@@ -416,9 +429,9 @@ namespace DaJet.Host
             
             return task;
         }
-        public Task<object> RunLongTask(in string key, in DataObject parameters = null)
+        public Task<object> RunLongTask(in string path, in DataObject parameters = null)
         {
-            Script script = GetOrCreate(in key);
+            Script script = GetOrCreate(in path);
             
             return RunLongTask(in script, in parameters);
         }
@@ -448,7 +461,7 @@ namespace DaJet.Host
         {
             if (!_singletons.TryAdd(script.SingletonKey, 0))
             {
-                string message = $"Duplicate singleton run: [{script.Name}] {{{script.SingletonKey}}}";
+                string message = $"Duplicate singleton run: [{script.Path}] {{{script.SingletonKey}}}";
 
                 return Task.FromException<object>(new InvalidOperationException(message));
             }
@@ -491,16 +504,61 @@ namespace DaJet.Host
                 executor.Cancel();
             }
         }
-        public List<RunningTaskInfo> GetRunningTasks()
+        public void Cancel(in string path)
         {
-            List<RunningTaskInfo> display = new(_runningTasks.Count);
+            List<AsyncExecutor> executors = new();
+
+            AsyncExecutor executor;
 
             foreach (var item in _runningTasks)
             {
-                display.Add(item.Value.Descriptor);
+                executor = item.Value;
+
+                if (executor.Script.Path == path)
+                {
+                    executors.Add(executor);
+                }
             }
 
-            return display;
+            for (int i = 0; i < executors.Count; i++)
+            {
+                executor = executors[i];
+
+                executor.Cancel();
+            }
+        }
+        public List<RunningTaskInfo> GetRunningTasks()
+        {
+            List<RunningTaskInfo> list = new(_runningTasks.Count);
+
+            AsyncExecutor executor;
+
+            foreach (var item in _runningTasks)
+            {
+                executor = item.Value;
+
+                list.Add(executor.Descriptor);
+            }
+
+            return list;
+        }
+        public List<RunningTaskInfo> GetRunningTasks(in string path)
+        {
+            List<RunningTaskInfo> list = new(_runningTasks.Count);
+
+            AsyncExecutor executor;
+
+            foreach (var item in _runningTasks)
+            {
+                executor = item.Value;
+
+                if (executor.Script.Path == path)
+                {
+                    list.Add(executor.Descriptor);
+                }
+            }
+
+            return list;
         }
     }
 }
