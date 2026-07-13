@@ -64,7 +64,7 @@ namespace DaJet.Host
 
             DaJetHost host = DaJetHost.Create("scripts").Run();
 
-            ExecuteScriptAsync(in host);
+            //ExecuteScriptAsync(in host);
 
             ExecuteLongRunningScriptAsync(in host);
 
@@ -289,27 +289,26 @@ namespace DaJet.Host
         }
         private static void ExecuteLongRunningScriptAsync(in DaJetHost host)
         {
-            if (!host.TryGetOrCreate("select/simple.djs", out Script script, out string error))
+            if (!host.TryGetOrCreate("sleep.djs", out Script script, out string error))
             {
                 Console.WriteLine(error); return;
             }
 
-            DataObject parameters = new();
-            parameters.SetValue("Код", "MS-01");
-
-            Task<object> task = host.RunAsync(in script, in parameters);
+            Task<object> task = host.RunAsync(in script);
 
             Task show = task.ContinueWith(ShowAsyncResult);
 
-            //host.Cancel(task.Id);
+            Console.WriteLine($"Before sleep: {host.GetRunningTask(task.Id)}");
 
-            //show.Wait();
+            Thread.Sleep(TimeSpan.FromSeconds(5));
 
-            //object value = task.Result;
+            Console.WriteLine($"After sleep: {host.GetRunningTask(task.Id)}");
 
-            //string json = JsonSerializer.Serialize(value, value.GetType(), JsonOptions);
+            Console.WriteLine($"Before cancel: {host.GetRunningTask(task.Id)}");
 
-            //Console.WriteLine(json);
+            host.Cancel(task.Id);
+
+            Console.WriteLine($"After cancel: {host.GetRunningTask(task.Id)}");
         }
         private static void ShowAsyncResult(Task<object> task)
         {
@@ -341,11 +340,11 @@ namespace DaJet.Host
 
         private static void DisplayRunningTasks(in DaJetHost host)
         {
-            List<RunningTaskInfo> tasks = host.GetRunningTasks();
+            List<RunningTaskStatus> tasks = host.GetRunningTasks();
 
             Console.WriteLine();
 
-            foreach (RunningTaskInfo task in tasks)
+            foreach (RunningTaskStatus task in tasks)
             {
                 Console.WriteLine(task);
             }

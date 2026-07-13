@@ -497,9 +497,9 @@ namespace DaJet.Host
                 _ = _singletons.TryRemove(key, out _);
             }
         }
-        public void Cancel(int task)
+        public void Cancel(int taskId)
         {
-            if (_runningTasks.TryRemove(task, out AsyncExecutor executor))
+            if (_runningTasks.TryRemove(taskId, out AsyncExecutor executor))
             {
                 executor.Cancel();
             }
@@ -527,9 +527,18 @@ namespace DaJet.Host
                 executor.Cancel();
             }
         }
-        public List<RunningTaskInfo> GetRunningTasks()
+        public RunningTaskStatus GetRunningTask(int taskId)
         {
-            List<RunningTaskInfo> list = new(_runningTasks.Count);
+            if (_runningTasks.TryGetValue(taskId, out AsyncExecutor executor))
+            {
+                return executor.Descriptor;
+            }
+
+            return RunningTaskStatus.Default; // Not found
+        }
+        public List<RunningTaskStatus> GetRunningTasks()
+        {
+            List<RunningTaskStatus> list = new(_runningTasks.Count);
 
             AsyncExecutor executor;
 
@@ -542,9 +551,9 @@ namespace DaJet.Host
 
             return list;
         }
-        public List<RunningTaskInfo> GetRunningTasks(in string path)
+        public List<RunningTaskStatus> GetRunningTasks(in string path)
         {
-            List<RunningTaskInfo> list = new(_runningTasks.Count);
+            List<RunningTaskStatus> list = new(_runningTasks.Count);
 
             AsyncExecutor executor;
 

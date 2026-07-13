@@ -168,6 +168,7 @@ namespace DaJet.Scripting
         {
             if (node is DeclareStatement declare) { return Execute(in declare); }
             else if (node is PrintStatement print) { return Execute(in print); }
+            else if (node is SleepStatement sleep) { return Execute(in sleep); }
             else if (node is UseStatement use) { return Execute(in use); }
             else if (node is SelectStatement select) { return Execute(in select); }
             else if (node is ReturnStatement _return) { return Execute(in _return); }
@@ -223,6 +224,14 @@ namespace DaJet.Scripting
             {
                 Console.WriteLine(value.ToString());
             }
+
+            return ExitCode.Success;
+        }
+        private ExitCode Execute(in SleepStatement statement)
+        {
+            TimeSpan delay = TimeSpan.FromSeconds(statement.Timeout);
+
+            Task.Delay(delay, Cancellation).Wait(Cancellation);
 
             return ExitCode.Success;
         }

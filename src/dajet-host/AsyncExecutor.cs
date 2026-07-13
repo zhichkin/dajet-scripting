@@ -34,11 +34,15 @@ namespace DaJet.Host
         }
         public Script Script { get { return _script; } }
         public Task<object> Task { get { return _task; } }
-        public RunningTaskInfo Descriptor
+        public RunningTaskStatus Descriptor
         {
             get
             {
-                return new RunningTaskInfo(_taskId, _script.Path, _script.SingletonKey);
+                Task<object> task = _task;
+
+                string status = task is null ? "Ready" : task.Status.ToString();
+
+                return new RunningTaskStatus(_taskId, status, _script.Path, _script.SingletonKey);
             }
         }
 
@@ -129,7 +133,6 @@ namespace DaJet.Host
             {
                 try
                 {
-                    _task = null;
                     _cts.Cancel();
                 }
                 finally
@@ -138,6 +141,7 @@ namespace DaJet.Host
                     _cts.Dispose(); // dispose executor cancellation token source
                 }
 
+                _task = null;
                 _taskId = 0;
 
                 SetReady(); // instances of this class can be reused
