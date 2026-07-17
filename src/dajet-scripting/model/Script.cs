@@ -7,10 +7,12 @@ namespace DaJet.Scripting.Model
     {
         public Script() { Token = Token.Script; }
         public string Path { get; set; } = string.Empty;
+        public string SourceCode { get; internal set; } = string.Empty; // is needed to handle dynamic scripts
         public bool RunAtStartup { get; internal set; }
         public bool IsLongRunning { get; internal set; }
         public bool IsSingleton { get; internal set; }
         public string SingletonKey { get; internal set; } = string.Empty;
+        public bool IsDynamic { get; set; } // USE @variable - dynamic database binding
         public List<SyntaxNode> Statements { get; } = new();
 
         ///<summary>Get the definition of a variable by its name, including the leading @ symbol.</summary>
@@ -26,7 +28,36 @@ namespace DaJet.Scripting.Model
 
             return null;
         }
-        
+
+        public List<UseStatement> GetUseStatements()
+        {
+            List<UseStatement> statements = new();
+
+            foreach (SyntaxNode node in Statements)
+            {
+                if (node is UseStatement use)
+                {
+                    statements.Add(use);
+
+                    Extract(in use, in statements);
+                }
+            }
+
+            return statements;
+        }
+        private static void Extract(in UseStatement use, in List<UseStatement> statements)
+        {
+            foreach (SyntaxNode node in use.Statements)
+            {
+                if (node is UseStatement nested)
+                {
+                    statements.Add(nested);
+
+                    Extract(in nested, in statements);
+                }
+            }
+        }
+
         public List<SqlStatement> GetSqlStatements()
         {
             List<SqlStatement> statements = new();
@@ -52,6 +83,10 @@ namespace DaJet.Scripting.Model
                 if (node is SqlStatement statement)
                 {
                     statements.Add(statement);
+                }
+                else if (node is UseStatement nested)
+                {
+                    Extract(in nested, in statements);
                 }
             }
         }

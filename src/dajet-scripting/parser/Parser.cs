@@ -794,16 +794,28 @@ namespace DaJet.Scripting
 
             return statement;
         }
-        private SyntaxNode use_statement()
+        private UseStatement use_statement()
         {
             UseStatement statement = new();
 
-            if (!Match(Token.String))
+            if (Match(Token.String))
             {
-                throw new FormatException("[USE] data source identifier expected");
+                statement.Source = Previous().Value;
+            }
+            else if (Match(Token.Variable))
+            {
+                statement.DynamicSource = variable() as VariableReference;
             }
 
-            statement.Source = Previous().Value;
+            if (string.IsNullOrWhiteSpace(statement.Source) && statement.DynamicSource is null)
+            {
+                throw new FormatException("[USE] data source is not specified");
+            }
+
+            if (statement.IsDynamic)
+            {
+                _script.IsDynamic = true;
+            }
 
             statement.Statements = statement_block(Token.END);
 

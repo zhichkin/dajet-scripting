@@ -3,7 +3,6 @@ using DaJet.Scripting.Model;
 using DaJet.TypeSystem;
 using DaJet.Utilities;
 using System.Collections.Concurrent;
-using System.Text;
 
 namespace DaJet.Host
 {
@@ -17,27 +16,13 @@ namespace DaJet.Host
         {
             return new DaJetHost(in catalog);
         }
-        private static readonly ScriptBuilder _builder = new();
-
-        private readonly object _scripts_lock = new();
+        
+        private readonly object _cache_lock = new();
         private readonly ConcurrentDictionary<string, Script> _scripts = new(StringComparer.OrdinalIgnoreCase);
         public DaJetHost() { }
         public DaJetHost(in string rootName) { RootName = rootName; }
         public string RootName { get; } = "scripts";
         public string RootPath { get { return Path.Combine(AppContext.BaseDirectory, RootName); } }
-        public string GetScriptFullPath(in string relativePath)
-        {
-            string fullPath = relativePath;
-
-            if (OperatingSystem.IsWindows())
-            {
-                fullPath = fullPath.Replace('/', '\\');
-            }
-
-            fullPath = Path.Combine(RootPath, fullPath);
-
-            return fullPath;
-        }
         public string GetScriptRelativePath(in string fullPath)
         {
             string relativePath = Path.GetRelativePath(RootPath, fullPath);
@@ -54,6 +39,10 @@ namespace DaJet.Host
 
             return relativePath;
         }
+        public ScriptBuilder CreateScriptBuilder()
+        {
+            return new ScriptBuilder(RootPath);
+        }
         private Script GetOrCreate(in string path)
         {
             Script script;
@@ -67,28 +56,31 @@ namespace DaJet.Host
 
             try
             {
-                Monitor.Enter(_scripts_lock, ref locked);
+                Monitor.Enter(_cache_lock, ref locked);
 
                 if (_scripts.TryGetValue(path, out script))
                 {
-                    return script; // double-checking
+                    return script;
                 }
 
-                // long path - create resource
+                // create script from source code and store it to the cache
 
-                string filePath = GetScriptFullPath(in path);
+                ScriptBuilder factory = CreateScriptBuilder();
 
-                script = _builder.FromFile(in filePath).Build();
-
-                script.Path = path;
-
-                _ = _scripts.TryAdd(path, script); // add resource to the cache
+                script = factory.FromPath(in path).Parse();
+                
+                if (!script.IsDynamic)
+                {
+                    script = factory.Build(); // build static script
+                }
+                
+                _ = _scripts.TryAdd(path, script); // add script to the cache
             }
             finally
             {
                 if (locked)
                 {
-                    Monitor.Exit(_scripts_lock);
+                    Monitor.Exit(_cache_lock);
                 }
             }
 
@@ -100,7 +92,7 @@ namespace DaJet.Host
 
             try
             {
-                Monitor.Enter(_scripts_lock, ref locked);
+                Monitor.Enter(_cache_lock, ref locked);
 
                 script.Path = path;
 
@@ -113,25 +105,20 @@ namespace DaJet.Host
             {
                 if (locked)
                 {
-                    Monitor.Exit(_scripts_lock);
+                    Monitor.Exit(_cache_lock);
                 }
             }
         }
-        public bool TryGetOrCreate(in string path, out Script script, out string error)
+        private Script GetScriptFromCache(in string path, in DataObject parameters)
         {
-            error = null;
-            script = null;
+            Script script = GetOrCreate(in path);
 
-            try
+            if (!script.IsDynamic)
             {
-                script = GetOrCreate(in path);
-            }
-            catch (Exception exception)
-            {
-                error = ExceptionHelper.GetErrorMessage(exception);
+                return script;
             }
 
-            return script is not null;
+            return CreateScriptBuilder().FromScript(in script).Use(in parameters).Build();
         }
         public DaJetHost Run()
         {
@@ -164,34 +151,30 @@ namespace DaJet.Host
         }
         private void StartupScript(in string scriptPath)
         {
-            string path = GetScriptRelativePath(in scriptPath);
-
             try
             {
-                string sourceCode = null;
+                ScriptBuilder factory = CreateScriptBuilder();
 
-                using (StreamReader reader = new(scriptPath, Encoding.UTF8))
+                Script script = factory.FromFile(in scriptPath).Parse();
+
+                if (script.RunAtStartup && !script.IsDynamic)
                 {
-                    sourceCode = reader.ReadToEnd();
-                }
+                    //NOTE: Dynamic scripts are not allowed to run at startup.
+                    //NOTE: Parameters to use are not available at the moment.
 
-                Script script = _builder.FromSource(in sourceCode).Parse();
+                    script = factory.Build();
 
-                if (script.RunAtStartup)
-                {
-                    script = _builder.FromScript(in script).Build();
-
-                    AddOrUpdate(in path, in script);
+                    AddOrUpdate(script.Path, in script);
 
                     _ = RunAsync(in script);
 
-                    FileLogger.Default.Write($"[STARTUP][SUCCESS] {path}");
+                    FileLogger.Default.Write($"[STARTUP][SUCCESS] {script.Path}");
                 }
             }
             catch (Exception error)
             {
-                FileLogger.Default.Write($"[STARTUP][ERROR] {path}");
-                FileLogger.Default.Write(ExceptionHelper.GetErrorMessageAndStackTrace(error));
+                FileLogger.Default.Write($"[STARTUP][ERROR] {scriptPath}");
+                FileLogger.Default.Write(ExceptionHelper.GetErrorMessage(error));
             }
         }
 
@@ -286,19 +269,24 @@ namespace DaJet.Host
                 return;
             }
 
-            string pathToCreate = GetScriptRelativePath(args.FullPath);
-
             try
             {
-                Script script = _builder.FromFile(args.FullPath).Build();
+                ScriptBuilder factory = CreateScriptBuilder();
 
-                AddOrUpdate(in pathToCreate, in script);
+                Script script = factory.FromFile(args.FullPath).Parse();
 
-                FileLogger.Default.Write($"Created: {pathToCreate}");
+                if (!script.IsDynamic)
+                {
+                    script = factory.Build();
+                }
+
+                AddOrUpdate(script.Path, in script);
+
+                FileLogger.Default.Write($"Created: {script.Path}");
             }
             catch (Exception error)
             {
-                FileLogger.Default.Write($"Created: failed to process {pathToCreate}");
+                FileLogger.Default.Write($"[WATCHER][CREATED][ERROR] {args.FullPath}");
                 FileLogger.Default.Write(ExceptionHelper.GetErrorMessage(error));
             }
         }
@@ -309,19 +297,24 @@ namespace DaJet.Host
                 return;
             }
 
-            string pathToUpdate = GetScriptRelativePath(args.FullPath);
-
             try
             {
-                Script script = _builder.FromFile(args.FullPath).Build();
+                ScriptBuilder factory = CreateScriptBuilder();
 
-                AddOrUpdate(in pathToUpdate, in script);
+                Script script = factory.FromFile(args.FullPath).Parse();
 
-                FileLogger.Default.Write($"Changed: {pathToUpdate}");
+                if (!script.IsDynamic)
+                {
+                    script = factory.Build();
+                }
+
+                AddOrUpdate(script.Path, in script);
+
+                FileLogger.Default.Write($"Changed: {script.Path}");
             }
             catch (Exception error)
             {
-                FileLogger.Default.Write($"Changed: failed to process {pathToUpdate}");
+                FileLogger.Default.Write($"[WATCHER][CHANGED][ERROR] {args.FullPath}");
                 FileLogger.Default.Write(ExceptionHelper.GetErrorMessage(error));
             }
         }
@@ -350,7 +343,14 @@ namespace DaJet.Host
             
             try
             {
-                Script script = _builder.FromFile(renamed.FullPath).Build();
+                ScriptBuilder factory = CreateScriptBuilder();
+
+                Script script = factory.FromFile(args.FullPath).Parse();
+
+                if (!script.IsDynamic)
+                {
+                    script = factory.Build();
+                }
 
                 _ = _scripts.TryRemove(pathToRemove, out _);
 
@@ -360,7 +360,7 @@ namespace DaJet.Host
             }
             catch (Exception error)
             {
-                FileLogger.Default.Write($"Renamed: failed to process {pathToRemove}");
+                FileLogger.Default.Write($"[WATCHER][RENAMED][ERROR] {renamed.OldFullPath}");
                 FileLogger.Default.Write(ExceptionHelper.GetErrorMessage(error));
             }
         }
@@ -370,7 +370,7 @@ namespace DaJet.Host
         private readonly ConcurrentDictionary<int, AsyncExecutor> _runningTasks = new();
         public object Run(in string path, in DataObject parameters = null)
         {
-            Script script = GetOrCreate(in path);
+            Script script = GetScriptFromCache(in path, in parameters);
 
             return Run(in script, in parameters);
         }
@@ -389,7 +389,22 @@ namespace DaJet.Host
         }
         public Task<object> RunAsync(in string path, in DataObject parameters = null)
         {
-            Script script = GetOrCreate(in path);
+            Script script = null;
+            Task<object> task = null;
+            
+            try
+            {
+                script = GetScriptFromCache(in path, in parameters);
+            }
+            catch (Exception error)
+            {
+                task = Task.FromException<object>(error);
+            }
+
+            if (script is null)
+            {
+                return task;
+            }
             
             return RunAsync(in script, in parameters);
         }
@@ -431,8 +446,23 @@ namespace DaJet.Host
         }
         public Task<object> RunLongTask(in string path, in DataObject parameters = null)
         {
-            Script script = GetOrCreate(in path);
-            
+            Script script = null;
+            Task<object> task = null;
+
+            try
+            {
+                script = GetScriptFromCache(in path, in parameters);
+            }
+            catch (Exception error)
+            {
+                task = Task.FromException<object>(error);
+            }
+
+            if (script is null)
+            {
+                return task;
+            }
+
             return RunLongTask(in script, in parameters);
         }
         public Task<object> RunLongTask(in Script script, in DataObject parameters = null)

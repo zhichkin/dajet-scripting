@@ -64,9 +64,11 @@ namespace DaJet.Host
 
             DaJetHost host = DaJetHost.Create("scripts").Run();
 
-            //ExecuteScriptAsync(in host);
+            ExecuteScriptAsync(in host);
 
             ExecuteLongRunningScriptAsync(in host);
+
+            TestDynamicDatabaseBinding(in host);
 
             DisplayRunningTasks(in host);
 
@@ -74,11 +76,16 @@ namespace DaJet.Host
 
             Console.WriteLine("Press any key to continue ...");
 
-            ConsoleKeyInfo key = Console.ReadKey(false);
+            ConsoleKeyInfo key = Console.ReadKey(true);
 
-            if (key.KeyChar == 'r')
+            while (key.Modifiers == ConsoleModifiers.Control && key.Key == ConsoleKey.R)
             {
                 ExecuteScriptAsync(in host);
+
+                Console.WriteLine("Press any key to continue ...");
+
+                key = Console.ReadKey(true);
+
             }
         }
         private static void ExecuteRunner()
@@ -289,12 +296,14 @@ namespace DaJet.Host
         }
         private static void ExecuteLongRunningScriptAsync(in DaJetHost host)
         {
-            if (!host.TryGetOrCreate("sleep.djs", out Script script, out string error))
-            {
-                Console.WriteLine(error); return;
-            }
+            //if (!host.TryGetOrCreate("sleep.djs", out Script script, out string error))
+            //{
+            //    Console.WriteLine(error); return;
+            //}
 
-            Task<object> task = host.RunAsync(in script);
+            //Task<object> task = host.RunAsync(in script);
+
+            Task<object> task = host.RunAsync("sleep.djs");
 
             Task show = task.ContinueWith(ShowAsyncResult);
 
@@ -334,7 +343,9 @@ namespace DaJet.Host
             }
             else
             {
-                Console.WriteLine($"Task [{task.Id}] is faulted: {task.Exception?.Message}");
+                Exception error = task.Exception.Flatten().InnerException;
+
+                Console.WriteLine($"Task [{task.Id}] is faulted: {error.Message}");
             }
         }
 
@@ -350,6 +361,37 @@ namespace DaJet.Host
             }
 
             Console.WriteLine();
+        }
+
+        private static void TestDynamicDatabaseBinding(in DaJetHost host)
+        {
+            Task show;
+            Task<object> task;
+            DataObject parameters;
+            
+            parameters = new DataObject();
+            parameters.SetValue("КодТовара", "PG-001");
+            parameters.SetValue("БазаДанных", "PG_TEST");
+            task = host.RunAsync("dynamic/select.djs", parameters);
+            show = task.ContinueWith(ShowAsyncResult);
+            
+            parameters = new DataObject();
+            parameters.SetValue("КодТовара", "MS-03");
+            parameters.SetValue("БазаДанных", "MS_TEST");
+            task = host.RunAsync("dynamic/select.djs", parameters);
+            task.ContinueWith(ShowAsyncResult);
+            
+            parameters = new DataObject();
+            parameters.SetValue("КодТовара", "MS-05");
+            parameters.SetValue("БазаДанных", "MS_TEST");
+            task = host.RunAsync("dynamic/select.djs", parameters);
+            show = task.ContinueWith(ShowAsyncResult);
+            
+            parameters = new DataObject();
+            parameters.SetValue("КодТовара", "MS-05");
+            parameters.SetValue("БазаДанных", "NOT_EXISTS");
+            task = host.RunAsync("dynamic/select.djs", parameters);
+            show = task.ContinueWith(ShowAsyncResult);
         }
     }
 }

@@ -10,11 +10,15 @@ namespace DaJet.Scripting
         {
             MetadataProvider provider = MetadataProvider.Get(in domain);
 
+            ThrowIfNull(in provider, in domain);
+
             return provider.GetMetadataEntry(typeCode);
         }
         public MetadataEntry GetEntry(in string domain, Guid typeUuid)
         {
             MetadataProvider provider = MetadataProvider.Get(in domain);
+
+            ThrowIfNull(in provider, in domain);
 
             return provider.GetMetadataEntry(typeUuid);
         }
@@ -22,11 +26,15 @@ namespace DaJet.Scripting
         {
             MetadataProvider provider = MetadataProvider.Get(in domain);
 
+            ThrowIfNull(in provider, in domain);
+
             return provider.GetMetadataEntry(in identifier);
         }
         public Entity GetEnumerationEntity(in string domain, in string identifier)
         {
             MetadataProvider provider = MetadataProvider.Get(in domain);
+
+            ThrowIfNull(in provider, in domain);
 
             return provider.GetEnumerationEntity(in identifier);
         }
@@ -41,11 +49,20 @@ namespace DaJet.Scripting
 
             MetadataProvider provider = MetadataProvider.Get(in domain);
 
+            ThrowIfNull(in provider, in domain);
+
             schema = provider.GetMetadataObject(in identifier);
 
             _ = _cache.TryAdd(key, schema);
 
             return schema;
+        }
+        private static void ThrowIfNull(in MetadataProvider provider, in string domain)
+        {
+            if (provider is null)
+            {
+                throw new InvalidOperationException($"Metadata provider [{domain}] is not found.");
+            }
         }
     }
 }
