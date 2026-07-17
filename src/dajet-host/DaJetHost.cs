@@ -120,6 +120,22 @@ namespace DaJet.Host
 
             return CreateScriptBuilder().FromScript(in script).Use(in parameters).Build();
         }
+        public bool TryGetOrCreate(in string path, in DataObject parameters, out Script script, out string error)
+        {
+            error = null;
+            script = null;
+
+            try
+            {
+                script = GetScriptFromCache(in path, in parameters);
+            }
+            catch (Exception exception)
+            {
+                error = ExceptionHelper.GetErrorMessage(exception);
+            }
+
+            return script is not null;
+        }
         public DaJetHost Run()
         {
             Startup();
