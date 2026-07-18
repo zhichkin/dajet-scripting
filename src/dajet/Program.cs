@@ -64,15 +64,17 @@ namespace DaJet.Host
 
             DaJetHost host = DaJetHost.Create("scripts").Run();
 
-            ExecuteScriptAsync(in host);
+            //ExecuteScriptAsync(in host);
 
-            ExecuteLongRunningScriptAsync(in host);
+            //ExecuteLongRunningScriptAsync(in host);
 
-            TestDynamicDatabaseBinding(in host);
+            //TestDynamicDatabaseBinding(in host);
 
-            DisplayRunningTasks(in host);
+            //DisplayRunningTasks(in host);
 
             //ExecuteScriptSync(in host);
+
+            TestInsertStatement(in host);
 
             Console.WriteLine("Press any key to continue ...");
 
@@ -80,7 +82,7 @@ namespace DaJet.Host
 
             while (key.Modifiers == ConsoleModifiers.Control && key.Key == ConsoleKey.R)
             {
-                ExecuteScriptAsync(in host);
+                TestInsertStatement(in host);
 
                 Console.WriteLine("Press any key to continue ...");
 
@@ -392,6 +394,13 @@ namespace DaJet.Host
             parameters.SetValue("БазаДанных", "NOT_EXISTS");
             task = host.RunAsync("dynamic/select.djs", parameters);
             show = task.ContinueWith(ShowAsyncResult);
+        }
+
+        private static void TestInsertStatement(in DaJetHost host)
+        {
+            Task<object> task = host.RunAsync("insert/simple.djs");
+
+            task.Wait();
         }
     }
 }

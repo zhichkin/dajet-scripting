@@ -1,4 +1,6 @@
-﻿namespace DaJet.Scripting.Model
+﻿using DaJet.TypeSystem;
+
+namespace DaJet.Scripting.Model
 {
     public sealed class SelectExpression : SyntaxNode
     {
@@ -31,6 +33,37 @@
             }
 
             return false;
+        }
+        public bool TryGetColumn(in string alias, out ColumnExpression expression)
+        {
+            ArgumentNullException.ThrowIfNullOrWhiteSpace(alias, nameof(alias));
+
+            expression = null;
+
+            string propertyName = null;
+
+            foreach (ColumnExpression column in Columns)
+            {
+                if (!string.IsNullOrEmpty(column.Alias))
+                {
+                    propertyName = column.Alias;
+                }
+                else if (column.Expression is ColumnReference field)
+                {
+                    propertyName = field.ColumnName;
+                }
+                else if (column.Source is PropertyDefinition property)
+                {
+                    propertyName = property.Name;
+                }
+
+                if (propertyName == alias)
+                {
+                    expression = column; return true; // success
+                }
+            }
+
+            return false; // not found
         }
 
         // PG = FOR UPDATE SKIP LOCKED

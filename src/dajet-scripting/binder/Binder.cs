@@ -110,7 +110,7 @@ namespace DaJet.Scripting
             else if (node is AdditionOperator addition) { Bind(in addition); }
             else if (node is ComparisonOperator comparison) { Bind(in comparison); }
 
-            //else if (node is InsertStatement insert) { Bind(in insert); }
+            else if (node is InsertStatement insert) { Bind(in insert); }
             //else if (node is UpdateStatement update) { Bind(in update); }
             //else if (node is UpsertStatement upsert) { Bind(in upsert); }
             //else if (node is DeleteStatement delete) { Bind(in delete); }
@@ -1064,6 +1064,28 @@ namespace DaJet.Scripting
         private void Bind(in ReturnStatement node)
         {
             Bind(node.Expression);
+        }
+
+        private void Bind(in InsertStatement node)
+        {
+            _scope = _scope.OpenScope(node);
+
+            Scope scope = _scope.Ancestor<UseStatement>();
+
+            if(scope is not null && scope.Owner is UseStatement use)
+            {
+                node.YearOffset = _schema.GetYearOffset(use.Source);
+            }
+
+            if (node.CommonTables is not null)
+            {
+                Bind(node.CommonTables);
+            }
+
+            if (node.Target is not null) { Bind(node.Target); }
+            if (node.Source is not null) { Bind(node.Source); }
+
+            _scope = _scope.CloseScope();
         }
     }
 }

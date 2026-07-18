@@ -171,6 +171,7 @@ namespace DaJet.Scripting
             else if (node is SleepStatement sleep) { return Execute(in sleep); }
             else if (node is UseStatement use) { return Execute(in use); }
             else if (node is SelectStatement select) { return Execute(in select); }
+            else if (node is InsertStatement insert) { return Execute(in insert); }
             else if (node is ReturnStatement _return) { return Execute(in _return); }
             else if (node is AssignmentOperator assign) { return Execute(in assign); }
             
@@ -326,6 +327,35 @@ namespace DaJet.Scripting
                 {
                     _object.SetValue(members[1], value);
                 }
+            }
+
+            return ExitCode.Success;
+        }
+        private ExitCode Execute(in InsertStatement statement)
+        {
+            DataSourceScope use = GetDataSource();
+
+            if (!_processors.TryGetValue(statement, out ProcessorBase processor))
+            {
+                if (use.Type == DataSourceType.SqlServer)
+                {
+                    processor = new MsInsertProcessor(this, in statement);
+                }
+                else
+                {
+                    //processor = new PgSelectProcessor(this, in statement);
+                }
+
+                _processors.Add(statement, processor);
+            }
+
+            try
+            {
+                processor.Process();
+            }
+            finally
+            {
+                processor.Dispose();
             }
 
             return ExitCode.Success;
