@@ -63,6 +63,10 @@ namespace DaJet.Scripting
             {
                 return new Guid(node.Literal);
             }
+            else if (node.Token == Token.Entity)
+            {
+                return Entity.Parse(node.Literal);
+            }
 
             return null;
         }

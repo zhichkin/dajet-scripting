@@ -263,9 +263,7 @@ namespace DaJet.Scripting
                 if (_source.TryGetColumn(property.Name, out ColumnExpression map))
                 {
                     object value = _context.Evaluate(map.Expression);
-
-                    DataType type = value is null ? DataType.Undefined : DataType.FromType(value.GetType());
-
+                    
                     foreach (ColumnDefinition column in property.Columns)
                     {
                         if (_parameters.TryGetValue(column, out SqlParameter parameter))
@@ -419,7 +417,16 @@ namespace DaJet.Scripting
                         else if (type.IsDecimal) { parameter.Value = 0m; }
                         else if (type.IsDateTime) { parameter.Value = DateTime.MinValue.AddYears(_yearOffset); }
                         else if (type.IsString) { parameter.Value = string.Empty; }
-                        else if (type.IsBinary) { parameter.Value = VALUE_STORAGE; }
+                        else if (type.IsBinary)
+                        {
+                            if (type.Size == 1) { parameter.Value = FALSE; }
+                            else if (type.Size == 4) { parameter.Value = EMPTY_TYPE_CODE; }
+                            else if (type.Size == 16) { parameter.Value = EMPTY_UUID; }
+                            else
+                            {
+                                parameter.Value = VALUE_STORAGE;
+                            }
+                        }
                         else if (type.IsUuid) { parameter.Value = EMPTY_UUID; }
                         else if (type.IsEntity)
                         {
