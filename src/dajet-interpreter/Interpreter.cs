@@ -171,10 +171,11 @@ namespace DaJet.Scripting
             else if (node is SleepStatement sleep) { return Execute(in sleep); }
             else if (node is UseStatement use) { return Execute(in use); }
             else if (node is SelectStatement select) { return Execute(in select); }
-            else if (node is InsertStatement insert) { return Execute(in insert); }
             else if (node is ReturnStatement _return) { return Execute(in _return); }
             else if (node is AssignmentOperator assign) { return Execute(in assign); }
-            
+
+            //else if (node is InsertStatement insert) { return Execute(in insert); }
+
             return ExitCode.Success;
         }
         private ExitCode Execute(in StatementBlock statements)
