@@ -168,7 +168,10 @@ namespace DaJet.Scripting
         }
         private void DynamicBindingStep()
         {
-            ArgumentNullException.ThrowIfNull(_parameters, "Dynamic binding parameters are not provided");
+            if (_parameters is null || _parameters.Count == 0)
+            {
+                throw new InvalidOperationException("[USE] Dynamic binding parameters are not provided");
+            }
 
             List<UseStatement> statements = _script.GetUseStatements();
 
@@ -177,21 +180,33 @@ namespace DaJet.Scripting
 
             foreach (UseStatement use in statements)
             {
-                if (use.IsDynamic) // Трансформируем динамический скрипт в статический
+                if (!use.IsDynamic) 
                 {
-                    parameter = use.DynamicSource.Identifier.TrimStart('@');
-
-                    if (_parameters.TryGetValue(parameter, out object value) && value is string database)
-                    {
-                        use.Source = database;
-                        use.DynamicSource = null;
-                        parameters.Add(database);
-                    }
-                    else
-                    {
-                        throw new InvalidOperationException($"[USE] Dynamic binding failed: parameter @{parameter} is not provided");
-                    }
+                    continue; // Статические команды USE остаются без изменений
                 }
+
+                // Трансформируем динамический скрипт в статический
+
+                parameter = use.DynamicSource.Identifier.TrimStart('@');
+
+                if (!_parameters.TryGetValue(parameter, out object value))
+                {
+                    throw new InvalidOperationException($"[USE] Dynamic binding parameter @{parameter} is not provided");
+                }
+
+                if (value is not string database)
+                {
+                    throw new InvalidOperationException($"[USE] Dynamic binding parameter @{parameter} must be a string value");
+                }
+
+                if (string.IsNullOrWhiteSpace(database))
+                {
+                    throw new InvalidOperationException($"[USE] Dynamic binding parameter @{parameter} empty value is not allowed");
+                }
+
+                use.Source = database;
+                use.DynamicSource = null;
+                parameters.Add(database);
             }
 
             _script.IsDynamic = false;
