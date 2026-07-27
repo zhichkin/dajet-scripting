@@ -6,13 +6,14 @@ namespace DaJet.Scripting.Model
     public sealed class Script : SyntaxNode
     {
         public Script() { Token = Token.Script; }
-        public string Path { get; set; } = string.Empty;
+        public string Path { get; set; } = string.Empty; // relative path to the script file or display alias
         public string SourceCode { get; internal set; } = string.Empty; // is needed to handle dynamic scripts
         public bool RunAtStartup { get; internal set; }
         public bool IsLongRunning { get; internal set; }
         public bool IsSingleton { get; internal set; }
         public string SingletonKey { get; internal set; } = string.Empty;
         public bool IsDynamic { get; set; } // USE @variable - dynamic database binding
+        public bool IsReadOnly { get; set; } = true; /// <see cref="ReadOnlyStatements"/>
         public List<SyntaxNode> Statements { get; } = new();
 
         ///<summary>Get the definition of a variable by its name, including the leading @ symbol.</summary>

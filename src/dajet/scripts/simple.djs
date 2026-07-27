@@ -1,17 +1,18 @@
 
-DECLARE @Таблица array
+DECLARE @Код string  = 'MS-10'
 
-DECLARE @Код string  = '000000001'
+PRIVATE @Таблица array
 
 USE 'MS_TEST'
 
   SELECT Ссылка, Код, Наименование
        , Идентификатор = NEWUUID()
-       , УникальныйИдентификатор
     INTO @Таблица
-    FROM Справочник.Справочник1
+    FROM Справочник.Номенклатура
    WHERE Код = @Код
 
 END
 
-RETURN JSON(@Таблица)
+--SLEEP 1
+
+RETURN @Таблица --JSON(@Таблица)

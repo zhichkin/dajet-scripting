@@ -34,6 +34,11 @@ namespace DaJet.Scripting
                     if (node is not null)
                     {
                         _script.Statements.Add(node);
+
+                        if (!ReadOnlyStatements.Contains(in node))
+                        {
+                            _script.IsReadOnly = false;
+                        }
                     }
                 }
 
@@ -1026,6 +1031,11 @@ namespace DaJet.Scripting
                 if (node is not null)
                 {
                     block.Add(node);
+
+                    if (!ReadOnlyStatements.Contains(in node))
+                    {
+                        _script.IsReadOnly = false;
+                    }
                 }
 
                 for (int i = 0; i < terminals.Length; i++)

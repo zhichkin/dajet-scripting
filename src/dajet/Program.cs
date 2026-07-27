@@ -63,8 +63,9 @@ namespace DaJet.Host
             MetadataProvider.Add("PG_TEST", DataSourceType.PostgreSql, in PG_TEST);
 
             DaJetHost host = DaJetHost.Create("scripts").Run();
+            //DaJetHost host = DaJetHost.Create("scripts").ReadOnly().Run();
 
-            //ExecuteScriptAsync(in host);
+            ExecuteScriptAsync(in host);
 
             //ExecuteLongRunningScriptAsync(in host);
 
@@ -282,7 +283,7 @@ namespace DaJet.Host
 
         private static void ExecuteScriptAsync(in DaJetHost host)
         {
-            Task<object> task = host.RunAsync("select/simple.djs");
+            Task<object> task = host.RunAsync("simple.djs");
 
             Task show = task.ContinueWith(ShowAsyncResult);
 
@@ -400,7 +401,9 @@ namespace DaJet.Host
         {
             Task<object> task = host.RunAsync("insert/simple.djs");
 
-            task.Wait();
+            //task.Wait();
+
+            Task show = task.ContinueWith(ShowAsyncResult);
         }
     }
 }

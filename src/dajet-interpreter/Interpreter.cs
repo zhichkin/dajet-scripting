@@ -173,8 +173,7 @@ namespace DaJet.Scripting
             else if (node is SelectStatement select) { return Execute(in select); }
             else if (node is ReturnStatement _return) { return Execute(in _return); }
             else if (node is AssignmentOperator assign) { return Execute(in assign); }
-
-            //else if (node is InsertStatement insert) { return Execute(in insert); }
+            else if (node is InsertStatement insert) { return Execute(in insert); }
 
             return ExitCode.Success;
         }

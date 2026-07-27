@@ -16,11 +16,16 @@ namespace DaJet.Host
         {
             return new DaJetHost(in catalog);
         }
-        
+        public DaJetHost ReadOnly()
+        {
+            ReadOnlyMode = true; return this;
+        }
+
         private readonly object _cache_lock = new();
         private readonly ConcurrentDictionary<string, Script> _scripts = new(StringComparer.OrdinalIgnoreCase);
-        public DaJetHost() { }
-        public DaJetHost(in string rootName) { RootName = rootName; }
+        private DaJetHost() { }
+        private DaJetHost(in string rootName) { RootName = rootName; }
+        public bool ReadOnlyMode { get; private set; }
         public string RootName { get; } = "scripts";
         public string RootPath { get { return Path.Combine(AppContext.BaseDirectory, RootName); } }
         public string GetScriptRelativePath(in string fullPath)
@@ -384,6 +389,15 @@ namespace DaJet.Host
         
         private readonly ConcurrentDictionary<string, int> _singletons = new(StringComparer.Ordinal);
         private readonly ConcurrentDictionary<int, AsyncExecutor> _runningTasks = new();
+        private void ThrowOnReadOnlyModeViolation(in Script script)
+        {
+            if (ReadOnlyMode && !script.IsReadOnly)
+            {
+                string name = string.IsNullOrEmpty(script.Path) ? "anonymous" : script.Path;
+
+                throw new InvalidOperationException($"Script [{name}] violates read-only mode of the host [{RootName}]");
+            }
+        }
         public object Run(in string path, in DataObject parameters = null)
         {
             Script script = GetScriptFromCache(in path, in parameters);
@@ -392,6 +406,8 @@ namespace DaJet.Host
         }
         public object Run(in Script script, in DataObject parameters = null)
         {
+            ThrowOnReadOnlyModeViolation(in script);
+
             Interpreter interpreter = new(in script);
 
             if (parameters is null)
@@ -426,6 +442,15 @@ namespace DaJet.Host
         }
         public Task<object> RunAsync(in Script script, in DataObject parameters = null)
         {
+            try
+            {
+                ThrowOnReadOnlyModeViolation(in script);
+            }
+            catch (Exception error)
+            {
+                return Task.FromException<object>(error);
+            }
+
             if (script.IsSingleton)
             {
                 return RunSingleton(in script, in parameters);
@@ -438,7 +463,7 @@ namespace DaJet.Host
 
             return RunTask(in script, in parameters);
         }
-        public Task<object> RunTask(in Script script, in DataObject parameters = null)
+        private Task<object> RunTask(in Script script, in DataObject parameters = null)
         {
             AsyncExecutor executor = new(in script);
 
@@ -460,28 +485,7 @@ namespace DaJet.Host
             
             return task;
         }
-        public Task<object> RunLongTask(in string path, in DataObject parameters = null)
-        {
-            Script script = null;
-            Task<object> task = null;
-
-            try
-            {
-                script = GetScriptFromCache(in path, in parameters);
-            }
-            catch (Exception error)
-            {
-                task = Task.FromException<object>(error);
-            }
-
-            if (script is null)
-            {
-                return task;
-            }
-
-            return RunLongTask(in script, in parameters);
-        }
-        public Task<object> RunLongTask(in Script script, in DataObject parameters = null)
+        private Task<object> RunLongTask(in Script script, in DataObject parameters = null)
         {
             AsyncExecutor executor = new(in script);
 
