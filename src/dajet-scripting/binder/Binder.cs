@@ -124,8 +124,8 @@ namespace DaJet.Scripting
             //else if (node is ImportStatement import_statement) { Bind(in import_statement); }
             //else if (node is ForStatement for_each) { Bind(in for_each); }
             //else if (node is CreateTypeStatement udt) { Bind(in udt); }
-            //else if (node is ApplySequenceStatement apply_sequence) { Bind(in apply_sequence); }
-            //else if (node is RevokeSequenceStatement revoke_sequence) { Bind(in revoke_sequence); }
+            else if (node is ApplySequenceStatement apply_sequence) { Bind(in apply_sequence); }
+            else if (node is RevokeSequenceStatement revoke_sequence) { Bind(in revoke_sequence); }
             //else if (node is AssignmentOperator assignment) { Bind(in assign); }
             //else if (node is CaseStatement case_statement) { Bind(in case_statement); }
             //else if (node is IfStatement if_statement) { Bind(in if_statement); }
@@ -1087,5 +1087,18 @@ namespace DaJet.Scripting
 
             _scope = _scope.CloseScope();
         }
+
+        #region "APPLY AND REVOKE SEQUENCE"
+        private void Bind(in ApplySequenceStatement node)
+        {
+            Bind(node.Table);
+
+            BindColumn(node.Table.Binding, node.Column.Identifier, node.Column);
+        }
+        private void Bind(in RevokeSequenceStatement node)
+        {
+            Bind(node.Table);
+        }
+        #endregion
     }
 }

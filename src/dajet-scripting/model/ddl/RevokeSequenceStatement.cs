@@ -1,6 +1,6 @@
 ﻿namespace DaJet.Scripting.Model
 {
-    public sealed class RevokeSequenceStatement : SyntaxNode
+    public sealed class RevokeSequenceStatement : SqlStatement
     {
         // REVOKE SEQUENCE <sequence> ON <table>
         public RevokeSequenceStatement() { Token = Token.SEQUENCE; }

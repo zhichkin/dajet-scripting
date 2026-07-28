@@ -1,6 +1,6 @@
 ﻿namespace DaJet.Scripting.Model
 {
-    public sealed class ApplySequenceStatement : SyntaxNode
+    public sealed class ApplySequenceStatement : SqlStatement
     {
         // APPLY SEQUENCE <sequence> ON <table>(<column>) [RECALCULATE]
         public ApplySequenceStatement() { Token = Token.SEQUENCE; }

@@ -1,145 +1,79 @@
-﻿using DaJet.Scripting.Model;
+﻿using DaJet.Metadata;
+using DaJet.Scripting.Model;
 using DaJet.TypeSystem;
 using System.Text;
 
 namespace DaJet.Scripting
 {
-    public sealed class MsSequenceTranspiler : SequenceTranspiler
+    public sealed class MsSequenceTranspiler : SqlTranspiler
     {
-        public MsSequenceTranspiler(ISchemaProvider schema) : base(schema) { }
+        private StringBuilder _script;
+        private MetadataProvider _provider;
+        public override bool TryTranspile(in SyntaxNode statement, in MetadataProvider provider, out string error)
+        {
+            ArgumentNullException.ThrowIfNull(provider, nameof(provider));
+            ArgumentNullException.ThrowIfNull(statement, nameof(statement));
 
-        //private string GetCreateTableColumnList(in SelectExpression select)
-        //{
-        //    StringBuilder columns = new();
+            error = null;
+            _provider = provider;
+            _script = new StringBuilder();
+            
+            try
+            {
+                Transpile(in statement);
+            }
+            catch (Exception exception)
+            {
+                error = ExceptionHelper.GetErrorMessage(exception);
+            }
 
-        //    ColumnMapper column;
-        //    PropertyMapper property;
-        //    EntityMapper map = DataMapper.CreateEntityMap(in select);
+            _script = null;
+            _provider = null;
 
-        //    for (int i = 0; i < map.Properties.Count; i++)
-        //    {
-        //        property = map.Properties[i];
-
-        //        for (int ii = 0; ii < property.ColumnSequence.Count; ii++)
-        //        {
-        //            column = property.ColumnSequence[ii];
-
-        //            if (column.Ordinal > 0) { columns.Append(", "); }
-
-        //            columns.Append(column.Alias).Append(' ').Append(column.TypeName);
-        //        }
-        //    }
-
-        //    return columns.ToString();
-        //}
-
-        //protected override void Visit(in TableReference node, in StringBuilder script)
-        //{
-        //    if (node.Binding is EntityDefinition entity)
-        //    {
-        //        script.Append(entity.DbName);
-        //    }
-        //    else if (node.Binding is TableExpression || node.Binding is CommonTableExpression)
-        //    {
-        //        script.Append(node.Identifier);
-        //    }
-        //    else if (node.Binding is TableVariableExpression)
-        //    {
-        //        script.Append($"@{node.Identifier}");
-        //    }
-        //    else if (node.Binding is TemporaryTableExpression)
-        //    {
-        //        script.Append($"#{node.Identifier}");
-        //    }
-
-        //    if (!string.IsNullOrEmpty(node.Alias))
-        //    {
-        //        script.Append(" AS ").Append(node.Alias);
-        //    }
-
-        //    if (!string.IsNullOrEmpty(node.Hints))
-        //    {
-        //        script.Append(' ').Append(node.Hints); // CONSUME statement support only
-        //    }
-        //}
-
-        //protected override void Visit(in FunctionExpression node, in StringBuilder script)
-        //{
-        //    string name = node.Name.ToUpperInvariant();
-
-        //    if (UDF.TryGet(node.Name, out IUserDefinedFunction transpiler))
-        //    {
-        //        FunctionDescriptor function = transpiler.Transpile(this, in node, in script);
-
-        //        if (function is not null)
-        //        {
-        //            Functions.Add(function);
-        //        }
-        //    }
-        //    else if (name == "NOW")
-        //    {
-        //        if (YearOffset == 0)
-        //        {
-        //            script.Append("GETDATE()");
-        //        }
-        //        else
-        //        {
-        //            script.Append("DATEADD(year, " + YearOffset.ToString() + ", GETDATE())");
-        //        }
-        //    }
-        //    else if (name == "UTC")
-        //    {
-        //        if (YearOffset == 0)
-        //        {
-        //            script.Append("GETUTCDATE()");
-        //        }
-        //        else
-        //        {
-        //            script.Append("DATEADD(year, " + YearOffset.ToString() + ", GETUTCDATE())");
-        //        }
-        //    }
-        //    else if (name == "VECTOR")
-        //    {
-        //        if (node.Parameters is not null && node.Parameters.Count > 0 && node.Parameters[0] is ScalarExpression scalar)
-        //        {
-        //            script.Append("NEXT VALUE FOR ").Append(scalar.Literal);
-        //        }
-        //    }
-        //    else if (name == "CHARLENGTH")
-        //    {
-        //        script.Append("LEN").Append('(');
-        //        Visit(node.Parameters[0], in script);
-        //        script.Append(')');
-        //    }
-        //    else if (name == "NEWUUID")
-        //    {
-        //        script.Append("NEWID()");
-        //    }
-        //    else if (node.Token != TokenType.UDF)
-        //    {
-        //        base.Visit(in node, in script);
-        //    }
-        //    else
-        //    {
-        //        throw new InvalidOperationException($"Invalid function name: {node.Name}");
-        //    }
-        //}
-        
-        public override void Visit(in CreateSequenceStatement node, in StringBuilder script)
+            return error is null;
+        }
+        public override void Visit(in SyntaxNode statement, in StringBuilder script)
+        {
+            throw new NotImplementedException();
+        }
+        private void Transpile(in SyntaxNode statement)
+        {
+            if (statement is CreateSequenceStatement create)
+            {
+                Transpile(in create);
+            }
+            else if (statement is ApplySequenceStatement apply)
+            {
+                Transpile(in apply);
+            }
+            else if (statement is RevokeSequenceStatement revoke)
+            {
+                Transpile(in revoke);
+            }
+            else if (statement is DropSequenceStatement drop)
+            {
+                Transpile(in drop);
+            }
+            else
+            {
+                throw new InvalidOperationException($"Invalid sequence statement: {statement.GetType()}");
+            }
+        }
+        private void Transpile(in CreateSequenceStatement statement)
         {
             // IF NOT EXISTS(SELECT 1 FROM sys.sequences WHERE name = '{SEQUENCE_NAME}')
             // BEGIN
             // CREATE SEQUENCE {SEQUENCE_NAME} AS numeric(19,0) START WITH 1 INCREMENT BY 1 CACHE 1;
             // END;
 
-            script
+            _script
                 .Append("IF NOT EXISTS(SELECT 1 FROM sys.sequences WHERE name = '")
-                .Append(node.Identifier).AppendLine("')")
+                .Append(statement.Identifier).AppendLine("')")
                 .AppendLine("BEGIN");
 
-            script.Append("CREATE SEQUENCE ").Append(node.Identifier).Append(" AS ");
+            _script.Append("CREATE SEQUENCE ").Append(statement.Identifier).Append(" AS ");
 
-            if (node.DataType is TypeReference info)
+            if (statement.DataType is TypeReference info)
             {
                 if (!info.Type.IsUndefined)
                 {
@@ -147,72 +81,74 @@ namespace DaJet.Scripting
                     {
                         if (info.Type.Precision > 0)
                         {
-                            script.Append("numeric(").Append(info.Type.Precision).Append(',').Append(info.Type.Scale).Append(')');
+                            _script.Append("numeric(").Append(info.Type.Precision).Append(',').Append(info.Type.Scale).Append(')');
                         }
                         else
                         {
-                            script.Append("bigint");
+                            _script.Append("bigint");
                         }
                     }
                     else if (info.Type.IsInteger)
                     {
                         if (info.Type.Size == 8)
                         {
-                            script.Append("bigint");
+                            _script.Append("bigint");
                         }
                         else
                         {
-                            script.Append("int");
+                            _script.Append("int");
                         }
                     }   
                 }
                 else
                 {
-                    script.Append("bigint");
+                    _script.Append("bigint");
                 }
             }
             else
             {
-                script.Append("bigint");
+                _script.Append("bigint");
             }
 
-            script
-                .Append(" START WITH ").Append(node.StartWith)
-                .Append(" INCREMENT BY ").Append(node.Increment);
+            _script
+                .Append(" START WITH ").Append(statement.StartWith)
+                .Append(" INCREMENT BY ").Append(statement.Increment);
 
-            if (node.CacheSize > 0)
+            if (statement.CacheSize > 0)
             {
-                script.Append(" CACHE ").Append(node.CacheSize);
+                _script.Append(" CACHE ").Append(statement.CacheSize);
             }
 
-            script.AppendLine(";").AppendLine("END;");
+            _script.AppendLine(";").AppendLine("END;");
+
+            statement.Sql = _script.ToString();
         }
         private static string CreateSequenceTriggerName(string tableName)
         {
             return $"{tableName.ToLowerInvariant()}_instead_of_insert";
         }
-        public override void Visit(in ApplySequenceStatement node, in StringBuilder script)
+        private void Transpile(in ApplySequenceStatement statement)
         {
-            if (string.IsNullOrWhiteSpace(node.Identifier))
+            if (string.IsNullOrWhiteSpace(statement.Identifier))
             {
                 throw new InvalidOperationException("[APPLY SEQUENCE] Sequence identifier missing");
             }
 
-            if (node.Table.Binding is not EntityDefinition table)
+            if (statement.Table.Binding is not EntityDefinition table)
             {
                 throw new InvalidOperationException("[APPLY SEQUENCE] Unsupported table binding");
             }
 
-            if (node.Column.Binding is not PropertyDefinition sequence)
+            if (statement.Column.Binding is not PropertyDefinition sequence)
             {
                 throw new InvalidOperationException("[APPLY SEQUENCE] Unsupported column binding");
             }
 
             string triggerName = CreateSequenceTriggerName(table.DbName);
 
-            script.Append("IF OBJECT_ID('").Append(triggerName).AppendLine("', 'TR') IS NULL");
+            _script.Append("IF OBJECT_ID('").Append(triggerName).AppendLine("', 'TR') IS NULL");
 
-            script
+            _script
                 .Append("EXECUTE('CREATE TRIGGER ")
                 .Append(triggerName).Append(" ON ").Append(table.DbName)
                 .AppendLine(" INSTEAD OF INSERT NOT FOR REPLICATION AS");
@@ -246,7 +182,7 @@ namespace DaJet.Scripting
                     {
                         sequenceColumn = column.Name;
 
-                        values.Append("NEXT VALUE FOR ").Append(node.Identifier);
+                        values.Append("NEXT VALUE FOR ").Append(statement.Identifier);
                     }
                     else
                     {
@@ -255,132 +191,113 @@ namespace DaJet.Scripting
                 }
             }
 
-            script.Append("INSERT ").Append(table.DbName).Append('(').Append(columns).Append(')').AppendLine();
-            script.Append("SELECT ").Append(values).AppendLine();
-            script.AppendLine("FROM INSERTED AS i;');"); // close EXECUTE statement
+            _script.Append("INSERT ").Append(table.DbName).Append('(').Append(columns).Append(')').AppendLine();
+            _script.Append("SELECT ").Append(values).AppendLine();
+            _script.AppendLine("FROM INSERTED AS i;');"); // close EXECUTE statement
 
-            //if (node.ReCalculate)
-            //{
-            //    script.AppendLine();
-            //    script.Append(CreateReCalculateSequenceColumnScript(table.DbName, in sequenceColumn, node.Identifier));
-            //}
+            if (statement.ReCalculate)
+            {
+                _script.AppendLine();
+                _script.Append(CreateReCalculateSequenceColumnScript(table.DbName, in sequenceColumn, statement.Identifier));
+            }
+
+            statement.Sql = _script.ToString();
         }
-        public override void Visit(in RevokeSequenceStatement node, in StringBuilder script)
+        private void Transpile(in RevokeSequenceStatement statement)
         {
-            if (string.IsNullOrWhiteSpace(node.Identifier))
+            if (string.IsNullOrWhiteSpace(statement.Identifier))
             {
                 throw new InvalidOperationException("[REVOKE SEQUENCE] Sequence identifier missing");
             }
 
-            if (node.Table.Binding is not EntityDefinition table)
+            if (statement.Table.Binding is not EntityDefinition table)
             {
                 throw new InvalidOperationException("[REVOKE SEQUENCE] Unsupported table binding");
             }
 
             string triggerName = CreateSequenceTriggerName(table.DbName);
 
-            script
+            _script
                 .Append("IF OBJECT_ID('").Append(triggerName).Append("', 'TR') IS NOT NULL ")
                 .AppendLine("DROP TRIGGER ").Append(triggerName).Append(';').AppendLine();
+
+            statement.Sql = _script.ToString();
         }
+        private string CreateReCalculateSequenceColumnScript(in string tableName, in string columnName, in string sequenceName)
+        {
+            StringBuilder script = new();
 
-        //private string CreateReCalculateSequenceColumnScript(in string tableName, in string columnName, in string sequenceName)
-        //{
-        //    StringBuilder script = new();
+            IndexInfo index = GetPrimaryOrUniqueIndex(in tableName)
+                ?? throw new InvalidOperationException($"[APPLY SEQUENCE RECALCULATE]: Primary or unique index missing for table [{tableName}]");
 
-        //    IndexInfo index = GetPrimaryOrUniqueIndex(in tableName)
-        //        ?? throw new InvalidOperationException($"[APPLY SEQUENCE RECALCULATE]: Primary or unique index missing for table [{tableName}]");
+            string temporaryTable = $"#COPY{tableName}";
 
-        //    string temporaryTable = $"#COPY{tableName}";
+            StringBuilder columns = new();
+            StringBuilder orderby = new();
+            StringBuilder joinon = new();
 
-        //    StringBuilder columns = new();
-        //    StringBuilder orderby = new();
-        //    StringBuilder joinon = new();
+            IndexColumnInfo column;
 
-        //    IndexColumnInfo column;
+            for (int i = 0; i < index.Columns.Count; i++)
+            {
+                column = index.Columns[i];
 
-        //    for (int i = 0; i < index.Columns.Count; i++)
-        //    {
-        //        column = index.Columns[i];
+                if (i > 0)
+                {
+                    columns.Append(',').Append(' ');
+                    orderby.Append(',').Append(' ');
+                    joinon.Append(" AND ");
+                }
 
-        //        if (i > 0)
-        //        {
-        //            columns.Append(',').Append(' ');
-        //            orderby.Append(',').Append(' ');
-        //            joinon.Append(" AND ");
-        //        }
+                columns.Append(column.Name);
+                orderby.Append(column.Name).Append(' ').Append(column.IsDescending ? "DESC" : "ASC");
+                joinon.Append('T').Append('.').Append(column.Name)
+                    .Append(" = ");
+                joinon.Append('S').Append('.').Append(column.Name);
+            }
 
-        //        columns.Append(column.Name);
-        //        orderby.Append(column.Name).Append(' ').Append(column.IsDescending ? "DESC" : "ASC");
-        //        joinon.Append('T').Append('.').Append(column.Name)
-        //            .Append(" = ");
-        //        joinon.Append('S').Append('.').Append(column.Name);
-        //    }
+            script.AppendLine("BEGIN TRANSACTION;");
 
-        //    script.AppendLine("BEGIN TRANSACTION;");
+            script.Append($"SELECT {columns}");
+            script.AppendLine($", NEXT VALUE FOR {sequenceName} OVER (ORDER BY {orderby}) AS sequence_value");
+            script.AppendLine($"INTO {temporaryTable} FROM {tableName} WITH (TABLOCKX, HOLDLOCK);");
 
-        //    script.Append($"SELECT {columns}");
-        //    script.AppendLine($", NEXT VALUE FOR {sequenceName} OVER (ORDER BY {orderby}) AS sequence_value");
-        //    script.AppendLine($"INTO {temporaryTable} FROM {tableName} WITH (TABLOCKX, HOLDLOCK);");
+            script.AppendLine($"UPDATE T SET T.{columnName} = S.sequence_value FROM {tableName} AS T");
+            script.AppendLine($"INNER JOIN {temporaryTable} AS S ON {joinon};");
 
-        //    script.AppendLine($"UPDATE T SET T.{columnName} = S.sequence_value FROM {tableName} AS T");
-        //    script.AppendLine($"INNER JOIN {temporaryTable} AS S ON {joinon};");
+            script.AppendLine($"DROP TABLE {temporaryTable};");
 
-        //    script.AppendLine($"DROP TABLE {temporaryTable};");
+            script.AppendLine("COMMIT TRANSACTION;");
 
-        //    script.AppendLine("COMMIT TRANSACTION;");
+            return script.ToString();
+        }
+        private IndexInfo GetPrimaryOrUniqueIndex(in string tableName)
+        {
+            List<IndexInfo> indexes = new MsSqlHelper(_provider.ConnectionString).GetIndexes(in tableName);
 
-        //    return script.ToString();
-        //}
-        //private IndexInfo GetPrimaryOrUniqueIndex(in string tableName)
-        //{
-        //    List<IndexInfo> indexes = new MsSqlHelper().GetIndexes(Metadata.ConnectionString, tableName);
+            foreach (IndexInfo index in indexes)
+            {
+                if (index.IsPrimary) { return index; }
+            }
 
-        //    foreach (IndexInfo index in indexes)
-        //    {
-        //        if (index.IsPrimary) { return index; }
-        //    }
+            foreach (IndexInfo index in indexes)
+            {
+                if (index.IsUnique && index.IsClustered) { return index; }
+            }
 
-        //    foreach (IndexInfo index in indexes)
-        //    {
-        //        if (index.IsUnique && index.IsClustered) { return index; }
-        //    }
+            foreach (IndexInfo index in indexes)
+            {
+                if (index.IsUnique) { return index; }
+            }
 
-        //    foreach (IndexInfo index in indexes)
-        //    {
-        //        if (index.IsUnique) { return index; }
-        //    }
+            return null;
+        }
+        private void Transpile(in DropSequenceStatement statement)
+        {
+            _script.Append("DROP SEQUENCE ").Append(statement.Identifier).AppendLine(";");
 
-        //    return null;
-        //}
-        //private IndexInfo GetPrimaryOrUniqueIndex(in TableReference table)
-        //{
-        //    if (table.Binding is not ApplicationObject entity)
-        //    {
-        //        throw new InvalidOperationException("CONSUME: target table has no entity binding.");
-        //    }
-
-        //    string target = entity.TableName.ToLowerInvariant();
-
-        //    List<IndexInfo> indexes = new MsSqlHelper().GetIndexes(Metadata.ConnectionString, target);
-
-        //    foreach (IndexInfo index in indexes)
-        //    {
-        //        if (index.IsPrimary) { return index; }
-        //    }
-
-        //    foreach (IndexInfo index in indexes)
-        //    {
-        //        if (index.IsUnique && index.IsClustered) { return index; }
-        //    }
-
-        //    foreach (IndexInfo index in indexes)
-        //    {
-        //        if (index.IsUnique) { return index; }
-        //    }
-
-        //    return null;
-        //}
+            statement.Sql = _script.ToString();
+        }
     }
 }
 

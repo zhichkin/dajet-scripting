@@ -1,6 +1,6 @@
 ﻿namespace DaJet.Scripting.Model
 {
-    public sealed class CreateSequenceStatement : SyntaxNode
+    public sealed class CreateSequenceStatement : SqlStatement
     {
         public CreateSequenceStatement() { Token = Token.SEQUENCE; }
         public string Identifier { get; set; }

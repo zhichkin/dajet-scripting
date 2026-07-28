@@ -1,11 +1,17 @@
-﻿using System.Data;
+﻿using Microsoft.Data.SqlClient;
+using System.Data;
 using System.Text;
 
-namespace DaJet.Scripting.transpiler
+namespace DaJet.Scripting
 {
     public sealed class MsSqlHelper
     {
-        private string GetSelectIndexesScript()
+        private readonly string _connectionString;
+        public MsSqlHelper(in string connectionString)
+        {
+            _connectionString = connectionString;
+        }
+        private static string GetSelectIndexesScript()
         {
             StringBuilder script = new();
 
@@ -34,61 +40,62 @@ namespace DaJet.Scripting.transpiler
 
             return script.ToString();
         }
-        //public List<IndexInfo> GetIndexes(string connectionString, string tableName)
-        //{
-        //    List<IndexInfo> list = new();
+        public List<IndexInfo> GetIndexes(in string tableName)
+        {
+            List<IndexInfo> list = new();
 
-        //    using (SqlConnection connection = new(connectionString))
-        //    {
-        //        connection.Open();
+            using (SqlConnection connection = new(_connectionString))
+            {
+                connection.Open();
 
-        //        using (SqlCommand command = connection.CreateCommand())
-        //        {
-        //            command.CommandType = CommandType.Text;
-        //            command.CommandText = GetSelectIndexesScript();
-        //            command.Parameters.AddWithValue("table_name", tableName);
+                using (SqlCommand command = connection.CreateCommand())
+                {
+                    command.CommandType = CommandType.Text;
+                    command.CommandText = GetSelectIndexesScript();
+                    command.Parameters.AddWithValue("table_name", tableName);
 
-        //            using (SqlDataReader reader = command.ExecuteReader())
-        //            {
-        //                int current_id = 0;
-        //                IndexInfo index = null;
-        //                IndexColumnInfo column = null;
+                    using (SqlDataReader reader = command.ExecuteReader())
+                    {
+                        int current_id = 0;
+                        IndexInfo index = null;
+                        IndexColumnInfo column = null;
 
-        //                while (reader.Read())
-        //                {
-        //                    int index_id = (int)reader.GetValue("index_id");
+                        while (reader.Read())
+                        {
+                            int index_id = (int)reader.GetValue("index_id");
 
-        //                    if (current_id != index_id)
-        //                    {
-        //                        index = new IndexInfo(
-        //                            reader.GetString("index_name"),
-        //                            reader.GetBoolean("is_unique"),
-        //                            reader.GetBoolean("is_primary"),
-        //                            reader.GetBoolean("is_clustered"));
+                            if (current_id != index_id)
+                            {
+                                index = new IndexInfo(
+                                    reader.GetString("index_name"),
+                                    reader.GetBoolean("is_unique"),
+                                    reader.GetBoolean("is_primary"),
+                                    reader.GetBoolean("is_clustered"));
 
-        //                        list.Add(index);
+                                list.Add(index);
 
-        //                        current_id = index_id;
-        //                    }
+                                current_id = index_id;
+                            }
 
-        //                    column = new IndexColumnInfo(
-        //                        reader.GetString("column_name"),
-        //                        reader.GetString("column_type"),
-        //                        reader.GetByte("column_ordinal"),
-        //                        false,
-        //                        reader.GetBoolean("is_nullable"),
-        //                        reader.GetBoolean("is_descending"));
+                            column = new IndexColumnInfo(
+                                reader.GetString("column_name"),
+                                reader.GetString("column_type"),
+                                reader.GetByte("column_ordinal"),
+                                false,
+                                reader.GetBoolean("is_nullable"),
+                                reader.GetBoolean("is_descending"));
 
-        //                    index.Columns.Add(column);
-        //                }
-        //                reader.Close();
-        //            }
-        //        }
-        //    }
+                            index.Columns.Add(column);
+                        }
+                        reader.Close();
+                    }
+                }
+            }
 
-        //    return list;
-        //}
+            return list;
+        }
     }
+
     public sealed class IndexInfo
     {
         public IndexInfo(string name, bool unique, bool primary, bool clustered)
