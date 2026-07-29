@@ -8,7 +8,7 @@ namespace DaJet.Scripting
     {
         public override DataType GetReturnType(in FunctionExpression node)
         {
-            return DataType.Decimal(15); //TODO: DataType.Integer(8)
+            return DataType.Decimal(15); //TODO: DataType.Integer(8) ?
         }
         public override void Transpile(in SqlTranspiler statement, in FunctionExpression node, in StringBuilder script)
         {

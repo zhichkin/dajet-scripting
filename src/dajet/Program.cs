@@ -65,7 +65,14 @@ namespace DaJet.Host
             DaJetHost host = DaJetHost.Create("scripts").Run();
             //DaJetHost host = DaJetHost.Create("scripts").ReadOnly().Run();
 
-            ExecuteScriptAsync(in host);
+            _ = host.RunAsync("sequence/ms/create.djs").ContinueWith(ShowAsyncResult);
+            _ = host.RunAsync("sequence/ms/vector.djs").ContinueWith(ShowAsyncResult);
+            _ = host.RunAsync("sequence/ms/apply.djs").ContinueWith(ShowAsyncResult);
+
+            _ = host.RunAsync("sequence/pg/create.djs").ContinueWith(ShowAsyncResult);
+            _ = host.RunAsync("sequence/pg/vector.djs").ContinueWith(ShowAsyncResult);
+
+            //ExecuteScriptAsync(in host);
 
             //ExecuteLongRunningScriptAsync(in host);
 
@@ -75,7 +82,7 @@ namespace DaJet.Host
 
             //ExecuteScriptSync(in host);
 
-            TestInsertStatement(in host);
+            //TestInsertStatement(in host);
 
             Console.WriteLine("Press any key to continue ...");
 

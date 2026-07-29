@@ -175,6 +175,9 @@ namespace DaJet.Scripting
             else if (node is AssignmentOperator assign) { return Execute(in assign); }
             else if (node is InsertStatement insert) { return Execute(in insert); }
 
+            else if (node is CreateSequenceStatement create_sequence) { return Execute(in create_sequence); }
+            else if (node is ApplySequenceStatement apply_sequence) { return Execute(in apply_sequence); }
+
             return ExitCode.Success;
         }
         private ExitCode Execute(in StatementBlock statements)
@@ -252,11 +255,11 @@ namespace DaJet.Scripting
 
             if (provider.DataSource == DataSourceType.SqlServer)
             {
-                use = new MsDataSourceScope(connectionString, "READCOMMITTED");
+                use = new MsDataSourceScope(connectionString, null); // "READCOMMITTED"
             }
             else if (provider.DataSource == DataSourceType.PostgreSql)
             {
-                use = new PgDataSourceScope(connectionString, "READCOMMITTED");
+                use = new PgDataSourceScope(connectionString, null); // "READCOMMITTED"
             }
             else
             {
@@ -344,6 +347,66 @@ namespace DaJet.Scripting
                 else
                 {
                     //processor = new PgSelectProcessor(this, in statement);
+                }
+
+                _processors.Add(statement, processor);
+            }
+
+            try
+            {
+                processor.Process();
+            }
+            finally
+            {
+                processor.Dispose();
+            }
+
+            return ExitCode.Success;
+        }
+
+        private ExitCode Execute(in CreateSequenceStatement statement)
+        {
+            DataSourceScope use = GetDataSource();
+
+            if (!_processors.TryGetValue(statement, out ProcessorBase processor))
+            {
+                if (use.Type == DataSourceType.SqlServer)
+                {
+                    processor = new MsCreateSequenceProcessor(this, in statement);
+                }
+                else
+                {
+                    processor = new PgCreateSequenceProcessor(this, in statement);
+                }
+
+                _processors.Add(statement, processor);
+            }
+
+            try
+            {
+                processor.Process();
+            }
+            finally
+            {
+                processor.Dispose();
+            }
+
+            return ExitCode.Success;
+        }
+
+        private ExitCode Execute(in ApplySequenceStatement statement)
+        {
+            DataSourceScope use = GetDataSource();
+
+            if (!_processors.TryGetValue(statement, out ProcessorBase processor))
+            {
+                if (use.Type == DataSourceType.SqlServer)
+                {
+                    processor = new MsApplySequenceProcessor(this, in statement);
+                }
+                else
+                {
+                    //processor = new PgCreateSequenceProcessor(this, in statement);
                 }
 
                 _processors.Add(statement, processor);
