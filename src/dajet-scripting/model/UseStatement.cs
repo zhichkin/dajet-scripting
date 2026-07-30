@@ -1,4 +1,6 @@
-﻿namespace DaJet.Scripting.Model
+﻿using System.Data;
+
+namespace DaJet.Scripting.Model
 {
     public sealed class UseStatement : SyntaxNode
     {
@@ -6,6 +8,7 @@
         public string Source { get; set; } // static database binding
         public VariableReference DynamicSource { get; set; } // dynamic database binding
         public bool IsDynamic { get { return DynamicSource is not null; } }
+        public bool IsTransactional { get; set; }
         public StatementBlock Statements { get; set; } = new();
         public override string ToString()
         {

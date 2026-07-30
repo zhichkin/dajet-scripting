@@ -1,16 +1,16 @@
 ﻿using DaJet.Data;
 using DaJet.Scripting.Model;
-using Npgsql;
+using Microsoft.Data.SqlClient;
 
 namespace DaJet.Scripting
 {
-    public sealed class PgCreateSequenceProcessor : ProcessorBase // NonQueryProcessor
+    public sealed class MsNonQueryProcessor : ProcessorBase
     {
-        private readonly PgDataSourceScope _dataSource;
-        private readonly CreateSequenceStatement _statement;
-        public PgCreateSequenceProcessor(in ScriptContext context, in CreateSequenceStatement statement)
+        private readonly MsDataSourceScope _dataSource;
+        private readonly SqlStatement _statement;
+        public MsNonQueryProcessor(in ScriptContext context, in SqlStatement statement)
         {
-            if (context.GetDataSource() is not PgDataSourceScope use)
+            if (context.GetDataSource() is not MsDataSourceScope use)
             {
                 throw new InvalidOperationException();
             }
@@ -20,7 +20,7 @@ namespace DaJet.Scripting
         }
         public override void Process()
         {
-            using (NpgsqlCommand command = _dataSource.CreateCommand())
+            using (SqlCommand command = _dataSource.CreateCommand())
             {
                 command.CommandText = _statement.Sql;
                 

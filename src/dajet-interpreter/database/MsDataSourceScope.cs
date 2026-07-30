@@ -8,7 +8,7 @@ namespace DaJet.Data
         private bool _disposed;
         private SqlConnection _connection;
         private SqlTransaction _transaction;
-        public MsDataSourceScope(string connectionString, string isolationLevel)
+        public MsDataSourceScope(string connectionString, bool transactional = false)
         {
             _connection = new SqlConnection(connectionString);
 
@@ -16,7 +16,7 @@ namespace DaJet.Data
             {
                 _connection.Open();
 
-                if (!string.IsNullOrEmpty(isolationLevel))
+                if (transactional)
                 {
                     _transaction = _connection.BeginTransaction();
                 }
@@ -29,7 +29,7 @@ namespace DaJet.Data
         public override DataSourceType Type { get { return DataSourceType.SqlServer; } }
         public override SqlCommand CreateCommand()
         {
-            // ObjectDisposedException.ThrowIf(_disposed, typeof(MsDataContext));
+            ObjectDisposedException.ThrowIf(_disposed, typeof(MsDataSourceScope));
 
             SqlCommand command = _connection.CreateCommand();
 
@@ -39,29 +39,30 @@ namespace DaJet.Data
 
             return command;
         }
-        public override void TxBegin()
+        public override void Commit()
         {
-            // ObjectDisposedException.ThrowIf(_disposed, typeof(MsDataContext));
-
-            _transaction = _connection.BeginTransaction();
-        }
-        public override void TxCommit()
-        {
-            // ObjectDisposedException.ThrowIf(_disposed, typeof(MsDataContext));
+            ObjectDisposedException.ThrowIf(_disposed, typeof(MsDataSourceScope));
 
             _transaction?.Commit();
         }
-        public override void TxRollback()
+        public override void Rollback()
         {
-            // ObjectDisposedException.ThrowIf(_disposed, typeof(MsDataContext));
+            ObjectDisposedException.ThrowIf(_disposed, typeof(MsDataSourceScope));
 
-            _transaction?.Rollback();
+            try
+            {
+                _transaction?.Rollback();
+            }
+            finally
+            {
+                _transaction = null;
+            }
         }
         public override void Dispose()
         {
             if (_disposed) { return; }
 
-            _transaction?.Dispose();
+            _transaction?.Dispose(); //NOTE: rolls back uncommitted transaction
             _transaction = null;
 
             _connection?.Dispose();

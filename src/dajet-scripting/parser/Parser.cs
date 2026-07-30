@@ -1,5 +1,6 @@
 ﻿using DaJet.Scripting.Model;
 using DaJet.TypeSystem;
+using System.Data;
 
 namespace DaJet.Scripting
 {
@@ -803,6 +804,11 @@ namespace DaJet.Scripting
         {
             UseStatement statement = new();
 
+            if (Match(Token.TRANSACTION)) // optional
+            {
+                statement.IsTransactional = true;
+            }
+
             if (Match(Token.String))
             {
                 statement.Source = Previous().Value;
@@ -821,7 +827,7 @@ namespace DaJet.Scripting
             {
                 _script.IsDynamic = true;
             }
-
+            
             statement.Statements = statement_block(Token.END);
 
             if (statement.Statements.Count == 0)

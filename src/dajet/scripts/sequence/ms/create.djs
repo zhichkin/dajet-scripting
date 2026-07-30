@@ -1,7 +1,9 @@
 
-USE 'MS_TEST'
+USE 'MS_TEST' -- TRANSACTION
 
-  CREATE SEQUENCE so_import AS decimal(15,0)
+  CREATE SEQUENCE so_import
+
+  --RETURN 'Create sequence [so_import] aborted'
 
 END
 

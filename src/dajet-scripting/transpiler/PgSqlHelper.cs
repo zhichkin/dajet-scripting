@@ -1,4 +1,5 @@
 ﻿using Npgsql;
+using NpgsqlTypes;
 using System.Data;
 using System.Text;
 
@@ -28,7 +29,7 @@ namespace DaJet.Scripting
             script.AppendLine("ix.indisclustered AS is_clustered");
             script.AppendLine("FROM pg_index AS ix");
             script.AppendLine("INNER JOIN pg_class AS ic ON ic.oid = ix.indexrelid");
-            script.AppendLine("INNER JOIN pg_class AS tc ON tc.oid = ix.indrelid AND tc.relname = @table_name");
+            script.AppendLine("INNER JOIN pg_class AS tc ON tc.oid = ix.indrelid AND tc.relname = $1");
             script.AppendLine("INNER JOIN pg_namespace AS ns ON tc.relnamespace = ns.oid AND ns.nspname = 'public'");
             script.AppendLine("CROSS JOIN LATERAL unnest (ix.indkey) WITH ORDINALITY AS c (colnum, ordinality)");
             script.AppendLine("LEFT JOIN LATERAL unnest (ix.indoption) WITH ORDINALITY AS o (option, ordinality)");
@@ -50,7 +51,11 @@ namespace DaJet.Scripting
                 {
                     command.CommandType = CommandType.Text;
                     command.CommandText = GetSelectIndexesScript();
-                    command.Parameters.AddWithValue("table_name", tableName);
+                    command.Parameters.Add(new NpgsqlParameter<string>()
+                    {
+                        TypedValue = tableName,
+                        NpgsqlDbType = NpgsqlDbType.Varchar
+                    });
 
                     using (NpgsqlDataReader reader = command.ExecuteReader())
                     {

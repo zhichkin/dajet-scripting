@@ -102,12 +102,12 @@ namespace DaJet.Scripting
                 }
                 else
                 {
-                    _script.Append("bigint"); // default value
+                    _script.Append("numeric(15,0)"); // default value
                 }
             }
             else
             {
-                _script.Append("bigint");  // default value
+                _script.Append("numeric(15,0)");  // default value
             }
 
             _script

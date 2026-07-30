@@ -3,7 +3,7 @@ DECLARE @Код string  = 'MS-10'
 
 PRIVATE @Таблица array
 
-USE 'MS_TEST'
+USE TRANSACTION 'MS_TEST'
 
   SELECT Ссылка, Код, Наименование
        , Идентификатор = NEWUUID()
@@ -11,7 +11,11 @@ USE 'MS_TEST'
     FROM Справочник.Номенклатура
    WHERE Код = @Код
 
-END
+  --SLEEP 40
+
+  --RETURN @Таблица -- Прерывает транзакцию
+
+END -- Фиксирует транзакцию
 
 --SLEEP 1
 

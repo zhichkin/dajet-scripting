@@ -1,5 +1,5 @@
 
-USE 'MS_TEST'
+USE 'PG_TEST'
 
   APPLY SEQUENCE so_import ON РегистрСведений.ИсходящаяОчередь(НомерСообщения) RECALCULATE
 

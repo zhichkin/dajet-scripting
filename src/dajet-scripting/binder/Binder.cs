@@ -126,7 +126,6 @@ namespace DaJet.Scripting
             //else if (node is CreateTypeStatement udt) { Bind(in udt); }
             else if (node is ApplySequenceStatement apply_sequence) { Bind(in apply_sequence); }
             else if (node is RevokeSequenceStatement revoke_sequence) { Bind(in revoke_sequence); }
-            //else if (node is AssignmentOperator assignment) { Bind(in assign); }
             //else if (node is CaseStatement case_statement) { Bind(in case_statement); }
             //else if (node is IfStatement if_statement) { Bind(in if_statement); }
             //else if (node is TryStatement try_statement) { Bind(in try_statement); }

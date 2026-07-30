@@ -226,6 +226,11 @@ namespace DaJet.Scripting
             {
                 property = properties[p];
 
+                if (_source.TryGetColumn(property.Name, out ColumnExpression map) && map.Expression is FunctionExpression function)
+                {
+                    
+                }
+                
                 columns = property.Columns;
 
                 for (int c = 0; c < columns.Count; c++)

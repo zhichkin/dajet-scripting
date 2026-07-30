@@ -132,14 +132,14 @@ namespace DaJet.Scripting
             _script.AppendLine("RETURN NEW;");
             _script.AppendLine("END $BODY$ LANGUAGE 'plpgsql';");
 
-            _script.AppendLine();
+            _script.AppendLine("GO"); //FIXME: commands splitter
             _script.Append("CREATE TRIGGER ").AppendLine(triggerName);
             _script.Append("BEFORE INSERT ON ").Append(tableName).AppendLine(" FOR EACH ROW");
             _script.Append("EXECUTE PROCEDURE ").Append(functionName).AppendLine("();");
 
             if (statement.ReCalculate)
             {
-                _script.AppendLine();
+                _script.AppendLine("GO"); //FIXME: commands splitter
                 _script.Append(CreateReCalculateSequenceColumnScript(in tableName, in columnName, statement.Identifier));
             }
 
@@ -162,6 +162,7 @@ namespace DaJet.Scripting
             string functionName = CreateSequenceFunctionName(in tableName);
 
             _script.Append("DROP FUNCTION IF EXISTS ").Append(functionName).AppendLine(" CASCADE;");
+            _script.AppendLine("GO"); //FIXME: commands splitter
             _script.Append("DROP TRIGGER IF EXISTS ").Append(triggerName).Append(" ON ").Append(tableName).Append(';').AppendLine();
 
             statement.Sql = _script.ToString();
@@ -198,15 +199,16 @@ namespace DaJet.Scripting
             }
 
             script.AppendLine("BEGIN TRANSACTION;").AppendLine();
+            script.AppendLine("GO"); //FIXME: commands splitter
             script.AppendLine($"LOCK TABLE {tableName} IN ACCESS EXCLUSIVE MODE;");
 
-            script.AppendLine();
+            script.AppendLine("GO"); //FIXME: commands splitter
             script.AppendLine($"WITH cte AS (SELECT {columns}, nextval('{sequenceName}') AS sequence_value");
             script.AppendLine($"FROM {tableName} ORDER BY {orderby})");
             script.AppendLine($"UPDATE {tableName} SET {columnName} = cte.sequence_value FROM cte");
             script.AppendLine($"WHERE {compare};");
 
-            script.AppendLine();
+            script.AppendLine("GO"); //FIXME: commands splitter
             script.AppendLine("COMMIT TRANSACTION;");
 
             return script.ToString();
