@@ -1071,7 +1071,7 @@ namespace DaJet.Scripting
 
             Scope scope = _scope.Ancestor<UseStatement>();
 
-            if(scope is not null && scope.Owner is UseStatement use)
+            if (scope is not null && scope.Owner is UseStatement use)
             {
                 node.YearOffset = _schema.GetYearOffset(use.Source);
             }

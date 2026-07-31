@@ -355,7 +355,7 @@ namespace DaJet.Scripting
                 }
                 else
                 {
-                    //processor = new PgSelectProcessor(this, in statement);
+                    //processor = new PgInsertProcessor(this, in statement);
                 }
 
                 _processors.Add(statement, processor);

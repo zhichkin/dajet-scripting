@@ -35,7 +35,8 @@ namespace DaJet.Scripting
         {
             if (node is UseStatement use) { Visit(in use); }
             else if (node is SelectStatement select) { Visit(in select); }
-            
+            else if (node is InsertStatement insert) { Visit(in insert); }
+
             else if (node is CreateSequenceStatement
                 || node is ApplySequenceStatement
                 || node is RevokeSequenceStatement
@@ -78,7 +79,18 @@ namespace DaJet.Scripting
                 _errors.Add(error);
             }
         }
-        
+        private void Visit(in InsertStatement node)
+        {
+            MetadataProvider provider = _providers.Peek();
+
+            InsertTranspiler transpiler = new();
+
+            if (!transpiler.TryTranspile(node, in provider, out string error))
+            {
+                _errors.Add(error);
+            }
+        }
+
         private void VisitSequenceStatement(in SyntaxNode node)
         {
             SqlTranspiler transpiler;

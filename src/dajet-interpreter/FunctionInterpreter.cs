@@ -27,6 +27,8 @@ namespace DaJet.Scripting
             if (node.Name == nameof(JSON)) { return JSON(in context, in node); }
             else if (node.Name == nameof(TYPEOF)) { return TYPEOF(in context, in node); }
             else if (node.Name == nameof(UUIDOF)) { return UUIDOF(in context, in node); }
+            else if (node.Name == nameof(NOW)) { return NOW(in context, in node); }
+            else if (node.Name == nameof(UTC)) { return UTC(in context, in node); }
             else
             {
                 return null;
@@ -70,6 +72,14 @@ namespace DaJet.Scripting
             }
 
             return Guid.Empty;
+        }
+        private static DateTime NOW(in ExpressionInterpreter context, in FunctionExpression node)
+        {
+            return DateTime.Now;
+        }
+        private static DateTime UTC(in ExpressionInterpreter context, in FunctionExpression node)
+        {
+            return DateTime.UtcNow;
         }
     }
 }

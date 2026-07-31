@@ -11,7 +11,9 @@ namespace DaJet.Scripting
             [
                 new KeyValuePair<string, Function>(nameof(JSON), new JSON()),
                 new KeyValuePair<string, Function>(nameof(TYPEOF), new TYPEOF()),
-                new KeyValuePair<string, Function>(nameof(UUIDOF), new UUIDOF())
+                new KeyValuePair<string, Function>(nameof(UUIDOF), new UUIDOF()),
+                new KeyValuePair<string, Function>(nameof(NOW), new NOW()),
+                new KeyValuePair<string, Function>(nameof(UTC), new UTC())
             ];
             return FrozenDictionary.ToFrozenDictionary(list);
         }
