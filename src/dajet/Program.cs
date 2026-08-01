@@ -79,8 +79,11 @@ namespace DaJet.Host
             //_ = host.RunAsync("sequence/pg/revoke.djs").ContinueWith(ShowAsyncResult);
             //_ = host.RunAsync("sequence/pg/drop.djs").ContinueWith(ShowAsyncResult);
 
-            _ = host.RunAsync("insert/ms/simple.djs").ContinueWith(ShowAsyncResult);
+            //_ = host.RunAsync("insert/ms/simple.djs").ContinueWith(ShowAsyncResult);
             //_ = host.RunAsync("insert/pg/simple.djs").ContinueWith(ShowAsyncResult);
+
+            _ = host.RunAsync("exchange/select-ms-pg.djs").ContinueWith(ShowAsyncResult);
+            _ = host.RunAsync("exchange/select-pg-ms.djs").ContinueWith(ShowAsyncResult);
 
             //ExecuteScriptAsync(in host);
 

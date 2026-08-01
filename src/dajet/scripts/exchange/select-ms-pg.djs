@@ -1,11 +1,11 @@
 
-DECLARE @Отправитель string = 'DaJet'
-DECLARE @НомерДокумента string = 'PG-001'
+DECLARE @Отправитель string = 'MS_TEST'
+DECLARE @НомерДокумента string = 'MS-001'
 
 PRIVATE @Документ object
 PRIVATE @ТабличнаяЧасть array
 
-USE 'PG_TEST'
+USE 'MS_TEST'
 
    SELECT Ссылка, Дата, Номер, Проведен, ПометкаУдаления
      INTO @Документ
@@ -20,13 +20,14 @@ USE 'PG_TEST'
 
    SET @Документ.Товары = @ТабличнаяЧасть
 
-   INSERT РегистрСведений.ВходящаяОчередь
-   SELECT НомерСообщения = VECTOR('so_import')
-        , ДатаВремя      = NOW()
-        , Отправитель    = @Отправитель
-        , ТипСообщения   = 'Документ.Приход'
-        , ТелоСообщения  = JSON(@Документ)
-
+   USE 'PG_TEST'
+      INSERT РегистрСведений.ВходящаяОчередь
+      SELECT НомерСообщения = VECTOR('so_import')
+           , ДатаВремя      = NOW()
+           , Отправитель    = @Отправитель
+           , ТипСообщения   = 'Документ.Приход'
+           , ТелоСообщения  = JSON(@Документ)
+   END
 END
 
-RETURN 'PG_TEST: команда INSERT выполнена успешно'
+RETURN '[SELECT] MS_TEST - PG_TEST'
