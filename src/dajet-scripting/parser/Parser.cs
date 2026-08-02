@@ -1,6 +1,5 @@
 ﻿using DaJet.Scripting.Model;
 using DaJet.TypeSystem;
-using System.Data;
 
 namespace DaJet.Scripting
 {
@@ -1594,7 +1593,19 @@ namespace DaJet.Scripting
         #endregion
 
         #region "SELECT STATEMENT"
-        private SyntaxNode select_statement() { return new SelectStatement() { Expression = union() }; }
+        private SyntaxNode select_statement()
+        {
+            SelectStatement select = new() { Expression = union() };
+
+            IntoClause into = select.GetIntoClause();
+
+            if (into is not null && into.Table is not null)
+            {
+                _script.IsReadOnly = false;
+            }
+
+            return select;
+        }
         private SelectStatement stream_statement()
         {
             if (Current().Token == Token.STREAM)
@@ -1760,7 +1771,7 @@ namespace DaJet.Scripting
 
             return select;
         }
-        ///<returns>TableReference or TableExpression</returns>
+        ///<returns>TableReference or TableExpression (subquery)</returns>
         private SyntaxNode table()
         {
             if (Match(Token.Identifier, Token.Variable))
@@ -1787,6 +1798,8 @@ namespace DaJet.Scripting
             }
 
             table.Alias = alias(); //NOTE: the function can return an empty string alias
+
+            table.ValidateIntoClauseOrThrow();
 
             return table;
         }
@@ -2376,7 +2389,7 @@ namespace DaJet.Scripting
 
             return left;
         }
-        ///<returns>TableExpression or ValuesExpression</returns>
+        ///<returns>TableExpression (subquery) or ValuesExpression</returns>
         private SyntaxNode in_right_operand()
         {
             if (!Match(Token.OpenRoundBracket))
@@ -2393,6 +2406,11 @@ namespace DaJet.Scripting
             if (!Match(Token.CloseRoundBracket))
             {
                 throw new FormatException("[IN] Close round bracket expected.");
+            }
+
+            if (expression is TableExpression subquery)
+            {
+                subquery.ValidateIntoClauseOrThrow();
             }
 
             return expression;
@@ -2499,7 +2517,7 @@ namespace DaJet.Scripting
 
             return grouping();
         }
-        ///<returns>GroupOperator (round brackets) or TableExpression without alias</returns>
+        ///<returns>GroupOperator (round brackets) or TableExpression (subquery) without alias</returns>
         private SyntaxNode grouping()
         {
             if (Match(Token.OpenRoundBracket))
@@ -2515,9 +2533,18 @@ namespace DaJet.Scripting
                     throw new FormatException("Close round bracket token expected.");
                 }
 
-                return (token == Token.SELECT)
-                    ? new TableExpression() { Expression = expression }
-                    : new GroupOperator() { Expression = expression };
+                if (token == Token.SELECT)
+                {
+                    TableExpression subquery = new() { Expression = expression };
+
+                    subquery.ValidateIntoClauseOrThrow();
+
+                    return subquery;
+                }
+                else
+                {
+                    return new GroupOperator() { Expression = expression };
+                }
             }
 
             return terminal();

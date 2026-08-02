@@ -14,7 +14,7 @@ namespace DaJet.Scripting.Model
         public string SingletonKey { get; internal set; } = string.Empty;
         public bool IsDynamic { get; set; } // USE @variable - dynamic database binding
         public bool IsReadOnly { get; set; } = true; /// <see cref="ReadOnlyStatements"/>
-        public List<SyntaxNode> Statements { get; } = new();
+        public StatementBlock Statements { get; } = new();
 
         ///<summary>Get the definition of a variable by its name, including the leading @ symbol.</summary>
         public DeclareStatement GetVariableByName(in string name)

@@ -11,6 +11,10 @@ USE TRANSACTION 'MS_TEST'
     FROM Справочник.Номенклатура
    WHERE Код = @Код
 
+  --IF @Код = '' THEN PRINT 'TEST IF' END
+
+  --DELETE Справочник.Номенклатура WHERE Код = @Код
+
   --SLEEP 40
 
   --RETURN @Таблица -- Прерывает транзакцию

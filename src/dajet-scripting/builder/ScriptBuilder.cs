@@ -137,7 +137,7 @@ namespace DaJet.Scripting
         {
             if (!new Parser().TryParse(in _source, out _script, out string error))
             {
-                throw new InvalidOperationException(error);
+                throw new InvalidOperationException($"[PARSER] {error}");
             }
 
             if (_script.IsDynamic)
@@ -228,14 +228,18 @@ namespace DaJet.Scripting
 
             if (!new Binder().TryBind(in _script, in provider, out List<string> errors))
             {
-                throw new InvalidOperationException(string.Join('\n', errors));
+                string error = string.Join('\n', errors);
+
+                throw new InvalidOperationException($"[BINDER] {error}");
             }
         }
         private void TranspileStep()
         {
             if (!new Transpiler().TryTranspile(in _script, out List<string> errors))
             {
-                throw new InvalidOperationException(string.Join('\n', errors));
+                string error = string.Join('\n', errors);
+
+                throw new InvalidOperationException($"[TRANSPILER] {error}");
             }
         }
         public Script Parse()

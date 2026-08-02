@@ -11,7 +11,7 @@ namespace DaJet.Scripting.Model
             get { return _statements[index]; }
             set { _statements[index] = value; }
         }
-        public bool IsReadOnly { get { return false; } }
+        bool ICollection<SyntaxNode>.IsReadOnly { get { return false; } }
         public int Count { get { return _statements.Count; } }
         IEnumerator IEnumerable.GetEnumerator()
         {

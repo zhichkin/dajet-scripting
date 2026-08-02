@@ -65,7 +65,7 @@ namespace DaJet.Host
             DaJetHost host = DaJetHost.Create("scripts").Run();
             //DaJetHost host = DaJetHost.Create("scripts").ReadOnly().Run();
 
-            //_ = host.RunAsync("simple.djs").ContinueWith(ShowAsyncResult);
+            _ = host.RunAsync("simple.djs").ContinueWith(ShowAsyncResult);
 
             //_ = host.RunAsync("sequence/ms/create.djs").ContinueWith(ShowAsyncResult);
             //_ = host.RunAsync("sequence/ms/vector.djs").ContinueWith(ShowAsyncResult);
@@ -82,8 +82,8 @@ namespace DaJet.Host
             //_ = host.RunAsync("insert/ms/simple.djs").ContinueWith(ShowAsyncResult);
             //_ = host.RunAsync("insert/pg/simple.djs").ContinueWith(ShowAsyncResult);
 
-            _ = host.RunAsync("exchange/select-ms-pg.djs").ContinueWith(ShowAsyncResult);
-            _ = host.RunAsync("exchange/select-pg-ms.djs").ContinueWith(ShowAsyncResult);
+            //_ = host.RunAsync("exchange/select-ms-pg.djs").ContinueWith(ShowAsyncResult);
+            //_ = host.RunAsync("exchange/select-pg-ms.djs").ContinueWith(ShowAsyncResult);
 
             //ExecuteScriptAsync(in host);
 

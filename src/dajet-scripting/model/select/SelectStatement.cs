@@ -13,10 +13,8 @@
                 return select.Into;
             }
             
-            if (Expression is TableUnionOperator union &&
-                union.Expression1 is SelectExpression first)
+            if (Expression is TableUnionOperator union && union.Expression1 is SelectExpression first)
             {
-                
                 return first.Into;
             }
 

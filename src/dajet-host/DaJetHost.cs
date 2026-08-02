@@ -78,7 +78,9 @@ namespace DaJet.Host
                 {
                     script = factory.Build(); // build static script
                 }
-                
+
+                ThrowOnReadOnlyModeViolation(in script);
+
                 _ = _scripts.TryAdd(path, script); // add script to the cache
             }
             finally
@@ -93,6 +95,8 @@ namespace DaJet.Host
         }
         private void AddOrUpdate(in string path, in Script script)
         {
+            ThrowOnReadOnlyModeViolation(in script);
+
             bool locked = false;
 
             try
@@ -395,7 +399,7 @@ namespace DaJet.Host
             {
                 string name = string.IsNullOrEmpty(script.Path) ? "anonymous" : script.Path;
 
-                throw new InvalidOperationException($"Script [{name}] violates read-only mode of the host [{RootName}]");
+                throw new HostReadOnlyModeException($"Read-only mode violation of the host [{RootName}]");
             }
         }
         public object Run(in string path, in DataObject parameters = null)

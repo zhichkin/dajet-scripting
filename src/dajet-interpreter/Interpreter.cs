@@ -169,11 +169,21 @@ namespace DaJet.Scripting
             if (node is DeclareStatement declare) { return Execute(in declare); }
             else if (node is PrintStatement print) { return Execute(in print); }
             else if (node is SleepStatement sleep) { return Execute(in sleep); }
-            else if (node is UseStatement use) { return Execute(in use); }
-            else if (node is SelectStatement select) { return Execute(in select); }
+            else if (node is IfStatement _if) { return Execute(in _if); }
+            else if (node is ForStatement _for) { return Execute(in _for); }
+            else if (node is WhileStatement _while) { return Execute(in _while); }
+            else if (node is BreakStatement _break) { return Execute(in _break); }
+            else if (node is ContinueStatement _continue) { return Execute(in _continue); }
+            else if (node is TryStatement _try) { return Execute(in _try); }
+            else if (node is ThrowStatement _throw) { return Execute(in _throw); }
             else if (node is ReturnStatement _return) { return Execute(in _return); }
             else if (node is AssignmentOperator assign) { return Execute(in assign); }
+            else if (node is UseStatement use) { return Execute(in use); }
+            else if (node is SelectStatement select) { return Execute(in select); }
             else if (node is InsertStatement insert) { return Execute(in insert); }
+            else if (node is UpdateStatement update) { return Execute(in update); }
+            else if (node is DeleteStatement delete) { return Execute(in delete); }
+            else if (node is ConsumeStatement consume) { return Execute(in consume); }
             else if (node is SqlStatement statement) { return Execute(in statement); }
 
             return ExitCode.Success;
@@ -237,12 +247,42 @@ namespace DaJet.Scripting
 
             return ExitCode.Success;
         }
+        private ExitCode Execute(in IfStatement statement) { throw new NotImplementedException("Statement is not implemented: IF"); }
+        private ExitCode Execute(in ForStatement statement) { throw new NotImplementedException("Statement is not implemented: FOR"); }
+        private ExitCode Execute(in WhileStatement statement) { throw new NotImplementedException("Statement is not implemented: WHILE"); }
+        private ExitCode Execute(in BreakStatement statement) { throw new NotImplementedException("Statement is not implemented: BREAK"); }
+        private ExitCode Execute(in ContinueStatement statement) { throw new NotImplementedException("Statement is not implemented: CONTINUE"); }
+        private ExitCode Execute(in TryStatement statement) { throw new NotImplementedException("Statement is not implemented: TRY"); }
+        private ExitCode Execute(in ThrowStatement statement) { throw new NotImplementedException("Statement is not implemented: THROW"); }
         private ExitCode Execute(in ReturnStatement statement)
         {
             _returnValue = _context.Evaluate(statement.Expression);
 
             return ExitCode.Return;
         }
+        private ExitCode Execute(in AssignmentOperator statement)
+        {
+            object value = _context.Evaluate(statement.Initializer);
+
+            if (statement.Target is VariableReference variable)
+            {
+                SetValue(variable.Identifier, in value);
+            }
+            else if (statement.Target is MemberAccessExpression member)
+            {
+                List<string> members = member.GetAccessMembers();
+
+                object target = GetValue(members[0]);
+
+                if (target is DataObject _object)
+                {
+                    _object.SetValue(members[1], value);
+                }
+            }
+
+            return ExitCode.Success;
+        }
+
         private ExitCode Execute(in UseStatement statement)
         {
             MetadataProvider provider = MetadataProvider.Get(statement.Source);
@@ -295,7 +335,7 @@ namespace DaJet.Scripting
         private ExitCode Execute(in SelectStatement statement)
         {
             DataSourceScope use = GetDataSource();
-
+            
             if (!_processors.TryGetValue(statement, out ProcessorBase processor))
             {
                 if (use.Type == DataSourceType.SqlServer)
@@ -317,28 +357,6 @@ namespace DaJet.Scripting
             finally
             {
                 processor.Dispose();
-            }
-
-            return ExitCode.Success;
-        }
-        private ExitCode Execute(in AssignmentOperator statement)
-        {
-            object value = _context.Evaluate(statement.Initializer);
-
-            if (statement.Target is VariableReference variable)
-            {
-                SetValue(variable.Identifier, in value);
-            }
-            else if (statement.Target is MemberAccessExpression member)
-            {
-                List<string> members = member.GetAccessMembers();
-
-                object target = GetValue(members[0]);
-
-                if (target is DataObject _object)
-                {
-                    _object.SetValue(members[1], value);
-                }
             }
 
             return ExitCode.Success;
@@ -372,6 +390,9 @@ namespace DaJet.Scripting
 
             return ExitCode.Success;
         }
+        private ExitCode Execute(in UpdateStatement statement) { throw new NotImplementedException("Statement is not implemented: UPDATE"); }
+        private ExitCode Execute(in DeleteStatement statement) { throw new NotImplementedException("Statement is not implemented: DELETE"); }
+        private ExitCode Execute(in ConsumeStatement statement) { throw new NotImplementedException("Statement is not implemented: CONSUME"); }
         private ExitCode Execute(in SqlStatement statement)
         {
             DataSourceScope use = GetDataSource();

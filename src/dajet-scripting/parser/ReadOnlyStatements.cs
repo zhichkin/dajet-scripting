@@ -14,7 +14,15 @@ namespace DaJet.Scripting
             typeof(SelectStatement),
             typeof(AssignmentOperator),
             typeof(ReturnStatement),
-            typeof(PrintStatement)
+            typeof(PrintStatement),
+            typeof(SleepStatement),
+            typeof(IfStatement),
+            typeof(ForStatement),
+            typeof(WhileStatement),
+            typeof(BreakStatement),
+            typeof(ContinueStatement),
+            typeof(TryStatement),
+            typeof(ThrowStatement)
         ]);
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal static bool Contains(in SyntaxNode node)
