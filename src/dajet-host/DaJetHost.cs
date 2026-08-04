@@ -182,6 +182,8 @@ namespace DaJet.Host
 
                 Script script = factory.FromFile(in scriptPath).Parse();
 
+                ThrowOnReadOnlyModeViolation(in script);
+
                 if (script.RunAtStartup && !script.IsDynamic)
                 {
                     //NOTE: Dynamic scripts are not allowed to run at startup.
@@ -191,15 +193,51 @@ namespace DaJet.Host
 
                     AddOrUpdate(script.Path, in script);
 
-                    _ = RunAsync(in script);
+                    if (script.IsLongRunning)
+                    {
+                        _ = RunAsync(in script);
+                    }
+                    else
+                    {
+                        _ = RunAsync(in script).ContinueWith(LogStartupResult, script.Path);
+                    }
 
-                    FileLogger.Default.Write($"[STARTUP][SUCCESS] {script.Path}");
+                    FileLogger.Default.Write($"[STARTUP][RUN][{script.Path}]");
                 }
             }
             catch (Exception error)
             {
-                FileLogger.Default.Write($"[STARTUP][ERROR] {scriptPath}");
-                FileLogger.Default.Write(ExceptionHelper.GetErrorMessage(error));
+                string relativePath;
+
+                try
+                {
+                    relativePath = GetScriptRelativePath(in scriptPath);
+                }
+                catch
+                {
+                    relativePath = scriptPath;
+                }
+
+                FileLogger.Default.Write($"[STARTUP][ERROR][{relativePath}] {ExceptionHelper.GetErrorMessage(error)}");
+            }
+        }
+        private static void LogStartupResult(Task<object> task, object scriptPath)
+        {
+            if (scriptPath is not string path) { return; }
+
+            if (task.IsCompletedSuccessfully)
+            {
+                FileLogger.Default.Write($"[STARTUP][SUCCESS][{path}]");
+            }
+            else if (task.IsCanceled)
+            {
+                FileLogger.Default.Write($"[STARTUP][CANCELED][{path}]");
+            }
+            else
+            {
+                Exception error = task?.Exception?.Flatten()?.InnerException;
+
+                FileLogger.Default.Write($"[STARTUP][FAULTED][{path}] {error?.Message}");
             }
         }
 

@@ -1,4 +1,6 @@
 
+--#STARTUP
+
 DECLARE @Код string  = 'MS-10'
 
 PRIVATE @Таблица array
