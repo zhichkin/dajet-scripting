@@ -41,6 +41,8 @@ namespace DaJet.Scripting.Model
             else if (node is FunctionExpression function) { return Infer(in function); }
             else if (node is GroupOperator group) { return Infer(in group); }
             else if (node is UnaryOperator unary) { return Infer(in unary); }
+            else if (node is BinaryOperator binary) { return Infer(in binary); }
+            else if (node is ComparisonOperator comparison) { return Infer(in comparison); }
             else if (node is AdditionOperator addition) { return Infer(in addition); }
             else if (node is MultiplyOperator multiply) { return Infer(in multiply); }
             else if (node is CaseExpression _case) { return Infer(in _case); }
@@ -216,14 +218,16 @@ namespace DaJet.Scripting.Model
             //NOTE: выполнение логических операторов и, как следствие, возврат булевых значений
             //NOTE: для колонок, получаемых операцией проекции SELECT, не поддерживается T-SQL
 
-            if (node.Token == Token.NOT) // Логический унарный оператор отрицания
-            {
-                throw new InvalidCastException("Failed to infer data type from unary operator [NOT]");
-            }
-
             PropertyDefinition property = Infer(node.Expression);
 
-            if (node.Token == Token.Minus)
+            if (node.Token == Token.NOT) // Логический унарный оператор отрицания
+            {
+                if (!property.Type.IsBoolean)
+                {
+                    throw new InvalidCastException("Failed to infer data type from unary operator [NOT]");
+                }
+            }
+            else if (node.Token == Token.Minus)
             {
                 if (!(property.Type.IsInteger || property.Type.IsDecimal))
                 {
@@ -232,6 +236,27 @@ namespace DaJet.Scripting.Model
             }
 
             return property;
+        }
+        private static PropertyDefinition Infer(in BinaryOperator node)
+        {
+            PropertyDefinition left = Infer(node.Expression1);
+            PropertyDefinition right = Infer(node.Expression2);
+
+            if (!(left.Type.IsBoolean && right.Type.IsBoolean))
+            {
+                throw new InvalidCastException($"Boolean values expected [{node.Token}]");
+            }
+
+            return new PropertyDefinition() { Type = DataType.Boolean };
+        }
+        private static PropertyDefinition Infer(in ComparisonOperator node)
+        {
+            PropertyDefinition left = Infer(node.Expression1);
+            PropertyDefinition right = Infer(node.Expression2);
+
+            //TODO: check if data types are comparable
+
+            return new PropertyDefinition() { Type = DataType.Boolean };
         }
         private static PropertyDefinition Infer(in AdditionOperator node)
         {

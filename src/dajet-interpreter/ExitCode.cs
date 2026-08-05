@@ -3,12 +3,11 @@
     public enum ExitCode : byte
     {
         None,
-        Running,
         Success,
         Faulted,
         Return,
-        Continue,
         Break,
+        Continue,
         Cancel
     }
 }

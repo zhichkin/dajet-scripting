@@ -2,6 +2,7 @@
 using DaJet.Metadata;
 using DaJet.Scripting.Model;
 using DaJet.TypeSystem;
+using DaJet.Utilities;
 
 namespace DaJet.Scripting
 {
@@ -20,6 +21,8 @@ namespace DaJet.Scripting
             ArgumentNullException.ThrowIfNull(script, nameof(script));
 
             _script = script;
+
+            _data.Add("@@ERROR_MESSAGE", string.Empty);
 
             _context = new ExpressionInterpreter(in _data);
         }
@@ -169,6 +172,7 @@ namespace DaJet.Scripting
             if (node is DeclareStatement declare) { return Execute(in declare); }
             else if (node is PrintStatement print) { return Execute(in print); }
             else if (node is SleepStatement sleep) { return Execute(in sleep); }
+
             else if (node is IfStatement _if) { return Execute(in _if); }
             else if (node is ForStatement _for) { return Execute(in _for); }
             else if (node is WhileStatement _while) { return Execute(in _while); }
@@ -177,6 +181,7 @@ namespace DaJet.Scripting
             else if (node is TryStatement _try) { return Execute(in _try); }
             else if (node is ThrowStatement _throw) { return Execute(in _throw); }
             else if (node is ReturnStatement _return) { return Execute(in _return); }
+
             else if (node is AssignmentOperator assign) { return Execute(in assign); }
             else if (node is UseStatement use) { return Execute(in use); }
             else if (node is SelectStatement select) { return Execute(in select); }
@@ -247,13 +252,146 @@ namespace DaJet.Scripting
 
             return ExitCode.Success;
         }
-        private ExitCode Execute(in IfStatement statement) { throw new NotImplementedException("Statement is not implemented: IF"); }
-        private ExitCode Execute(in ForStatement statement) { throw new NotImplementedException("Statement is not implemented: FOR"); }
-        private ExitCode Execute(in WhileStatement statement) { throw new NotImplementedException("Statement is not implemented: WHILE"); }
-        private ExitCode Execute(in BreakStatement statement) { throw new NotImplementedException("Statement is not implemented: BREAK"); }
-        private ExitCode Execute(in ContinueStatement statement) { throw new NotImplementedException("Statement is not implemented: CONTINUE"); }
-        private ExitCode Execute(in TryStatement statement) { throw new NotImplementedException("Statement is not implemented: TRY"); }
-        private ExitCode Execute(in ThrowStatement statement) { throw new NotImplementedException("Statement is not implemented: THROW"); }
+        private ExitCode Execute(in IfStatement statement)
+        {
+            object value = _context.Evaluate(statement.IF);
+
+            if (value is not bool condition)
+            {
+                throw new InvalidOperationException("[IF] Condition must evaluate to boolean value");
+            }
+
+            ExitCode code = ExitCode.Success;
+
+            if (condition)
+            {
+                code = Execute(statement.THEN);
+            }
+            else if (statement.ELSE is not null)
+            {
+                code = Execute(statement.ELSE);
+            }
+
+            return code;
+        }
+        private ExitCode Execute(in ForStatement statement)
+        {
+            object value = _context.Evaluate(statement.Iterator);
+
+            if (value is not List<DataObject> iterator)
+            {
+                throw new InvalidOperationException("[FOR] Condition must evaluate to boolean value");
+            }
+
+            ExitCode code = ExitCode.Success;
+
+            if (iterator.Count == 0)
+            {
+                return code;
+            }
+
+            foreach (DataObject item in iterator)
+            {
+                SetValue(statement.Variable.Identifier, item);
+
+                code = Execute(statement.Statements);
+
+                if (code == ExitCode.Break)
+                {
+                    code = ExitCode.Success; break;
+                }
+                else if (code == ExitCode.Continue)
+                {
+                    code = ExitCode.Success;
+                }
+                else if (code != ExitCode.Success)
+                {
+                    return code;
+                }
+            }
+
+            return code;
+        }
+        private ExitCode Execute(in WhileStatement statement)
+        {
+            object value = _context.Evaluate(statement.Condition);
+
+            if (value is not bool condition)
+            {
+                throw new InvalidOperationException("[WHILE] Condition must evaluate to boolean value");
+            }
+
+            ExitCode code = ExitCode.Success;
+
+            while (condition)
+            {
+                code = Execute(statement.Statements);
+
+                if (code == ExitCode.Break)
+                {
+                    code = ExitCode.Success; break;
+                }
+                else if (code == ExitCode.Continue)
+                {
+                    code = ExitCode.Success;
+                }
+                else if (code != ExitCode.Success)
+                {
+                    return code;
+                }
+
+                condition = (bool)_context.Evaluate(statement.Condition);
+            }
+
+            return code;
+        }
+        private ExitCode Execute(in BreakStatement _) { return ExitCode.Break; }
+        private ExitCode Execute(in ContinueStatement _) { return ExitCode.Continue; }
+        private ExitCode Execute(in TryStatement statement)
+        {
+            ExitCode code = ExitCode.Success;
+
+            try
+            {
+                code = Execute(statement.TRY);
+
+                if (code != ExitCode.Success)
+                {
+                    return code;
+                }
+            }
+            catch (Exception error)
+            {
+                _data["@@ERROR_MESSAGE"] = ExceptionHelper.GetErrorMessage(error);
+
+                if (statement.CATCH is not null)
+                {
+                    code = Execute(statement.CATCH);
+                }
+            }
+            finally
+            {
+                _data["@@ERROR_MESSAGE"] = string.Empty;
+
+                if (statement.FINALLY is not null)
+                {
+                    code = Execute(statement.FINALLY);
+                }
+            }
+
+            return code;
+        }
+        private ExitCode Execute(in ThrowStatement statement)
+        {
+            object value = _context.Evaluate(statement.Expression);
+
+            if (value is not string message)
+            {
+                throw new InvalidOperationException("[THROW] Expression must evaluate to string value");
+            }
+
+            throw new Exception(message);
+        }
         private ExitCode Execute(in ReturnStatement statement)
         {
             _returnValue = _context.Evaluate(statement.Expression);

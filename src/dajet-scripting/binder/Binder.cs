@@ -122,22 +122,21 @@ namespace DaJet.Scripting
             //else if (node is ProduceStatement produce_statement) { Bind(in produce_statement); }
             //else if (node is RequestStatement request_statement) { Bind(in request_statement); }
             //else if (node is ImportStatement import_statement) { Bind(in import_statement); }
-            //else if (node is ForStatement for_each) { Bind(in for_each); }
-            //else if (node is CreateTypeStatement udt) { Bind(in udt); }
+            
             else if (node is ApplySequenceStatement apply_sequence) { Bind(in apply_sequence); }
             else if (node is RevokeSequenceStatement revoke_sequence) { Bind(in revoke_sequence); }
-            //else if (node is CaseStatement case_statement) { Bind(in case_statement); }
-            //else if (node is IfStatement if_statement) { Bind(in if_statement); }
-            //else if (node is TryStatement try_statement) { Bind(in try_statement); }
-            //else if (node is WhileStatement while_statement) { Bind(in while_statement); }
-            //else if (node is SleepStatement sleep_statement) { Bind(in sleep_statement); }
-            //else if (node is ThrowStatement throw_statement) { Bind(in throw_statement); }
+                       
             //else if (node is ProcessStatement process) { Bind(in process); }
             //else if (node is ExecuteStatement execute) { Bind(in execute); } // nothing to bind
-            //else if (node is WaitStatement wait) { Bind(in wait); }
-            //else if (node is ModifyStatement modify) { Bind(in modify); } // nothing to bind
+
             else if (node is PrintStatement print) { Bind(in print); }
             else if (node is ReturnStatement return_statement) { Bind(in return_statement); }
+
+            else if (node is IfStatement _if) { Bind(in _if); }
+            else if (node is ForStatement _for) { Bind(in _for); }
+            else if (node is WhileStatement _while) { Bind(in _while); }
+            else if (node is TryStatement _try) { Bind(in _try); }
+            else if (node is ThrowStatement _throw) { Bind(in _throw); }
         }
         private void Bind(in Script node)
         {
@@ -152,12 +151,16 @@ namespace DaJet.Scripting
 
             //TODO: process IMPORT statements
 
-            foreach (SyntaxNode statement in node.Statements)
+            Bind(node.Statements);
+
+            _scope = _scope.CloseScope();
+        }
+        private void Bind(in StatementBlock node)
+        {
+            foreach (SyntaxNode statement in node)
             {
                 Bind(in statement);
             }
-
-            _scope = _scope.CloseScope();
         }
         private void Bind(in TypeReference node)
         {
@@ -320,10 +323,7 @@ namespace DaJet.Scripting
         {
             _scope = _scope.OpenScope(node);
 
-            foreach (SyntaxNode statement in node.Statements)
-            {
-                Bind(in statement);
-            }
+            Bind(node.Statements);
 
             _scope = _scope.CloseScope();
         }
@@ -1099,5 +1099,62 @@ namespace DaJet.Scripting
             Bind(node.Table);
         }
         #endregion
+
+        private void Bind(in IfStatement node)
+        {
+            Bind(node.IF);
+
+            DataType condition = node.IF.InferType();
+
+            if (!condition.IsBoolean)
+            {
+                RegisterBindingError(node.Token, "Condition expression must evaluate to boolean type");
+            }
+            
+            Bind(node.THEN);
+
+            if (node.ELSE is not null)
+            {
+                Bind(node.ELSE);
+            }
+        }
+        private void Bind(in ForStatement node)
+        {
+            Bind(node.Iterator);
+            Bind(node.Variable);
+            Bind(node.Statements);
+        }
+        private void Bind(in WhileStatement node)
+        {
+            Bind(node.Condition);
+
+            DataType condition = node.Condition.InferType();
+
+            if (!condition.IsBoolean)
+            {
+                RegisterBindingError(node.Token, "Condition expression must evaluate to boolean type");
+            }
+
+            Bind(node.Statements);
+        }
+        private void Bind(in TryStatement node)
+        {
+            Bind(node.TRY);
+
+            if (node.CATCH is not null) { Bind(node.CATCH); }
+
+            if (node.FINALLY is not null) { Bind(node.FINALLY); }
+        }
+        private void Bind(in ThrowStatement node)
+        {
+            Bind(node.Expression);
+
+            DataType expression = node.Expression.InferType();
+
+            if (!expression.IsString)
+            {
+                RegisterBindingError(node.Token, "THROW expression must evaluate to string type");
+            }
+        }
     }
 }

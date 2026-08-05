@@ -45,6 +45,15 @@
     <None Update="scripts\exchange\select-ms-pg.djs">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
+    <None Update="scripts\flow_control\for.djs">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Update="scripts\flow_control\while.djs">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Update="scripts\flow_control\if.djs">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
     <None Update="scripts\functions\sum_остатки.djs">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>

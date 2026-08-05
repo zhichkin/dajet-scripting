@@ -41,6 +41,18 @@ namespace DaJet.Scripting
                 || node is ApplySequenceStatement
                 || node is RevokeSequenceStatement
                 || node is DropSequenceStatement) { VisitSequenceStatement(in node); }
+
+            else if (node is IfStatement _if) { Visit(in _if); }
+            else if (node is ForStatement _for) { Visit(in _for); }
+            else if (node is WhileStatement _while) { Visit(in _while); }
+            else if (node is TryStatement _try) { Visit(in _try); }
+        }
+        private void Visit(in StatementBlock node)
+        {
+            foreach (SyntaxNode statement in node)
+            {
+                Visit(in statement);
+            }
         }
         private void Visit(in UseStatement node)
         {
@@ -48,11 +60,8 @@ namespace DaJet.Scripting
 
             _providers.Push(provider);
 
-            foreach (SyntaxNode statement in node.Statements)
-            {
-                Visit(in statement);
-            }
-
+            Visit(node.Statements);
+            
             _ = _providers.Pop();
         }
         private void Visit(in SelectStatement node)
@@ -120,61 +129,37 @@ namespace DaJet.Scripting
         {
             if (node.THEN is not null)
             {
-
+                Visit(node.THEN);
             }
 
             if (node.ELSE is not null)
             {
-
-            }
-        }
-        private void Visit(in CaseStatement node)
-        {
-            if (node.CASE is not null)
-            {
-                foreach (WhenClause when in node.CASE)
-                {
-                    if (when.THEN is not null)
-                    {
-                        Visit(when.THEN);
-                    }
-                }
-            }
-
-            if (node.ELSE is not null)
-            {
-
+                Visit(node.ELSE);
             }
         }
         private void Visit(in ForStatement node)
         {
-            if (node.Statements is not null)
-            {
-
-            }
+            Visit(node.Statements);
         }
         private void Visit(in WhileStatement node)
         {
-            if (node.Statements is not null)
-            {
-
-            }
+            Visit(node.Statements);
         }
         private void Visit(in TryStatement node)
         {
             if (node.TRY is not null)
             {
-
+                Visit(node.TRY);
             }
 
             if (node.CATCH is not null)
             {
-
+                Visit(node.CATCH);
             }
 
             if (node.FINALLY is not null)
             {
-
+                Visit(node.FINALLY);
             }
         }
     }

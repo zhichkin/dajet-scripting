@@ -13,7 +13,8 @@ namespace DaJet.Scripting
                 new KeyValuePair<string, Function>(nameof(TYPEOF), new TYPEOF()),
                 new KeyValuePair<string, Function>(nameof(UUIDOF), new UUIDOF()),
                 new KeyValuePair<string, Function>(nameof(NOW), new NOW()),
-                new KeyValuePair<string, Function>(nameof(UTC), new UTC())
+                new KeyValuePair<string, Function>(nameof(UTC), new UTC()),
+                new KeyValuePair<string, Function>(nameof(ERROR_MESSAGE), new ERROR_MESSAGE())
             ];
             return FrozenDictionary.ToFrozenDictionary(list);
         }

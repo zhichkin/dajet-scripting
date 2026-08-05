@@ -65,7 +65,10 @@ namespace DaJet.Host
             DaJetHost host = DaJetHost.Create("scripts").Run();
             //DaJetHost host = DaJetHost.Create("scripts").ReadOnly().Run();
 
-            _ = host.RunAsync("simple.djs").ContinueWith(ShowAsyncResult);
+            //_ = host.RunAsync("simple.djs").ContinueWith(ShowAsyncResult);
+            //_ = host.RunAsync("flow_control/if.djs").ContinueWith(ShowAsyncResult);
+            _ = host.RunAsync("flow_control/for.djs").ContinueWith(ShowAsyncResult);
+            //_ = host.RunAsync("flow_control/while.djs").ContinueWith(ShowAsyncResult);
 
             //_ = host.RunAsync("sequence/ms/create.djs").ContinueWith(ShowAsyncResult);
             //_ = host.RunAsync("sequence/ms/vector.djs").ContinueWith(ShowAsyncResult);

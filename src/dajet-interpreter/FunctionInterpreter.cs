@@ -29,6 +29,7 @@ namespace DaJet.Scripting
             else if (node.Name == nameof(UUIDOF)) { return UUIDOF(in context, in node); }
             else if (node.Name == nameof(NOW)) { return NOW(in context, in node); }
             else if (node.Name == nameof(UTC)) { return UTC(in context, in node); }
+            else if (node.Name == nameof(ERROR_MESSAGE)) { return ERROR_MESSAGE(in context, in node); }
             else
             {
                 return null;
@@ -80,6 +81,10 @@ namespace DaJet.Scripting
         private static DateTime UTC(in ExpressionInterpreter context, in FunctionExpression node)
         {
             return DateTime.UtcNow;
+        }
+        private static string ERROR_MESSAGE(in ExpressionInterpreter context, in FunctionExpression node)
+        {
+            return (string)context.Evaluate(new VariableReference() { Identifier = "@@ERROR_MESSAGE" });
         }
     }
 }
