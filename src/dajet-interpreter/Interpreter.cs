@@ -140,7 +140,7 @@ namespace DaJet.Scripting
                     }
                     else if (code == ExitCode.Cancel)
                     {
-                        break;
+                        break; //TODO: throw OperationCanceledException ?
                     }
                 }
             }

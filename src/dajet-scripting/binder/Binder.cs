@@ -34,6 +34,10 @@ namespace DaJet.Scripting
         }
 
         #region "Binding and syntax errors"
+        private void RegisterSyntaxError(Token token, string message)
+        {
+            _errors.Add($"[{token}] Syntax error: {message}]");
+        }
         private void RegisterBindingError(Token token, string identifier)
         {
             _errors.Add($"Failed to bind [{token}: {identifier}]");
@@ -135,6 +139,8 @@ namespace DaJet.Scripting
             else if (node is IfStatement _if) { Bind(in _if); }
             else if (node is ForStatement _for) { Bind(in _for); }
             else if (node is WhileStatement _while) { Bind(in _while); }
+            else if (node is BreakStatement _break) { Bind(in _break); }
+            else if (node is ContinueStatement _continue) { Bind(in _continue); }
             else if (node is TryStatement _try) { Bind(in _try); }
             else if (node is ThrowStatement _throw) { Bind(in _throw); }
         }
@@ -1120,12 +1126,18 @@ namespace DaJet.Scripting
         }
         private void Bind(in ForStatement node)
         {
+            _scope = _scope.OpenScope(node);
+
             Bind(node.Iterator);
             Bind(node.Variable);
             Bind(node.Statements);
+
+            _scope = _scope.CloseScope();
         }
         private void Bind(in WhileStatement node)
         {
+            _scope = _scope.OpenScope(node);
+
             Bind(node.Condition);
 
             DataType condition = node.Condition.InferType();
@@ -1136,6 +1148,30 @@ namespace DaJet.Scripting
             }
 
             Bind(node.Statements);
+
+            _scope = _scope.CloseScope();
+        }
+        private void Bind(in BreakStatement node)
+        {
+            Scope scope = _scope.Ancestor<ForStatement>();
+
+            scope ??= _scope.Ancestor<WhileStatement>();
+
+            if (scope is null)
+            {
+                RegisterSyntaxError(node.Token, "FOR or WHILE scope missing");
+            }
+        }
+        private void Bind(in ContinueStatement node)
+        {
+            Scope scope = _scope.Ancestor<ForStatement>();
+
+            scope ??= _scope.Ancestor<WhileStatement>();
+
+            if (scope is null)
+            {
+                RegisterSyntaxError(node.Token, "FOR or WHILE scope missing");
+            }
         }
         private void Bind(in TryStatement node)
         {
