@@ -22,7 +22,6 @@ namespace DaJet.Scripting
         private readonly static byte[] TAG_ENTITY = [0x08];
 
         private readonly ScriptContext _context;
-        private readonly MsDataSourceScope _dataSource;
         private readonly InsertStatement _statement;
         private readonly EntityDefinition _target;
         private readonly int _yearOffset;
@@ -30,12 +29,11 @@ namespace DaJet.Scripting
         private readonly Dictionary<ColumnDefinition, SqlParameter> _parameters = new();
         public MsInsertProcessor(in ScriptContext context, in InsertStatement statement)
         {
-            if (context.GetDataSource() is not MsDataSourceScope use)
+            if (context.GetDataSource() is not MsDataSourceScope)
             {
                 throw new InvalidOperationException();
             }
-
-            _dataSource = use;
+            
             _context = context;
             _statement = statement;
             _yearOffset = statement.YearOffset;
@@ -216,59 +214,71 @@ namespace DaJet.Scripting
 
                 object value = _context.Evaluate(map.Expression);
 
+                SqlParameter copy = null;
+
                 foreach (ColumnDefinition column in property.Columns)
                 {
                     if (_parameters.TryGetValue(column, out SqlParameter parameter))
                     {
+                        copy = new SqlParameter()
+                        {
+                            Direction = parameter.Direction,
+                            ParameterName = parameter.ParameterName,
+                            Size = parameter.Size,
+                            SqlDbType = parameter.SqlDbType,
+                            Scale = parameter.Scale,
+                            Precision = parameter.Precision
+                        };
+
                         if (value is null)
                         {
-                            parameter.Value = DBNull.Value;
+                            copy.Value = DBNull.Value;
                         }
                         else if (column.Purpose == ColumnPurpose.Value)
                         {
                             if (value is bool boolean)
                             {
-                                parameter.Value = boolean ? TRUE : FALSE;
+                                copy.Value = boolean ? TRUE : FALSE;
                             }
                             else if (value is decimal numeric)
                             {
-                                parameter.Value = numeric;
+                                copy.Value = numeric;
                             }
                             else if (value is DateTime datetime)
                             {
-                                parameter.Value = datetime.AddYears(_yearOffset);
+                                copy.Value = datetime.AddYears(_yearOffset);
                             }
                             else if (value is string text)
                             {
-                                parameter.Value = text;
+                                copy.Value = text;
                             }
                             else if (value is byte[] binary)
                             {
-                                parameter.Value = binary;
+                                copy.Value = binary;
                             }
                             else if (value is Guid uuid)
                             {
-                                parameter.Value = uuid.ToByteArray();
+                                copy.Value = uuid.ToByteArray();
                             }
                             else if (value is Entity entity)
                             {
-                                parameter.Value = entity.Identity.ToByteArray();
+                                copy.Value = entity.Identity.ToByteArray();
                             }
                             else
                             {
-                                parameter.Value = value; // this might be error
+                                copy.Value = value; // this might be error
                             }
                         }
                         else if (column.Purpose == ColumnPurpose.Tag)
                         {
-                            if (value is null) { parameter.Value = TAG_UNDEFINED; }
-                            else if (value is bool) { parameter.Value = TAG_BOOLEAN; }
-                            else if (value is decimal) { parameter.Value = TAG_DECIMAL; }
-                            else if (value is DateTime) { parameter.Value = TAG_DATETIME; }
-                            else if (value is string) { parameter.Value = TAG_STRING; }
+                            if (value is null) { copy.Value = TAG_UNDEFINED; }
+                            else if (value is bool) { copy.Value = TAG_BOOLEAN; }
+                            else if (value is decimal) { copy.Value = TAG_DECIMAL; }
+                            else if (value is DateTime) { copy.Value = TAG_DATETIME; }
+                            else if (value is string) { copy.Value = TAG_STRING; }
                             else
                             {
-                                parameter.Value = TAG_ENTITY;
+                                copy.Value = TAG_ENTITY;
                             }
                         }
                         else if (column.Purpose == ColumnPurpose.TypeCode)
@@ -277,22 +287,22 @@ namespace DaJet.Scripting
                             {
                                 Span<byte> buffer = _buffer.AsSpan(0, 4);
                                 BinaryPrimitives.WriteInt32BigEndian(buffer, entity.TypeCode);
-                                parameter.Value = buffer.ToArray();
+                                copy.Value = buffer.ToArray();
                             }
                             else
                             {
-                                parameter.Value = EMPTY_TYPE_CODE;
+                                copy.Value = EMPTY_TYPE_CODE;
                             }
                         }
                         else if (column.Purpose == ColumnPurpose.Identity)
                         {
                             if (value is Entity entity)
                             {
-                                parameter.Value = entity.Identity.ToByteArray();
+                                copy.Value = entity.Identity.ToByteArray();
                             }
                             else
                             {
-                                parameter.Value = EMPTY_UUID;
+                                copy.Value = EMPTY_UUID;
                             }
                         }
                         else if (column.Purpose == ColumnPurpose.Boolean)
@@ -310,44 +320,49 @@ namespace DaJet.Scripting
                         {
                             if (value is decimal numeric)
                             {
-                                parameter.Value = numeric;
+                                copy.Value = numeric;
                             }
                             else
                             {
-                                parameter.Value = 0m;
+                                copy.Value = 0m;
                             }
                         }
                         else if (column.Purpose == ColumnPurpose.DateTime)
                         {
                             if (value is DateTime datetime)
                             {
-                                parameter.Value = datetime.AddYears(_yearOffset);
+                                copy.Value = datetime.AddYears(_yearOffset);
                             }
                             else
                             {
-                                parameter.Value = DateTime.MinValue.AddYears(_yearOffset);
+                                copy.Value = DateTime.MinValue.AddYears(_yearOffset);
                             }
                         }
                         else if (column.Purpose == ColumnPurpose.String)
                         {
                             if (value is string text)
                             {
-                                parameter.Value = text;
+                                copy.Value = text;
                             }
                             else
                             {
-                                parameter.Value = string.Empty;
+                                copy.Value = string.Empty;
                             }
                         }
                     }
 
-                    command.Parameters.Add(parameter);
+                    command.Parameters.Add(copy);
                 }
             }
         }
-        public override void Process()
+        public override ExitCode Process()
         {
-            using (SqlCommand command = _dataSource.CreateCommand())
+            if (_context.GetDataSource() is not MsDataSourceScope use)
+            {
+                throw new InvalidOperationException();
+            }
+
+            using (SqlCommand command = use.CreateCommand())
             {
                 command.CommandText = _statement.Sql;
 
@@ -355,6 +370,8 @@ namespace DaJet.Scripting
 
                 int recordsAffected = command.ExecuteNonQuery();
             }
+
+            return ExitCode.Success;
         }
         public override void Dispose()
         {

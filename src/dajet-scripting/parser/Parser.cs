@@ -1621,6 +1621,13 @@ namespace DaJet.Scripting
 
             ValidateStreamStatement(in select);
 
+            if (Check(Token.END))
+            {
+                throw new FormatException("[STREAM] statement block is empty");
+            }
+
+            select.Statements = statement_block(Token.END);
+
             return select;
         }
         private void ValidateStreamStatement(in SelectStatement node)

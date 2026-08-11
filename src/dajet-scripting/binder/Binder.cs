@@ -346,6 +346,14 @@ namespace DaJet.Scripting
 
             BindOutputSchema(in node);
 
+            if (node.IsStream)
+            {
+                if (node.Statements is not null)
+                {
+                    Bind(node.Statements);
+                }
+            }
+
             _scope = _scope.CloseScope();
         }
         private void BindOutputSchema(in SelectStatement select)

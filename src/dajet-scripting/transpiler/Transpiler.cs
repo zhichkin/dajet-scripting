@@ -87,6 +87,14 @@ namespace DaJet.Scripting
             {
                 _errors.Add(error);
             }
+
+            if (node.IsStream)
+            {
+                if (node.Statements is not null)
+                {
+                    Visit(node.Statements);
+                }
+            }
         }
         private void Visit(in InsertStatement node)
         {

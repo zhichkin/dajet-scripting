@@ -2,7 +2,7 @@
 {
     public abstract class ProcessorBase
     {
-        public abstract void Process();
+        public abstract ExitCode Process();
         public abstract void Dispose();
     }
 }

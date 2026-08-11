@@ -6,6 +6,7 @@
         public SyntaxNode Expression { get; set; }
         public CommonTableExpression CommonTables { get; set; }
         public bool IsStream { get; set; } // STREAM statement
+        public StatementBlock Statements { get; set; } // STREAM statement's data processor
         public IntoClause GetIntoClause()
         {
             if (Expression is SelectExpression select)

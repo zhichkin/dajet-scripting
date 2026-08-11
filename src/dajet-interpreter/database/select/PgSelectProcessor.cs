@@ -10,19 +10,19 @@ namespace DaJet.Scripting
     {
         private readonly PgDataMapper _mapper;
         private readonly ScriptContext _context;
-        private readonly PgDataSourceScope _dataSource;
-        
+        private readonly SelectStatement _statement;
+
         private readonly DataType _outputType;
         private readonly string _outputVariable;
         public PgSelectProcessor(in ScriptContext context, in SelectStatement statement)
         {
-            if (context.GetDataSource() is not PgDataSourceScope use)
+            if (context.GetDataSource() is not PgDataSourceScope)
             {
                 throw new InvalidOperationException();
             }
-
-            _dataSource = use;
+            
             _context = context;
+            _statement = statement;
 
             _mapper = new PgDataMapper(in _context, statement);
 
@@ -39,13 +39,33 @@ namespace DaJet.Scripting
                 }
             }
         }
-        public override void Process()
+        public override ExitCode Process()
         {
+            ExitCode code = ExitCode.Success;
+
+            if (_statement.IsStream)
+            {
+                code = Stream();
+            }
+            else
+            {
+                Select();
+            }
+
+            return code;
+        }
+        private void Select()
+        {
+            if (_context.GetDataSource() is not PgDataSourceScope use)
+            {
+                throw new InvalidOperationException();
+            }
+
             List<DataObject> table = new();
 
             int outputCount = _mapper.OutputSchema.Properties.Count;
 
-            using (NpgsqlCommand command = _dataSource.CreateCommand())
+            using (NpgsqlCommand command = use.CreateCommand())
             {
                 command.CommandText = _mapper.CommandText;
 
@@ -86,6 +106,52 @@ namespace DaJet.Scripting
             }
 
             SetOutputValue(in table);
+        }
+        private ExitCode Stream()
+        {
+            ExitCode code = ExitCode.Success;
+
+            if (_context.GetDataSource() is not PgDataSourceScope use)
+            {
+                throw new InvalidOperationException();
+            }
+
+            int outputCount = _mapper.OutputSchema.Properties.Count;
+
+            DataObject record = new(outputCount);
+
+            using (NpgsqlCommand command = use.CreateCommand())
+            {
+                _mapper.ProcessInput(in command);
+
+                command.CommandText = _mapper.CommandText;
+
+                using (NpgsqlDataReader reader = command.ExecuteReader())
+                {
+                    while (reader.Read())
+                    {
+                        _mapper.ProcessOutput(in reader, in record);
+
+                        _context.SetValue(in _outputVariable, record);
+
+                        if (_statement.Statements is not null)
+                        {
+                            code = _context.Callback(_statement.Statements);
+
+                            if (code != ExitCode.Success)
+                            {
+                                break;
+                            }
+                        }
+                    }
+
+                    reader.Close();
+                }
+            }
+
+            _context.SetValue(in _outputVariable, new DataObject());
+
+            return code;
         }
         private void SetOutputValue(in List<DataObject> table)
         {

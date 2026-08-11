@@ -104,6 +104,10 @@ namespace DaJet.Scripting
                 }
             }
         }
+        public override ExitCode Callback(in StatementBlock statements)
+        {
+            return Execute(in statements);
+        }
 
         public void Configure(CancellationToken cancellation)
         {
@@ -167,6 +171,7 @@ namespace DaJet.Scripting
         {
             SetParameters(in parameters); return Execute();
         }
+        
         private ExitCode Execute(in SyntaxNode node)
         {
             if (node is DeclareStatement declare) { return Execute(in declare); }
@@ -488,16 +493,18 @@ namespace DaJet.Scripting
                 _processors.Add(statement, processor);
             }
 
+            ExitCode code = ExitCode.Success;
+
             try
             {
-                processor.Process();
+                code = processor.Process();
             }
             finally
             {
                 processor.Dispose();
             }
 
-            return ExitCode.Success;
+            return code;
         }
         private ExitCode Execute(in InsertStatement statement)
         {
@@ -517,16 +524,18 @@ namespace DaJet.Scripting
                 _processors.Add(statement, processor);
             }
 
+            ExitCode code = ExitCode.Success;
+
             try
             {
-                processor.Process();
+                code = processor.Process();
             }
             finally
             {
                 processor.Dispose();
             }
 
-            return ExitCode.Success;
+            return code;
         }
         private ExitCode Execute(in UpdateStatement statement) { throw new NotImplementedException("Statement is not implemented: UPDATE"); }
         private ExitCode Execute(in DeleteStatement statement) { throw new NotImplementedException("Statement is not implemented: DELETE"); }
@@ -549,16 +558,18 @@ namespace DaJet.Scripting
                 _processors.Add(statement, processor);
             }
 
+            ExitCode code = ExitCode.Success;
+
             try
             {
-                processor.Process();
+                code = processor.Process();
             }
             finally
             {
                 processor.Dispose();
             }
 
-            return ExitCode.Success;
+            return code;
         }
     }
 }

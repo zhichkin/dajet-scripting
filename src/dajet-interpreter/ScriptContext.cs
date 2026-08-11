@@ -10,5 +10,6 @@ namespace DaJet.Scripting
         public abstract object GetValue(in string name);
         public abstract void SetValue(in string name, in object value);
         public abstract object Evaluate(in SyntaxNode expression);
+        public abstract ExitCode Callback(in StatementBlock statements);
     }
 }

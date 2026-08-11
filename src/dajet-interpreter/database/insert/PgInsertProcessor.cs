@@ -21,7 +21,6 @@ namespace DaJet.Scripting
         private readonly static byte[] TAG_ENTITY = [0x08];
 
         private readonly ScriptContext _context;
-        private readonly PgDataSourceScope _dataSource;
         private readonly InsertStatement _statement;
         private readonly EntityDefinition _target;
         private readonly int _yearOffset;
@@ -29,12 +28,11 @@ namespace DaJet.Scripting
         private readonly Dictionary<ColumnDefinition, NpgsqlParameter> _parameters = new();
         public PgInsertProcessor(in ScriptContext context, in InsertStatement statement)
         {
-            if (context.GetDataSource() is not PgDataSourceScope use)
+            if (context.GetDataSource() is not PgDataSourceScope)
             {
                 throw new InvalidOperationException();
             }
-
-            _dataSource = use;
+            
             _context = context;
             _statement = statement;
             _yearOffset = statement.YearOffset;
@@ -332,9 +330,14 @@ namespace DaJet.Scripting
                 }
             }
         }
-        public override void Process()
+        public override ExitCode Process()
         {
-            using (NpgsqlCommand command = _dataSource.CreateCommand())
+            if (_context.GetDataSource() is not PgDataSourceScope use)
+            {
+                throw new InvalidOperationException();
+            }
+
+            using (NpgsqlCommand command = use.CreateCommand())
             {
                 command.CommandText = _statement.Sql;
 
@@ -342,6 +345,8 @@ namespace DaJet.Scripting
 
                 int recordsAffected = command.ExecuteNonQuery();
             }
+
+            return ExitCode.Success;
         }
         public override void Dispose()
         {

@@ -70,7 +70,7 @@ namespace DaJet.Host
             //_ = host.RunAsync("flow_control/for.djs").ContinueWith(ShowAsyncResult);
             //_ = host.RunAsync("flow_control/while.djs").ContinueWith(ShowAsyncResult);
 
-            _ = host.RunAsync("select/totals/test.djs").ContinueWith(ShowAsyncResult);
+            _ = host.RunAsync("exchange/stream-ms-pg.djs").ContinueWith(ShowAsyncResult);
 
             //_ = host.RunAsync("sequence/ms/create.djs").ContinueWith(ShowAsyncResult);
             //_ = host.RunAsync("sequence/ms/vector.djs").ContinueWith(ShowAsyncResult);

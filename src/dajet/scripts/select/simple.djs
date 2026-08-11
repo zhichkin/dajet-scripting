@@ -1,4 +1,4 @@
-# STARTUP
+--# STARTUP
 --# LONG_TASK
 # SINGLETON 'Select product by code'
 

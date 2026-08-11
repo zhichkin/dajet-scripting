@@ -18,7 +18,7 @@ namespace DaJet.Scripting
             _dataSource = use;
             _statement = statement;
         }
-        public override void Process()
+        public override ExitCode Process()
         {
             using (SqlCommand command = _dataSource.CreateCommand())
             {
@@ -26,6 +26,8 @@ namespace DaJet.Scripting
                 
                 int rows_affected = command.ExecuteNonQuery();
             }
+
+            return ExitCode.Success;
         }
         public override void Dispose()
         {
