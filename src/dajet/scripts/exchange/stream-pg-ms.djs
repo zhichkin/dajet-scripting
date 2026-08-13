@@ -1,18 +1,19 @@
 
-DECLARE @Отправитель string = 'MS_TEST'
+DECLARE @Отправитель string = 'PG_TEST'
+DECLARE @Получатель  string = 'MS_TEST'
 
 PRIVATE @Счётчик        integer
 PRIVATE @Документ       object
 PRIVATE @ТабличнаяЧасть array
 
-USE 'PG_TEST'
+USE @Отправитель
 
-   STREAM Ссылка, Дата, Номер, Проведен, ПометкаУдаления
+   STREAM TOP 3 Ссылка, Дата, Номер, Проведен, ПометкаУдаления
      INTO @Документ
      FROM Документ.Приход
     ORDER BY Дата ASC
    
-   USE 'PG_TEST'
+   USE @Отправитель
       SELECT НомерСтроки, Номенклатура, Количество
         INTO @ТабличнаяЧасть
         FROM Документ.Приход.Товары
@@ -22,7 +23,7 @@ USE 'PG_TEST'
 
    SET @Документ.Товары = @ТабличнаяЧасть
 
-   USE 'MS_TEST'
+   USE @Получатель
       INSERT РегистрСведений.ВходящаяОчередь
       SELECT НомерСообщения = VECTOR('so_import')
            , ДатаВремя      = NOW()
@@ -34,4 +35,4 @@ USE 'PG_TEST'
    SET @Счётчик = @Счётчик + 1
 END
 
-RETURN '[STREAM] PG_TEST - MS_TEST = ' + @Счётчик
+RETURN '[STREAM DYNAMIC] ' + @Отправитель + ' - ' + @Получатель + ' = ' + @Счётчик

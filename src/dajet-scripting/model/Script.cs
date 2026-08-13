@@ -32,9 +32,25 @@ namespace DaJet.Scripting.Model
 
         public List<UseStatement> GetUseStatements()
         {
-            List<UseStatement> statements = new();
+            List<UseStatement> statements = [];
 
-            foreach (SyntaxNode node in Statements)
+            Extract(Statements, in statements);
+
+            return statements;
+        }
+        private static void Extract(in SyntaxNode node, in List<UseStatement> statements)
+        {
+            if (node is StatementBlock block) { Extract(in block, in statements); }
+            else if (node is IfStatement _if) { Extract(in _if, in statements); }
+            else if (node is ForStatement _for) { Extract(in _for, in statements); }
+            else if (node is WhileStatement _while) { Extract(in _while, in statements); }
+            else if (node is TryStatement _try) { Extract(in _try, in statements); }
+            else if (node is UseStatement use) { Extract(in use, in statements); }
+            else if (node is SelectStatement select) { Extract(in select, in statements); }
+        }
+        private static void Extract(in StatementBlock block, in List<UseStatement> statements)
+        {
+            foreach (SyntaxNode node in block)
             {
                 if (node is UseStatement use)
                 {
@@ -42,20 +58,43 @@ namespace DaJet.Scripting.Model
 
                     Extract(in use, in statements);
                 }
+                else
+                {
+                    Extract(in node, in statements);
+                }
             }
+        }
+        private static void Extract(in IfStatement node, in List<UseStatement> statements)
+        {
+            Extract(node.THEN, in statements);
 
-            return statements;
+            if (node.ELSE is not null) { Extract(node.ELSE, in statements); }
+        }
+        private static void Extract(in ForStatement node, in List<UseStatement> statements)
+        {
+            Extract(node.Statements, in statements);
+        }
+        private static void Extract(in WhileStatement node, in List<UseStatement> statements)
+        {
+            Extract(node.Statements, in statements);
+        }
+        private static void Extract(in TryStatement node, in List<UseStatement> statements)
+        {
+            Extract(node.TRY, in statements);
+
+            if (node.CATCH is not null) { Extract(node.CATCH, in statements); }
+
+            if (node.FINALLY is not null) { Extract(node.FINALLY, in statements); }
         }
         private static void Extract(in UseStatement use, in List<UseStatement> statements)
         {
-            foreach (SyntaxNode node in use.Statements)
+            Extract(use.Statements, in statements);
+        }
+        private static void Extract(in SelectStatement select, in List<UseStatement> statements)
+        {
+            if (select.IsStream)
             {
-                if (node is UseStatement nested)
-                {
-                    statements.Add(nested);
-
-                    Extract(in nested, in statements);
-                }
+                Extract(select.Statements, in statements);
             }
         }
 
