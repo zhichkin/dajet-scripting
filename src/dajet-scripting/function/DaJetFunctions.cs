@@ -14,7 +14,11 @@ namespace DaJet.Scripting
                 new KeyValuePair<string, Function>(nameof(UUIDOF), new UUIDOF()),
                 new KeyValuePair<string, Function>(nameof(NOW), new NOW()),
                 new KeyValuePair<string, Function>(nameof(UTC), new UTC()),
-                new KeyValuePair<string, Function>(nameof(ERROR_MESSAGE), new ERROR_MESSAGE())
+                new KeyValuePair<string, Function>(nameof(ERROR_MESSAGE), new ERROR_MESSAGE()),
+                new KeyValuePair<string, Function>(nameof(DATESTART), new DATESTART()),
+                new KeyValuePair<string, Function>(nameof(DATEEND), new DATEEND()),
+                new KeyValuePair<string, Function>(nameof(DATEADD), new DATEADD()),
+                new KeyValuePair<string, Function>(nameof(DATEDIFF), new DATEDIFF())
             ];
             return FrozenDictionary.ToFrozenDictionary(list);
         }

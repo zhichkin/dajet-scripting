@@ -149,7 +149,11 @@
             { "LEAD", Token.LEAD },
             { "FIRST_VALUE", Token.FIRST_VALUE },
             { "LAST_VALUE", Token.LAST_VALUE },
-            { "NEWUUID", Token.NEWUUID }
+            { "NEWUUID", Token.NEWUUID },
+            { "DATESTART", Token.DATESTART },
+            { "DATEEND", Token.DATEEND },
+            { "DATEADD", Token.DATEADD },
+            { "DATEDIFF", Token.DATEDIFF }
         };
         
         internal static bool IsKeyword(string identifier, out Token token)

@@ -35,6 +35,10 @@ namespace DaJet.Scripting
                 new KeyValuePair<Token, Function>(Token.NEWUUID, new NEWUUID()),
                 new KeyValuePair<Token, Function>(Token.NOW, DATETIME_FUNCTION),
                 new KeyValuePair<Token, Function>(Token.UTC, DATETIME_FUNCTION),
+                new KeyValuePair<Token, Function>(Token.DATESTART, DATETIME_FUNCTION),
+                new KeyValuePair<Token, Function>(Token.DATEEND, DATETIME_FUNCTION),
+                new KeyValuePair<Token, Function>(Token.DATEADD, DATETIME_FUNCTION),
+                new KeyValuePair<Token, Function>(Token.DATEDIFF, new DATEDIFF()),
                 new KeyValuePair<Token, Function>(Token.ROW_NUMBER, new ROW_NUMBER()),
                 new KeyValuePair<Token, Function>(Token.DATALENGTH, new DATALENGTH()),
                 new KeyValuePair<Token, Function>(Token.CHARLENGTH, new CHARLENGTH())

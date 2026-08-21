@@ -22,7 +22,7 @@
         OVER, PARTITION, RANGE, BETWEEN, UNBOUNDED, PRECEDING, CURRENT, FOLLOWING,
         CASE, WHEN, THEN, ELSE, BEGIN, END, EXISTS, EXECUTE,
         SUBSTRING,
-        NOW, UTC,
+        NOW, UTC, DATESTART, DATEEND, DATEADD, DATEDIFF,
 
         Identifier, Type, Table, Column, Variable, Star, Array, Object, APPEND, FOR, EACH, MAXDOP,
 

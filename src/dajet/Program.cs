@@ -1,14 +1,8 @@
 ﻿using DaJet.Data;
 using DaJet.Json;
 using DaJet.Metadata;
-using DaJet.Scripting;
-using DaJet.Scripting.Model;
-using DaJet.TypeSystem;
-using System.Reflection;
-using System.Text;
 using System.Text.Encodings.Web;
 using System.Text.Json;
-using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 using System.Text.Unicode;
 
@@ -71,7 +65,9 @@ namespace DaJet.Host
             //_ = host.RunAsync("exchange/stream-pg-ms.djs", in parameters).ContinueWith(ShowAsyncResult);
 
             //_ = host.RunAsync("totals/get-settings.djs").ContinueWith(ShowAsyncResult);
-            _ = host.RunAsync("totals/universal.djs").ContinueWith(ShowAsyncResult);
+            //_ = host.RunAsync("totals/universal.djs").ContinueWith(ShowAsyncResult);
+
+            _ = host.RunAsync("datetime/pg-test.djs").ContinueWith(ShowAsyncResult);
 
             Console.WriteLine("Press any key to continue ..."); _ = Console.ReadKey(true);
         }
