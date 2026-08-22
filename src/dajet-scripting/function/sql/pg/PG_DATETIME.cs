@@ -154,65 +154,47 @@ namespace DaJet.Scripting
                 statement.Visit(in expression, in script);
                 script.Append(")::integer, CASE WHEN date_part('month', ");
                 statement.Visit(in expression, in script);
-                script.Append(")::integer <= 3 THEN 1 WHEN date_part('month', ");
+                script.Append(")::integer <= 3 THEN 3 WHEN date_part('month', ");
                 statement.Visit(in expression, in script);
-                script.Append(")::integer <= 6 THEN 4 WHEN date_part('month', ");
+                script.Append(")::integer <= 6 THEN 6 WHEN date_part('month', ");
                 statement.Visit(in expression, in script);
-                script.Append(")::integer <= 9 THEN 7 ELSE 10 END, 1, 0, 0, 0.0)");
+                script.Append(")::integer <= 9 THEN 9 ELSE 12 END, CASE WHEN date_part('month', ");
+                statement.Visit(in expression, in script);
+                script.Append(")::integer <= 3 THEN 31 WHEN date_part('month', ");
+                statement.Visit(in expression, in script);
+                script.Append(")::integer <= 6 THEN 30 WHEN date_part('month', ");
+                statement.Visit(in expression, in script);
+                script.Append(")::integer <= 9 THEN 30 ELSE 31 END, 23, 59, 59.0)");
             }
             else if (datepart == "MONTH")
             {
                 script.Append("date_trunc('month', ");
                 statement.Visit(in expression, in script);
-                script.Append(")");
+                script.Append(") + '1 months'::interval - '1 second'::interval");
             }
             else if (datepart == "DAY")
             {
                 script.Append("date_trunc('day', ");
                 statement.Visit(in expression, in script);
-                script.Append(")");
+                script.Append(") + '23 hours 59 minutes 59 seconds'");
             }
             else if (datepart == "HOUR")
             {
-                script.Append("make_timestamp(date_part('year', ");
+                script.Append("date_trunc('hour', ");
                 statement.Visit(in expression, in script);
-                script.Append(")::integer, date_part('month', ");
-                statement.Visit(in expression, in script);
-                script.Append(")::integer, date_part('day', ");
-                statement.Visit(in expression, in script);
-                script.Append(")::integer, date_part('hour', ");
-                statement.Visit(in expression, in script);
-                script.Append(")::integer, 0, 0.0)");
+                script.Append(") + '59 minutes 59 seconds'");
             }
             else if (datepart == "MINUTE")
             {
-                script.Append("make_timestamp(date_part('year', ");
+                script.Append("date_trunc('minute', ");
                 statement.Visit(in expression, in script);
-                script.Append(")::integer, date_part('month', ");
-                statement.Visit(in expression, in script);
-                script.Append(")::integer, date_part('day', ");
-                statement.Visit(in expression, in script);
-                script.Append(")::integer, date_part('hour', ");
-                statement.Visit(in expression, in script);
-                script.Append(")::integer, date_part('minute', ");
-                statement.Visit(in expression, in script);
-                script.Append(")::integer, 0.0)");
+                script.Append(") + '59 seconds'");
             }
             else if (datepart == "SECOND")
             {
-                script.Append("make_timestamp(date_part('year', ");
+                script.Append("date_trunc('second', ");
                 statement.Visit(in expression, in script);
-                script.Append(")::integer, date_part('month', ");
-                statement.Visit(in expression, in script);
-                script.Append(")::integer, date_part('day', ");
-                statement.Visit(in expression, in script);
-                script.Append(")::integer, date_part('hour', ");
-                statement.Visit(in expression, in script);
-                script.Append(")::integer, date_part('minute', ");
-                statement.Visit(in expression, in script);
-                script.Append(")::integer, date_part('second', ");
-                statement.Visit(in expression, in script);
-                script.Append(')').Append(')');
+                script.Append(')');
             }
             else
             {
@@ -227,18 +209,18 @@ namespace DaJet.Scripting
             {
                 throw new InvalidOperationException($"[DATEADD] the first parameter must be string");
             }
-
+            
             string datepart = scalar.Literal.ToUpper();
-
-            script.Append("DATEADD(").Append(datepart).Append(',').Append(' ');
-
-            expression = node.Parameters[1];
-            statement.Visit(in expression, in script);
-            script.Append(',').Append(' ');
 
             expression = node.Parameters[2];
             statement.Visit(in expression, in script);
-            script.Append(')');
+
+            script.Append(' ').Append('+').Append(' ').Append('\'');
+
+            expression = node.Parameters[1];
+            statement.Visit(in expression, in script);
+
+            script.Append(' ').Append(datepart).Append('\'');
         }
     }
 }

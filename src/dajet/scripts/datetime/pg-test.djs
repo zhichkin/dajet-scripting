@@ -26,10 +26,10 @@ SET @Результат.НачалоПредыдующегоМесяца = DATEA
 USE 'PG_TEST'
 
   SELECT Дата, Номер
-      -- , МинусМесяц              = DATEADD('MONTH', -1, Дата)
-      -- , ПлюсМесяц               = DATEADD('MONTH',  1, Дата)
-      -- , НачалоПредыдущегоМесяца = DATEADD('MONTH', -1, DATESTART('MONTH', Дата))
-      -- , НачалоСледующегоМесяца  = DATEADD('MONTH',  1, DATESTART('MONTH', Дата))
+       , МинусМесяц              = DATEADD('MONTH', -1, Дата)
+       , ПлюсМесяц               = DATEADD('MONTH',  1, Дата)
+       , НачалоПредыдущегоМесяца = DATEADD('MONTH', -1, DATESTART('MONTH', Дата))
+       , НачалоСледующегоМесяца  = DATEADD('MONTH',  1, DATESTART('MONTH', Дата))
        , НачалоГода     = DATESTART('YEAR',    Дата)
        , НачалоКвартала = DATESTART('QUARTER', Дата)
        , НачалоМесяца   = DATESTART('MONTH',   Дата)
@@ -38,12 +38,12 @@ USE 'PG_TEST'
        , НачалоМинуты   = DATESTART('MINUTE',  Дата)
        , НачалоСекунды  = DATESTART('SECOND',  Дата)
        , КонецГода      = DATEEND('YEAR',    Дата)
-      -- , КонецКвартала  = DATEEND('QUARTER', Дата)
+       , КонецКвартала  = DATEEND('QUARTER', Дата)
        , КонецМесяца    = DATEEND('MONTH',   Дата)
        , КонецДня       = DATEEND('DAY',     Дата)
-      -- , КонецЧаса      = DATEEND('HOUR',    Дата)
-      -- , КонецМинуты    = DATEEND('MINUTE',  Дата)
-      -- , КонецСекунды   = DATEEND('SECOND',  Дата)
+       , КонецЧаса      = DATEEND('HOUR',    Дата)
+       , КонецМинуты    = DATEEND('MINUTE',  Дата)
+       , КонецСекунды   = DATEEND('SECOND',  Дата)
     INTO @Таблица
     FROM Документ.Расход
    ORDER BY Дата ASC

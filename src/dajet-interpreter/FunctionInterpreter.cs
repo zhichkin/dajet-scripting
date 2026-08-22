@@ -1,7 +1,6 @@
 ﻿using DaJet.Json;
 using DaJet.Scripting.Model;
 using DaJet.TypeSystem;
-using System.Reflection.Metadata;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Serialization;

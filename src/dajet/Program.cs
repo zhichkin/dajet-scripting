@@ -67,7 +67,7 @@ namespace DaJet.Host
             //_ = host.RunAsync("totals/get-settings.djs").ContinueWith(ShowAsyncResult);
             //_ = host.RunAsync("totals/universal.djs").ContinueWith(ShowAsyncResult);
 
-            _ = host.RunAsync("datetime/pg-test.djs").ContinueWith(ShowAsyncResult);
+            _ = host.RunAsync("datetime/test.djs").ContinueWith(ShowAsyncResult);
 
             Console.WriteLine("Press any key to continue ..."); _ = Console.ReadKey(true);
         }
