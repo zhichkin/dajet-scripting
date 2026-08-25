@@ -52,17 +52,37 @@ namespace DaJet.Scripting
                     return TransformUnionComparison(in comparison);
                 }
             }
+            else if (comparison.Token == Token.IN)
+            {
+                if (IsUnionNode(comparison.Expression1))
+                {
+                    // Преобразование оператора IN для составных типов данных не реализовано:
+                    // без трансформации колонка транспилируется в несколько колонок СУБД,
+                    // что порождает некорректный SQL. Сообщаем об этом явно.
+
+                    throw new NotSupportedException(
+                        "IN operator is not supported for multi-type (union) columns. " +
+                        "Use a chain of equality comparisons with bound parameters instead: <column> = @p0 OR <column> = @p1 ...");
+                }
+            }
 
             return null; // no transformation is needed
         }
         private bool IsUnionNode(in SyntaxNode node)
         {
-            if (node is not ColumnReference)
+            SyntaxNode target = node;
+
+            while (target is GroupOperator group) // (Колонка) - выражение в скобках
+            {
+                target = group.Expression;
+            }
+
+            if (target is not ColumnReference)
             {
                 return false; // Константа, функция, параметр или выражение
             }
 
-            PropertyDefinition source = node.InferSource();
+            PropertyDefinition source = target.InferSource();
 
             if (string.IsNullOrEmpty(source.Name))
             {
@@ -78,7 +98,14 @@ namespace DaJet.Scripting
 
         private SyntaxNode TransformColumnIsType(in ComparisonOperator comparison)
         {
-            if (comparison.Expression1 is not ColumnReference left)
+            SyntaxNode unwrapped = comparison.Expression1;
+
+            while (unwrapped is GroupOperator group) // (Колонка) - выражение в скобках
+            {
+                unwrapped = group.Expression;
+            }
+
+            if (unwrapped is not ColumnReference left)
             {
                 return null; // no transformation is needed
             }
@@ -164,6 +191,14 @@ namespace DaJet.Scripting
             ConfigureTag(in map, in comparison); // _TYPE column
             ConfigureTypeCode(in map, in comparison); // _TRef column
 
+            // Слот сравнения, заполненный только с одной стороны (литерал ссылки {код:guid},
+            // строковый или числовой операнд, ISNULL, CASE и т.п.), при сборке результата
+            // молча выбрасывается: значение операнда игнорируется, а запрос возвращает
+            // правдоподобный неверный результат. Сообщаем об этом явно.
+
+            ThrowIfComparisonPartIsDropped(in map, in comparison);
+            ThrowIfFixedEntityTypesDiffer(in map, in comparison);
+
             GroupOperator group = new();
 
             foreach (var item in map)
@@ -192,6 +227,86 @@ namespace DaJet.Scripting
             }
 
             return group;
+        }
+        private static void ThrowIfComparisonPartIsDropped(in Dictionary<ColumnPurpose, ComparisonOperator> map, in ComparisonOperator comparison)
+        {
+            if (IsTypeReference(comparison.Expression1) || IsTypeReference(comparison.Expression2))
+            {
+                return; // Оператор IS: сравнение только по коду типа - контракт оператора
+            }
+
+            foreach (var item in map)
+            {
+                ComparisonOperator slot = item.Value;
+
+                if (slot.Expression1 is null == slot.Expression2 is null)
+                {
+                    continue; // Слот либо не задействован, либо сопоставлен полностью
+                }
+
+                throw new NotSupportedException(
+                    $"Comparison of {Unwrap(comparison.Expression1)} and {Unwrap(comparison.Expression2)} is not supported: " +
+                    $"the {item.Key} part of the comparison has no counterpart and would be silently dropped. " +
+                    "Use a bound parameter (@parameter) of a reference type instead; to test the type only, use the IS <type> operator.");
+            }
+        }
+        private static void ThrowIfFixedEntityTypesDiffer(in Dictionary<ColumnPurpose, ComparisonOperator> map, in ComparisonOperator comparison)
+        {
+            if (map.TryGetValue(ColumnPurpose.Tag, out ComparisonOperator tag)
+                && (tag.Expression1 is not null || tag.Expression2 is not null))
+            {
+                return; // Тип сравнивается по колонке _TYPE
+            }
+
+            if (map.TryGetValue(ColumnPurpose.TypeCode, out ComparisonOperator code)
+                && (code.Expression1 is not null || code.Expression2 is not null))
+            {
+                return; // Тип сравнивается по колонке _TRRef
+            }
+
+            // Сравнение свелось к равенству только по GUID (Identity). Статический тип
+            // надёжно известен только у физических колонок: для UDF (UUIDOF) InferType
+            // выбрасывает исключение, а для производных выражений (CASE и т.п.) вывод
+            // типа неполон. Прочие формы оставляем как есть - сравнение только по GUID.
+
+            if (Unwrap(comparison.Expression1) is not ColumnReference column1 || column1.Binding is not PropertyDefinition)
+            {
+                return;
+            }
+
+            if (Unwrap(comparison.Expression2) is not ColumnReference column2 || column2.Binding is not PropertyDefinition)
+            {
+                return;
+            }
+
+            // Обе стороны - физические колонки с фиксированным типом ссылки. Если типы
+            // различны, равенство ссылок невозможно, а совпадение GUID разных типов
+            // дало бы ложное срабатывание.
+
+            DataType type1 = column1.InferType();
+            DataType type2 = column2.InferType();
+
+            if (type1.IsEntity && type2.IsEntity
+                && type1.TypeCode > 0 && type2.TypeCode > 0
+                && type1.TypeCode != type2.TypeCode)
+            {
+                throw new NotSupportedException(
+                    $"Comparison of {Unwrap(comparison.Expression1)} and {Unwrap(comparison.Expression2)} is not supported: " +
+                    $"the operands have different fixed entity types ({type1.TypeCode} and {type2.TypeCode}) " +
+                    "and no type columns to compare - equality by identity (GUID) alone would be incorrect.");
+            }
+        }
+        private static bool IsTypeReference(in SyntaxNode node)
+        {
+            return Unwrap(node) is TypeReference;
+        }
+        private static SyntaxNode Unwrap(in SyntaxNode node)
+        {
+            SyntaxNode target = node;
+
+            while (target is GroupOperator group) { target = group.Expression; }
+
+            return target;
         }
         private void SetExpression1(ComparisonOperator comparison, SyntaxNode value)
         {
@@ -319,7 +434,11 @@ namespace DaJet.Scripting
         }
         private void Transform(in SyntaxNode node, in Dictionary<ColumnPurpose, ComparisonOperator> map, Action<ComparisonOperator, SyntaxNode> setter)
         {
-            if (node is TypeReference type)
+            if (node is GroupOperator group) // (выражение) - разворачиваем скобки
+            {
+                Transform(group.Expression, in map, setter);
+            }
+            else if (node is TypeReference type)
             {
                 Transform(in type, map, setter);
             }
@@ -479,6 +598,9 @@ namespace DaJet.Scripting
         private void Transform(in ScalarExpression node, in Dictionary<ColumnPurpose, ComparisonOperator> map, Action<ComparisonOperator, SyntaxNode> setter)
         {
             DataType type = node.InferType();
+
+            //NOTE: Литерал ссылки {код:guid} не даёт сравнения по Identity - потеря GUID
+            //      обнаруживается общей проверкой ThrowIfComparisonPartIsDropped выше по стеку.
 
             //UnionTag tag = type.IsUuid ? UnionTag.Entity : type.GetSingleTagOrUndefined();
 
