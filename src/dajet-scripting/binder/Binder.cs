@@ -32,6 +32,40 @@ namespace DaJet.Scripting
 
             return (errors.Count == 0);
         }
+        private static void BindOutputSchema(in SqlStatement statement, in IntoClause into)
+        {
+            if (into is null) { return; }
+
+            // Define and apply schema to object or array variable
+
+            if (into.Value is VariableReference variable &&
+                variable.Binding is DeclareStatement declare &&
+                (declare.Type.IsArray || declare.Type.IsObject))
+            {
+                DefineStatement schema = statement.InferSchema();
+
+                if (declare.Binding is DefineStatement binding)
+                {
+                    foreach (DefineProperty property in schema.Properties)
+                    {
+                        if (binding.GetPropertyByName(property.Name) is null)
+                        {
+                            binding.Properties.Add(property); // extend anonymous schema
+                        }
+                    }
+                }
+                else // this is the first time of binding variable to SELECT INTO output
+                {
+                    // Script processor property name - see compiler
+                    // Variable name is used in case schema is not defined
+                    // New type is compiled and added to AnonymousDataSchema
+
+                    schema.Identifier = declare.Identifier;
+
+                    declare.Binding = schema;
+                }
+            }
+        }
 
         #region "Binding and syntax errors"
         private void RegisterSyntaxError(Token token, string message)
@@ -122,7 +156,7 @@ namespace DaJet.Scripting
             //else if (node is SetExpression set_expression) { Bind(in set_expression); }
             //else if (node is OutputClause output) { Bind(in output); }
 
-            //else if (node is ConsumeStatement consume_statement) { Bind(in consume_statement); }
+            else if (node is ConsumeStatement consume_statement) { Bind(in consume_statement); }
             //else if (node is ProduceStatement produce_statement) { Bind(in produce_statement); }
             //else if (node is RequestStatement request_statement) { Bind(in request_statement); }
             //else if (node is ImportStatement import_statement) { Bind(in import_statement); }
@@ -344,7 +378,9 @@ namespace DaJet.Scripting
 
             Bind(node.Expression); //NOTE: SelectExpression | TableUnionOperator
 
-            BindOutputSchema(in node);
+            //NOTE: INTO columns are derived from the host SELECT expression
+
+            BindOutputSchema(node, node.GetIntoClause()); //NOTE: SELECT columns are bound already
 
             if (node.IsStream)
             {
@@ -355,45 +391,6 @@ namespace DaJet.Scripting
             }
 
             _scope = _scope.CloseScope();
-        }
-        private void BindOutputSchema(in SelectStatement select)
-        {
-            //NOTE: INTO columns are derived from the host SELECT expression
-            //NOTE: SELECT columns are bound already
-
-            IntoClause into = select.GetIntoClause();
-
-            if (into is null) { return; }
-
-            // Define and apply schema to object or array variable
-
-            if (into.Value is VariableReference variable &&
-                variable.Binding is DeclareStatement declare &&
-                (declare.Type.IsArray || declare.Type.IsObject))
-            {
-                DefineStatement schema = select.InferSchema();
-
-                if (declare.Binding is DefineStatement binding)
-                {
-                    foreach (DefineProperty property in schema.Properties)
-                    {
-                        if (binding.GetPropertyByName(property.Name) is null)
-                        {
-                            binding.Properties.Add(property); // extend anonymous schema
-                        }
-                    }
-                }
-                else // this is the first time of binding variable to SELECT INTO output
-                {
-                    // Script processor property name - see compiler
-                    // Variable name is used in case schema is not defined
-                    // New type is compiled and added to AnonymousDataSchema
-                    
-                    schema.Identifier = declare.Identifier;
-
-                    declare.Binding = schema;
-                }
-            }
         }
         private void BindOrderByClause(in SelectExpression select, in Dictionary<string, ColumnExpression> aliases)
         {
@@ -442,7 +439,7 @@ namespace DaJet.Scripting
                 }
             }
         }
-
+        
         #region "TABLE BINDING"
         private void Bind(in CommonTableExpression node)
         {
@@ -1100,7 +1097,59 @@ namespace DaJet.Scripting
 
             _scope = _scope.CloseScope();
         }
+        private void Bind(in ConsumeStatement node)
+        {
+            if (!string.IsNullOrEmpty(node.Target))
+            {
+                BindStreamConsume(in node);
+            }
+            else
+            {
+                BindDatabaseConsume(in node);
+            }
+            
+            if (node.Statements is not null)
+            {
+                Bind(node.Statements);
+            }
+        }
+        private void BindStreamConsume(in ConsumeStatement node)
+        {
+            _scope = _scope.OpenScope(node);
 
+            for (int i = 0; i < node.Options.Count; i++)
+            {
+                Bind(node.Options[i]);
+            }
+
+            for (int i = 0; i < node.Columns.Count; i++)
+            {
+                Bind(node.Columns[i]);
+            }
+
+            _scope = _scope.CloseScope();
+        }
+        private void BindDatabaseConsume(in ConsumeStatement node)
+        {
+            _scope = _scope.OpenScope(node);
+
+            if (node.From is not null) { Bind(node.From); }
+
+            for (int i = 0; i < node.Columns.Count; i++)
+            {
+                Bind(node.Columns[i]);
+            }
+
+            if (node.Top is not null) { Bind(node.Top); }
+            if (node.Into is not null) { Bind(node.Into.Value); }
+            if (node.Where is not null) { Bind(node.Where); }
+            if (node.Order is not null) { Bind(node.Order); }
+
+            BindOutputSchema(node, node.Into); //NOTE: defines INTO variable data schema
+
+            _scope = _scope.CloseScope();
+        }
+        
         #region "APPLY AND REVOKE SEQUENCE"
         private void Bind(in ApplySequenceStatement node)
         {

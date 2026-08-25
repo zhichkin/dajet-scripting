@@ -36,6 +36,7 @@ namespace DaJet.Scripting
             if (node is UseStatement use) { Visit(in use); }
             else if (node is SelectStatement select) { Visit(in select); }
             else if (node is InsertStatement insert) { Visit(in insert); }
+            else if (node is ConsumeStatement consume) { Visit(in consume); }
 
             else if (node is CreateSequenceStatement
                 || node is ApplySequenceStatement
@@ -105,6 +106,35 @@ namespace DaJet.Scripting
             if (!transpiler.TryTranspile(node, in provider, out string error))
             {
                 _errors.Add(error);
+            }
+        }
+        private void Visit(in ConsumeStatement node)
+        {
+            SqlTranspiler transpiler;
+
+            MetadataProvider provider = _providers.Peek();
+
+            if (provider.DataSource == DataSourceType.SqlServer)
+            {
+                transpiler = new MsConsumeTranspiler();
+            }
+            else if (provider.DataSource == DataSourceType.PostgreSql)
+            {
+                transpiler = new PgConsumeTranspiler();
+            }
+            else
+            {
+                _errors.Add($"Unsupported data provider: {provider.DataSource}"); return;
+            }
+
+            if (!transpiler.TryTranspile(node, in provider, out string error))
+            {
+                _errors.Add(error);
+            }
+
+            if (node.Statements is not null)
+            {
+                Visit(node.Statements);
             }
         }
 

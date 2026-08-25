@@ -98,6 +98,7 @@ namespace DaJet.Scripting
             if (right is ScalarExpression scalar && scalar.Token == Token.NULL) // _Fld_TYPE IS [NOT] NULL
             {
                 //NOTE: Для сравнения на NULL берём первую колонку свойства составного типа данных
+                //TODO: _Fld_TYPE = 0x01 Неопределено
 
                 if (left.Binding is PropertyDefinition property)
                 {
@@ -153,7 +154,6 @@ namespace DaJet.Scripting
                 { ColumnPurpose.Numeric, new ComparisonOperator() { Token = Token.Equals } },
                 { ColumnPurpose.DateTime, new ComparisonOperator() { Token = Token.Equals } },
                 { ColumnPurpose.String, new ComparisonOperator() { Token = Token.Equals } },
-                { ColumnPurpose.Binary, new ComparisonOperator() { Token = Token.Equals } },
                 { ColumnPurpose.TypeCode, new ComparisonOperator() { Token = Token.Equals } },
                 { ColumnPurpose.Identity, new ComparisonOperator() { Token = Token.Equals } }
             };
@@ -368,19 +368,12 @@ namespace DaJet.Scripting
             {
                 ColumnDefinition column = property.GetColumnByPurpose(ColumnPurpose.Value);
 
-                column ??= property.GetColumnByPurpose(ColumnPurpose.Identity);
-
-                if (map.TryGetValue(ColumnPurpose.Identity, out ComparisonOperator identity))
+                if (column is not null)
                 {
-                    binding = new PropertyDefinition() { Columns = [column] };
-
-                    ColumnReference expression = new()
+                    if (property.Type.IsBoolean)
                     {
-                        Binding = binding,
-                        Identifier = node.Identifier
-                    };
-
-                    setter(identity, expression);
+                        //TODO:
+                    }
                 }
 
                 column = property.GetColumnByPurpose(ColumnPurpose.Tag);
@@ -401,6 +394,78 @@ namespace DaJet.Scripting
                     }
                 }
 
+                column = property.GetColumnByPurpose(ColumnPurpose.Boolean);
+
+                if (column is not null)
+                {
+                    if (map.TryGetValue(ColumnPurpose.Boolean, out ComparisonOperator boolean))
+                    {
+                        binding = new PropertyDefinition() { Columns = [column] };
+
+                        ColumnReference expression = new()
+                        {
+                            Binding = binding,
+                            Identifier = node.Identifier
+                        };
+
+                        setter(boolean, expression);
+                    }
+                }
+
+                column = property.GetColumnByPurpose(ColumnPurpose.Numeric);
+
+                if (column is not null)
+                {
+                    if (map.TryGetValue(ColumnPurpose.Numeric, out ComparisonOperator numeric))
+                    {
+                        binding = new PropertyDefinition() { Columns = [column] };
+
+                        ColumnReference expression = new()
+                        {
+                            Binding = binding,
+                            Identifier = node.Identifier
+                        };
+
+                        setter(numeric, expression);
+                    }
+                }
+
+                column = property.GetColumnByPurpose(ColumnPurpose.DateTime);
+
+                if (column is not null)
+                {
+                    if (map.TryGetValue(ColumnPurpose.DateTime, out ComparisonOperator datetime))
+                    {
+                        binding = new PropertyDefinition() { Columns = [column] };
+
+                        ColumnReference expression = new()
+                        {
+                            Binding = binding,
+                            Identifier = node.Identifier
+                        };
+
+                        setter(datetime, expression);
+                    }
+                }
+
+                column = property.GetColumnByPurpose(ColumnPurpose.String);
+
+                if (column is not null)
+                {
+                    if (map.TryGetValue(ColumnPurpose.String, out ComparisonOperator _string))
+                    {
+                        binding = new PropertyDefinition() { Columns = [column] };
+
+                        ColumnReference expression = new()
+                        {
+                            Binding = binding,
+                            Identifier = node.Identifier
+                        };
+
+                        setter(_string, expression);
+                    }
+                }
+
                 column = property.GetColumnByPurpose(ColumnPurpose.TypeCode);
 
                 if (column is not null)
@@ -416,6 +481,24 @@ namespace DaJet.Scripting
                         };
 
                         setter(typecode, expression);
+                    }
+                }
+
+                column = property.GetColumnByPurpose(ColumnPurpose.Identity);
+
+                if (column is not null)
+                {
+                    if (map.TryGetValue(ColumnPurpose.Identity, out ComparisonOperator identity))
+                    {
+                        binding = new PropertyDefinition() { Columns = [column] };
+
+                        ColumnReference expression = new()
+                        {
+                            Binding = binding,
+                            Identifier = node.Identifier
+                        };
+
+                        setter(identity, expression);
                     }
                 }
             }
@@ -478,14 +561,75 @@ namespace DaJet.Scripting
         }
         private void Transform(in ScalarExpression node, in Dictionary<ColumnPurpose, ComparisonOperator> map, Action<ComparisonOperator, SyntaxNode> setter)
         {
-            DataType type = node.InferType();
+            if (!map.TryGetValue(ColumnPurpose.Tag, out ComparisonOperator tag))
+            {
+                throw new InvalidOperationException("[ComparisonOperatorTransformer] tag slot is missing");
+            }
 
-            //UnionTag tag = type.IsUuid ? UnionTag.Entity : type.GetSingleTagOrUndefined();
+            if (node.Token == Token.Boolean)
+            {
+                setter(tag, new ScalarExpression() { Token = Token.Binary, Literal = "0x02" });
 
-            //if (map.TryGetValue(tag, out ComparisonOperator comparison))
-            //{
-            //    setter(comparison, node);
-            //}
+                if (map.TryGetValue(ColumnPurpose.Boolean, out ComparisonOperator boolean))
+                {
+                    setter(boolean, node);
+                }
+            }
+            else if (node.Token == Token.Decimal || node.Token == Token.Integer)
+            {
+                setter(tag, new ScalarExpression() { Token = Token.Binary, Literal = "0x03" });
+
+                if (map.TryGetValue(ColumnPurpose.Numeric, out ComparisonOperator number))
+                {
+                    setter(number, node);
+                }
+            }
+            else if (node.Token == Token.DateTime)
+            {
+                setter(tag, new ScalarExpression() { Token = Token.Binary, Literal = "0x04" });
+
+                if (map.TryGetValue(ColumnPurpose.DateTime, out ComparisonOperator datetime))
+                {
+                    setter(datetime, node);
+                }
+            }
+            else if (node.Token == Token.String)
+            {
+                setter(tag, new ScalarExpression() { Token = Token.Binary, Literal = "0x05" });
+
+                if (map.TryGetValue(ColumnPurpose.String, out ComparisonOperator _string))
+                {
+                    setter(_string, node);
+                }
+            }
+            else if (node.Token == Token.Entity)
+            {
+                Entity entity = Entity.Parse(node.Literal);
+
+                setter(tag, new ScalarExpression() { Token = Token.Binary, Literal = "0x08" });
+
+                if (map.TryGetValue(ColumnPurpose.TypeCode, out ComparisonOperator typecode))
+                {
+                    setter(typecode, new ScalarExpression()
+                    {
+                        Token = Token.Binary,
+                        Literal = $"0x{Convert.ToHexString(DbUtilities.GetByteArray(entity.TypeCode))}"
+                    });
+                }
+
+                if (map.TryGetValue(ColumnPurpose.Identity, out ComparisonOperator identity))
+                {
+                    setter(identity, new ScalarExpression()
+                    {
+                        Token = Token.Binary,
+                        Literal = $"0x{Convert.ToHexString(entity.Identity.ToByteArray())}"
+                    });
+                }
+            }
+            else
+            {
+                throw new InvalidCastException($"[ComparisonOperatorTransformer] unsupported literal '{node.Literal}'");
+            }
         }
         private void Transform(in VariableReference node, in Dictionary<ColumnPurpose, ComparisonOperator> map, Action<ComparisonOperator, SyntaxNode> setter)
         {

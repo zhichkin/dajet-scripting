@@ -70,9 +70,11 @@ namespace DaJet.Scripting
         {
             command.Parameters.Clear();
 
+            int ordinal = 0;
+
             foreach (SyntaxNode input in _statement.Input)
             {
-                string name = string.Format("@p{0}", _statement.Input.IndexOf(input));
+                string name = string.Format("@p{0}", ordinal++);
 
                 object value = _context.Evaluate(in input);
 

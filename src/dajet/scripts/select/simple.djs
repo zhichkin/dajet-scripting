@@ -1,8 +1,8 @@
 --# STARTUP
 --# LONG_TASK
-# SINGLETON 'Select product by code'
+--# SINGLETON 'Select product by code'
 
-DECLARE @Код string = 'MS-07'
+DECLARE @Код string = '00001'
 
 PRIVATE @Таблица array
 
@@ -15,6 +15,6 @@ USE 'MS_TEST'
 
 END
 
-SLEEP 1
+--SLEEP 1
 
 RETURN @Таблица

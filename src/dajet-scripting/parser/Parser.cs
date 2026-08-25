@@ -3403,12 +3403,12 @@ namespace DaJet.Scripting
             }
             else
             {
-                consume.Top = top_clause();
+                consume.Top = top_clause(); // database queue table consumer
             }
             
             Skip(Token.Comment);
 
-            if (consume.Top is null) { throw new FormatException("CONSUME: TOP keyword expected."); }
+            if (consume.Top is null) { throw new FormatException("[CONSUME] TOP keyword expected."); }
 
             if (Match(Token.WITH))
             {
@@ -3422,10 +3422,10 @@ namespace DaJet.Scripting
                 }
                 else
                 {
-                    throw new FormatException($"CONSUME: STRICT or RANDOM keyword expected.");
+                    throw new FormatException($"[CONSUME] STRICT or RANDOM keyword expected.");
                 }
 
-                if (!Match(Token.ORDER)) { throw new FormatException($"CONSUME: (STRICT or RANDOM) ORDER keyword expected."); }
+                if (!Match(Token.ORDER)) { throw new FormatException($"[CONSUME] (STRICT or RANDOM) ORDER keyword expected."); }
             }
 
             Skip(Token.Comment);
@@ -3442,8 +3442,15 @@ namespace DaJet.Scripting
 
             if (consume.From.Expression is TableReference table && table.Identifier.StartsWith('@'))
             {
-                throw new FormatException($"CONSUME {table.Identifier}: table variable targeting is not allowed.");
+                throw new FormatException($"[CONSUME] {table.Identifier}: table variable targeting is not allowed.");
             }
+
+            if (Check(Token.END))
+            {
+                throw new FormatException("[CONSUME] statement block is empty");
+            }
+
+            consume.Statements = statement_block(Token.END);
 
             return consume;
         }

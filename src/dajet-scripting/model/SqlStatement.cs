@@ -183,6 +183,10 @@ namespace DaJet.Scripting.Model
             {
                 return GetColumnExpressions(in select);
             }
+            else if (node is ConsumeStatement consume)
+            {
+                return consume.Columns;
+            }
 
             return null;
         }

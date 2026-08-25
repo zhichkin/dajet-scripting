@@ -67,7 +67,15 @@ namespace DaJet.Host
             //_ = host.RunAsync("totals/get-settings.djs").ContinueWith(ShowAsyncResult);
             //_ = host.RunAsync("totals/universal.djs").ContinueWith(ShowAsyncResult);
 
-            _ = host.RunAsync("datetime/example.djs").ContinueWith(ShowAsyncResult);
+            //_ = host.RunAsync("datetime/example.djs").ContinueWith(ShowAsyncResult);
+            //_ = host.RunAsync("datetime/test.djs").ContinueWith(ShowAsyncResult);
+
+            //_ = host.RunAsync("select/simple.djs").ContinueWith(ShowAsyncResult);
+            //_ = host.RunAsync("consume/consume-ms-pg.djs").ContinueWith(ShowAsyncResult);
+
+            //_ = host.RunAsync("change-tracking/example.djs").ContinueWith(ShowAsyncResult);
+
+            _ = host.RunAsync("union_comparison.djs").ContinueWith(ShowAsyncResult);
 
             Console.WriteLine("Press any key to continue ..."); _ = Console.ReadKey(true);
         }
