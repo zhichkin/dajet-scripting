@@ -1,6 +1,7 @@
 ﻿using DaJet.Data;
 using DaJet.Scripting.Model;
 using DaJet.TypeSystem;
+using static System.Runtime.InteropServices.JavaScript.JSType;
 
 namespace DaJet.Scripting
 {
@@ -161,8 +162,8 @@ namespace DaJet.Scripting
             Transform(comparison.Expression1, in map, SetExpression1);
             Transform(comparison.Expression2, in map, SetExpression2);
 
-            ConfigureTag(in map, in comparison); // _TYPE column
-            ConfigureTypeCode(in map, in comparison); // _TRef column
+            //ConfigureTag(in map, in comparison); // _TYPE column
+            //ConfigureTypeCode(in map, in comparison); // _TRef column
 
             GroupOperator group = new();
 
@@ -302,6 +303,8 @@ namespace DaJet.Scripting
 
             if (!target.IsEntity) { return; } // TypeCode can only be used in conjunction with Entity
 
+            if (target.TypeCode == 0) { return; } // TypeCode must be defined
+
             ScalarExpression scalar = new()
             {
                 Token = Token.Binary,
@@ -346,6 +349,29 @@ namespace DaJet.Scripting
         }
         private void Transform(in TypeReference node, in Dictionary<ColumnPurpose, ComparisonOperator> map, Action<ComparisonOperator, SyntaxNode> setter)
         {
+            if (!map.TryGetValue(ColumnPurpose.Tag, out ComparisonOperator tag))
+            {
+                throw new InvalidOperationException("[ComparisonOperatorTransformer] tag slot is missing");
+            }
+
+            string tagValue = "0x01";
+            DataType type = node.Type;
+
+            if (type.IsBoolean) { tagValue = "0x02"; }
+            else if (type.IsDecimal) { tagValue = "0x03"; }
+            else if (type.IsDateTime) { tagValue = "0x04"; }
+            else if (type.IsString) { tagValue = "0x05"; }
+            else if (type.IsEntity) { tagValue = "0x08"; }
+            else if (type.IsObject) { tagValue = "0x08"; }
+            else
+            {
+                throw new InvalidOperationException($"[ComparisonOperatorTransformer][{node}] unsupported data type to compare");
+            }
+
+            setter(tag, new ScalarExpression() { Token = Token.Binary, Literal = tagValue });
+
+            if (!type.IsObject) { return; } // this is not metadata object
+
             if (node.Binding is not MetadataEntry entity)
             {
                 return; // binding error
@@ -370,10 +396,43 @@ namespace DaJet.Scripting
 
                 if (column is not null)
                 {
-                    if (property.Type.IsBoolean)
+                    string tagValue = "0x01";
+                    DataType type = property.Type;
+                    ColumnPurpose purpose = ColumnPurpose.Value;
+
+                    if (type.IsBoolean) { purpose = ColumnPurpose.Boolean; tagValue = "0x02"; }
+                    else if (type.IsDecimal) { purpose = ColumnPurpose.Numeric; tagValue = "0x03"; }
+                    else if (type.IsDateTime) { purpose = ColumnPurpose.DateTime; tagValue = "0x04"; }
+                    else if (type.IsString) { purpose = ColumnPurpose.String; tagValue = "0x05"; }
+                    else if (type.IsEntity) { purpose = ColumnPurpose.Identity; tagValue = "0x08"; }
+                    else
                     {
-                        //TODO:
+                        throw new InvalidOperationException($"[ComparisonOperatorTransformer][{node}] unsupported data type to compare");
                     }
+
+                    if (map.TryGetValue(ColumnPurpose.Tag, out ComparisonOperator tag))
+                    {
+                        setter(tag, new ScalarExpression() { Token = Token.Binary, Literal = tagValue });
+                    }
+
+                    if (purpose == ColumnPurpose.Identity)
+                    {
+                        if (map.TryGetValue(ColumnPurpose.TypeCode, out ComparisonOperator typecode))
+                        {
+                            setter(typecode, new ScalarExpression()
+                            {
+                                Token = Token.Binary,
+                                Literal = $"0x{Convert.ToHexString(DbUtilities.GetByteArray(type.TypeCode))}"
+                            });
+                        }
+                    }
+
+                    if (map.TryGetValue(purpose, out ComparisonOperator value))
+                    {
+                        setter(value, node);
+                    }
+                    
+                    return;
                 }
 
                 column = property.GetColumnByPurpose(ColumnPurpose.Tag);
@@ -510,11 +569,45 @@ namespace DaJet.Scripting
 
                     ColumnDefinition column = source.GetColumnByPurpose(ColumnPurpose.Value);
 
-                    column ??= source.GetColumnByPurpose(ColumnPurpose.Identity);
-
-                    if (map.TryGetValue(ColumnPurpose.Identity, out ComparisonOperator identity))
+                    if (column is not null)
                     {
-                        setter(identity, CreateSingleColumnReference(in node, in column));
+                        string tagValue = "0x01";
+                        DataType type = source.Type;
+                        ColumnPurpose purpose = ColumnPurpose.Value;
+
+                        if (type.IsBoolean) { purpose = ColumnPurpose.Boolean; tagValue = "0x02"; }
+                        else if (type.IsDecimal) { purpose = ColumnPurpose.Numeric; tagValue = "0x03"; }
+                        else if (type.IsDateTime) { purpose = ColumnPurpose.DateTime; tagValue = "0x04"; }
+                        else if (type.IsString) { purpose = ColumnPurpose.String; tagValue = "0x05"; }
+                        else if (type.IsEntity) { purpose = ColumnPurpose.Identity; tagValue = "0x08"; }
+                        else
+                        {
+                            throw new InvalidOperationException($"[ComparisonOperatorTransformer][{node}] unsupported data type to compare");
+                        }
+
+                        if (map.TryGetValue(ColumnPurpose.Tag, out ComparisonOperator tag))
+                        {
+                            setter(tag, new ScalarExpression() { Token = Token.Binary, Literal = tagValue });
+                        }
+
+                        if (purpose == ColumnPurpose.Identity)
+                        {
+                            if (map.TryGetValue(ColumnPurpose.TypeCode, out ComparisonOperator typecode))
+                            {
+                                setter(typecode, new ScalarExpression()
+                                {
+                                    Token = Token.Binary,
+                                    Literal = $"0x{Convert.ToHexString(DbUtilities.GetByteArray(type.TypeCode))}"
+                                });
+                            }
+                        }
+
+                        if (map.TryGetValue(purpose, out ComparisonOperator value))
+                        {
+                            setter(value, node);
+                        }
+
+                        return;
                     }
 
                     column = source.GetColumnByPurpose(ColumnPurpose.Tag);
@@ -527,6 +620,46 @@ namespace DaJet.Scripting
                         }
                     }
 
+                    column = source.GetColumnByPurpose(ColumnPurpose.Boolean);
+
+                    if (column is not null)
+                    {
+                        if (map.TryGetValue(ColumnPurpose.Boolean, out ComparisonOperator boolean))
+                        {
+                            setter(boolean, CreateSingleColumnReference(in node, in column));
+                        }
+                    }
+
+                    column = source.GetColumnByPurpose(ColumnPurpose.Numeric);
+
+                    if (column is not null)
+                    {
+                        if (map.TryGetValue(ColumnPurpose.Numeric, out ComparisonOperator numeric))
+                        {
+                            setter(numeric, CreateSingleColumnReference(in node, in column));
+                        }
+                    }
+
+                    column = source.GetColumnByPurpose(ColumnPurpose.DateTime);
+
+                    if (column is not null)
+                    {
+                        if (map.TryGetValue(ColumnPurpose.DateTime, out ComparisonOperator datetime))
+                        {
+                            setter(datetime, CreateSingleColumnReference(in node, in column));
+                        }
+                    }
+
+                    column = source.GetColumnByPurpose(ColumnPurpose.String);
+
+                    if (column is not null)
+                    {
+                        if (map.TryGetValue(ColumnPurpose.String, out ComparisonOperator _string))
+                        {
+                            setter(_string, CreateSingleColumnReference(in node, in column));
+                        }
+                    }
+
                     column = source.GetColumnByPurpose(ColumnPurpose.TypeCode);
 
                     if (column is not null)
@@ -534,6 +667,16 @@ namespace DaJet.Scripting
                         if (map.TryGetValue(ColumnPurpose.TypeCode, out ComparisonOperator typecode))
                         {
                             setter(typecode, CreateSingleColumnReference(in node, in column));
+                        }
+                    }
+
+                    column = source.GetColumnByPurpose(ColumnPurpose.Identity);
+
+                    if (column is not null)
+                    {
+                        if (map.TryGetValue(ColumnPurpose.Identity, out ComparisonOperator identity))
+                        {
+                            setter(identity, CreateSingleColumnReference(in node, in column));
                         }
                     }
                 }
@@ -547,15 +690,29 @@ namespace DaJet.Scripting
             }
             else if (node.Binding is Entity entity) // enumeration value
             {
+                if (map.TryGetValue(ColumnPurpose.Tag, out ComparisonOperator tag))
+                {
+                    setter(tag, new ScalarExpression() { Token = Token.Binary, Literal = "0x08" });
+                }
+                
+                if (map.TryGetValue(ColumnPurpose.TypeCode, out ComparisonOperator typecode))
+                {
+                    setter(typecode, new ScalarExpression()
+                    {
+                        Token = Token.Binary,
+                        Literal = $"0x{Convert.ToHexString(DbUtilities.GetByteArray(entity.TypeCode))}"
+                    });
+                }
+
                 if (map.TryGetValue(ColumnPurpose.Identity, out ComparisonOperator identity))
                 {
-                    setter(identity, node);
+                    Guid uuid = UuidConverter.CONVERT_UUID_1C_TO_DB(entity.Identity);
 
-                    //setter(identity, new ScalarExpression()
-                    //{
-                    //    Token = Token.Uuid,
-                    //    Literal = entity.Identity.ToString()
-                    //});
+                    setter(identity, new ScalarExpression()
+                    {
+                        Token = Token.Binary,
+                        Literal = $"0x{Convert.ToHexString(uuid.ToByteArray())}"
+                    });
                 }
             }
         }
@@ -633,18 +790,16 @@ namespace DaJet.Scripting
         }
         private void Transform(in VariableReference node, in Dictionary<ColumnPurpose, ComparisonOperator> map, Action<ComparisonOperator, SyntaxNode> setter)
         {
+            if (!map.TryGetValue(ColumnPurpose.Tag, out ComparisonOperator tag))
+            {
+                throw new InvalidOperationException("[ComparisonOperatorTransformer] tag slot is missing");
+            }
+
             DataType type = node.InferType();
 
             if (type.IsEntity)
             {
-                if (map.TryGetValue(ColumnPurpose.Tag, out ComparisonOperator tag))
-                {
-                    setter(tag, new ScalarExpression()
-                    {
-                        Token = Token.Binary,
-                        Literal = "0x08" // reference type (ссылка)
-                    });
-                }
+                setter(tag, new ScalarExpression() { Token = Token.Binary, Literal = "0x08" });
 
                 if (map.TryGetValue(ColumnPurpose.TypeCode, out ComparisonOperator code))
                 {
@@ -668,6 +823,8 @@ namespace DaJet.Scripting
             }
             else if (type.IsUuid)
             {
+                setter(tag, new ScalarExpression() { Token = Token.Binary, Literal = "0x08" });
+
                 if (map.TryGetValue(ColumnPurpose.Identity, out ComparisonOperator uuid))
                 {
                     setter(uuid, new FunctionExpression()
@@ -680,6 +837,8 @@ namespace DaJet.Scripting
             }
             else if (type.IsBoolean)
             {
+                setter(tag, new ScalarExpression() { Token = Token.Binary, Literal = "0x02" });
+
                 if (map.TryGetValue(ColumnPurpose.Boolean, out ComparisonOperator boolean))
                 {
                     setter(boolean, node);
@@ -687,6 +846,8 @@ namespace DaJet.Scripting
             }
             else if (type.IsDecimal)
             {
+                setter(tag, new ScalarExpression() { Token = Token.Binary, Literal = "0x03" });
+
                 if (map.TryGetValue(ColumnPurpose.Numeric, out ComparisonOperator number))
                 {
                     setter(number, node);
@@ -694,6 +855,8 @@ namespace DaJet.Scripting
             }
             else if (type.IsDateTime)
             {
+                setter(tag, new ScalarExpression() { Token = Token.Binary, Literal = "0x04" });
+
                 if (map.TryGetValue(ColumnPurpose.DateTime, out ComparisonOperator datetime))
                 {
                     setter(datetime, node);
@@ -701,6 +864,8 @@ namespace DaJet.Scripting
             }
             else if (type.IsString)
             {
+                setter(tag, new ScalarExpression() { Token = Token.Binary, Literal = "0x05" });
+
                 if (map.TryGetValue(ColumnPurpose.String, out ComparisonOperator _string))
                 {
                     setter(_string, node);
@@ -709,18 +874,16 @@ namespace DaJet.Scripting
         }
         private void Transform(in MemberAccessExpression node, in Dictionary<ColumnPurpose, ComparisonOperator> map, Action<ComparisonOperator, SyntaxNode> setter)
         {
+            if (!map.TryGetValue(ColumnPurpose.Tag, out ComparisonOperator tag))
+            {
+                throw new InvalidOperationException("[ComparisonOperatorTransformer] tag slot is missing");
+            }
+
             DataType type = node.InferType();
 
             if (type.IsEntity)
             {
-                if (map.TryGetValue(ColumnPurpose.Tag, out ComparisonOperator tag))
-                {
-                    setter(tag, new ScalarExpression()
-                    {
-                        Token = Token.Binary,
-                        Literal = "0x08" // reference type (ссылка)
-                    });
-                }
+                setter(tag, new ScalarExpression() { Token = Token.Binary, Literal = "0x08" });
 
                 if (map.TryGetValue(ColumnPurpose.TypeCode, out ComparisonOperator code))
                 {
@@ -744,6 +907,8 @@ namespace DaJet.Scripting
             }
             else if (type.IsUuid)
             {
+                setter(tag, new ScalarExpression() { Token = Token.Binary, Literal = "0x08" });
+
                 if (map.TryGetValue(ColumnPurpose.Identity, out ComparisonOperator uuid))
                 {
                     setter(uuid, new FunctionExpression()
@@ -756,6 +921,8 @@ namespace DaJet.Scripting
             }
             else if (type.IsBoolean)
             {
+                setter(tag, new ScalarExpression() { Token = Token.Binary, Literal = "0x02" });
+
                 if (map.TryGetValue(ColumnPurpose.Boolean, out ComparisonOperator boolean))
                 {
                     setter(boolean, node);
@@ -763,6 +930,8 @@ namespace DaJet.Scripting
             }
             else if (type.IsDecimal)
             {
+                setter(tag, new ScalarExpression() { Token = Token.Binary, Literal = "0x03" });
+
                 if (map.TryGetValue(ColumnPurpose.Numeric, out ComparisonOperator number))
                 {
                     setter(number, node);
@@ -770,6 +939,8 @@ namespace DaJet.Scripting
             }
             else if (type.IsDateTime)
             {
+                setter(tag, new ScalarExpression() { Token = Token.Binary, Literal = "0x04" });
+
                 if (map.TryGetValue(ColumnPurpose.DateTime, out ComparisonOperator datetime))
                 {
                     setter(datetime, node);
@@ -777,6 +948,8 @@ namespace DaJet.Scripting
             }
             else if (type.IsString)
             {
+                setter(tag, new ScalarExpression() { Token = Token.Binary, Literal = "0x05" });
+
                 if (map.TryGetValue(ColumnPurpose.String, out ComparisonOperator _string))
                 {
                     setter(_string, node);
@@ -785,18 +958,41 @@ namespace DaJet.Scripting
         }
         private void Transform(in FunctionExpression node, in Dictionary<ColumnPurpose, ComparisonOperator> map, Action<ComparisonOperator, SyntaxNode> setter)
         {
+            if (!map.TryGetValue(ColumnPurpose.Tag, out ComparisonOperator tag))
+            {
+                throw new InvalidOperationException("[ComparisonOperatorTransformer] tag slot is missing");
+            }
+
+            SyntaxNode parameter = node.Parameters[0];
+
+            DataType type = parameter.InferType();
+
             if (node.Name == nameof(TYPEOF))
             {
-                if (map.TryGetValue(ColumnPurpose.TypeCode, out ComparisonOperator comparison))
+                if (type.IsUndefined) // NULL keyword and literal
                 {
-                    setter(comparison, node);
+                    setter(tag, new ScalarExpression() { Token = Token.Binary, Literal = "0x01" });
+                }
+                else if (type.IsEntity)
+                {
+                    setter(tag, new ScalarExpression() { Token = Token.Binary, Literal = "0x08" });
+
+                    if (map.TryGetValue(ColumnPurpose.TypeCode, out ComparisonOperator typecode))
+                    {
+                        setter(typecode, node);
+                    }
                 }
             }
             else if (node.Name == nameof(UUIDOF))
             {
-                if (map.TryGetValue(ColumnPurpose.Identity, out ComparisonOperator comparison))
+                setter(tag, new ScalarExpression() { Token = Token.Binary, Literal = "0x08" });
+
+                if (type.IsEntity)
                 {
-                    setter(comparison, node);
+                    if (map.TryGetValue(ColumnPurpose.Identity, out ComparisonOperator comparison))
+                    {
+                        setter(comparison, node);
+                    }
                 }
             }
         }
