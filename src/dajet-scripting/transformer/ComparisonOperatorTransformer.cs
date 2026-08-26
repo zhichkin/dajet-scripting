@@ -1,7 +1,6 @@
 ﻿using DaJet.Data;
 using DaJet.Scripting.Model;
 using DaJet.TypeSystem;
-using static System.Runtime.InteropServices.JavaScript.JSType;
 
 namespace DaJet.Scripting
 {
@@ -74,7 +73,7 @@ namespace DaJet.Scripting
         }
         private void ThrowUnableToCompareException(SyntaxNode node1, SyntaxNode node2)
         {
-            throw new InvalidCastException($"Unable to compare {node1} and {node2}");
+            throw new InvalidCastException($"[ComparisonOperatorTransformer] Unable to compare {node1} and {node2}");
         }
 
         private SyntaxNode TransformColumnIsType(in ComparisonOperator comparison)
@@ -165,6 +164,8 @@ namespace DaJet.Scripting
             //ConfigureTag(in map, in comparison); // _TYPE column
             //ConfigureTypeCode(in map, in comparison); // _TRef column
 
+            ValidateComparisonMapping(in map);
+
             GroupOperator group = new();
 
             foreach (var item in map)
@@ -193,6 +194,45 @@ namespace DaJet.Scripting
             }
 
             return group;
+        }
+        private static void ValidateComparisonMapping(in Dictionary<ColumnPurpose, ComparisonOperator> map)
+        {
+            List<ColumnPurpose> toRemove = new();
+
+            foreach (var item in map)
+            {
+                ComparisonOperator comparison = item.Value;
+
+                if (comparison.Expression1 is null || comparison.Expression2 is null)
+                {
+                    toRemove.Add(item.Key);
+                }
+            }
+
+            foreach (ColumnPurpose purpose in toRemove)
+            {
+                _ = map.Remove(purpose);
+            }
+
+            if (map.Count == 0)
+            {
+                throw new InvalidOperationException("[ComparisonOperatorTransformer] failed to compare");
+            }
+
+            if (map.Count == 1) //Исключение: <union> IS <type>
+            {
+                if (map.TryGetValue(ColumnPurpose.Tag, out _))
+                {
+                    return; // <union> IS <type>
+                }
+
+                if (map.TryGetValue(ColumnPurpose.TypeCode, out _))
+                {
+                    return; // Регистратор IS <type>
+                }
+
+                throw new InvalidOperationException("[ComparisonOperatorTransformer] failed to compare");
+            }
         }
         private void SetExpression1(ComparisonOperator comparison, SyntaxNode value)
         {

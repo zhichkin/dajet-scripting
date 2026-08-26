@@ -75,7 +75,7 @@ namespace DaJet.Host
 
             //_ = host.RunAsync("change-tracking/example.djs").ContinueWith(ShowAsyncResult);
 
-            _ = host.RunAsync("union-comparison/exchange.djs").ContinueWith(ShowAsyncResult);
+            _ = host.RunAsync("union-comparison/columns.djs").ContinueWith(ShowAsyncResult);
 
             Console.WriteLine("Press any key to continue ..."); _ = Console.ReadKey(true);
         }
