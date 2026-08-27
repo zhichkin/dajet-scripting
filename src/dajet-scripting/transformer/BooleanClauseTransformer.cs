@@ -13,6 +13,7 @@ namespace DaJet.Scripting
             else if (node is UnaryOperator unary) { Transform(in unary); }
             else if (node is BinaryOperator binary) { Transform(in binary); }
             else if (node is GroupOperator group) { Transform(in group); }
+            else if (node is HavingClause having) { Transform(in having); }
         }
         private void Transform(in OnClause clause)
         {
@@ -57,6 +58,27 @@ namespace DaJet.Scripting
             }
         }
         private void Transform(in WhereClause clause)
+        {
+            if (clause.Expression is ComparisonOperator comparison)
+            {
+                SyntaxNode node = _transformer.Transform(in comparison);
+
+                if (node is not null)
+                {
+                    clause.Expression = node; // successful transformation
+                }
+                else
+                {
+                    Transform(comparison.Expression1);
+                    Transform(comparison.Expression2);
+                }
+            }
+            else
+            {
+                Transform(clause.Expression);
+            }
+        }
+        private void Transform(in HavingClause clause)
         {
             if (clause.Expression is ComparisonOperator comparison)
             {

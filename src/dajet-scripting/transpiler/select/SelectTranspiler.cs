@@ -455,6 +455,8 @@ namespace DaJet.Scripting
         {
             script.Append("HAVING ");
 
+            _transformer.Transform(node);
+
             Visit(node.Expression, in script);
         }
         protected virtual void Visit(in OnClause node, in StringBuilder script)

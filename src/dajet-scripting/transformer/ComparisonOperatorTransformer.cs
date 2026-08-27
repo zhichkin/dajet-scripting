@@ -21,7 +21,7 @@ namespace DaJet.Scripting
                 {
                     return TransformColumnIsType(in comparison);
                 }
-                else if (comparison.Expression1 is ColumnReference column && comparison.Expression2 is TypeReference type) 
+                else if (comparison.Expression1 is ColumnReference column && comparison.Expression2 is TypeReference type && type.Type.IsObject) 
                 {
                     // Колонка не составного типа данных, не являющаяся выражением
                     // Например: WHERE Номенклатура IS Справочник.Номенклатура
@@ -52,18 +52,33 @@ namespace DaJet.Scripting
                     return TransformUnionComparison(in comparison);
                 }
             }
+            else if (comparison.Token == Token.IN)
+            {
+                if (IsUnionNode(comparison.Expression1))
+                {
+                    // Преобразование оператора IN для составных типов данных не реализовано:
+                    // без трансформации колонка транспилируется в несколько колонок СУБД,
+                    // что порождает некорректный SQL. Сообщаем об этом явно.
+
+                    throw new NotSupportedException($"[ComparisonOperatorTransformer][{comparison.Expression1}] IN operator is not supported for union type columns. " +
+                        "Use a chain of equality comparisons with bound parameters instead: <column> = @p0 OR <column> = @p1 ...");
+                }
+            }
 
             return null; // no transformation is needed
         }
-        private bool IsUnionNode(in SyntaxNode node)
+        private static bool IsUnionNode(in SyntaxNode node)
         {
-            if (node is not ColumnReference)
+            //NOTE: на всякий случчай. Вдруг кто-то решит написать как-то вот так: WHERE (<column>) = @value
+            SyntaxNode target = UnwrapGroupOperator(in node); 
+
+            if (target is not ColumnReference)
             {
                 return false; // Константа, функция, параметр или выражение
             }
-
-            PropertyDefinition source = node.InferSource();
-
+            
+            PropertyDefinition source = target.InferSource();
+            
             if (string.IsNullOrEmpty(source.Name))
             {
                 return false; // Константа, функция, параметр или выражение
@@ -71,14 +86,28 @@ namespace DaJet.Scripting
 
             return source.Type.IsUnion; // Источник данных - колонка таблицы СУБД
         }
-        private void ThrowUnableToCompareException(SyntaxNode node1, SyntaxNode node2)
+        private static SyntaxNode UnwrapGroupOperator(in SyntaxNode node)
+        {
+            SyntaxNode target = node;
+
+            while (target is GroupOperator group)
+            {
+                target = group.Expression;
+            }
+
+            return target;
+        }
+        private static void ThrowUnableToCompareException(SyntaxNode node1, SyntaxNode node2)
         {
             throw new InvalidCastException($"[ComparisonOperatorTransformer] Unable to compare {node1} and {node2}");
         }
 
         private SyntaxNode TransformColumnIsType(in ComparisonOperator comparison)
         {
-            if (comparison.Expression1 is not ColumnReference left)
+            //NOTE: на всякий случчай. Вдруг кто-то решит написать как-то вот так: WHERE (<column>) IS <type>
+            SyntaxNode unwrapped = UnwrapGroupOperator(comparison.Expression1);
+
+            if (unwrapped is not ColumnReference left)
             {
                 return null; // no transformation is needed
             }
@@ -161,49 +190,43 @@ namespace DaJet.Scripting
             Transform(comparison.Expression1, in map, SetExpression1);
             Transform(comparison.Expression2, in map, SetExpression2);
 
-            //ConfigureTag(in map, in comparison); // _TYPE column
-            //ConfigureTypeCode(in map, in comparison); // _TRef column
-
-            ValidateComparisonMapping(in map);
+            ValidateUnionComparisonOrThrow(in comparison, in map);
 
             GroupOperator group = new();
 
             foreach (var item in map)
             {
-                if (item.Value.Expression1 is not null && item.Value.Expression2 is not null)
+                if (group.Expression is null)
                 {
-                    if (group.Expression == null)
+                    group.Expression = item.Value;
+                }
+                else
+                {
+                    group.Expression = new BinaryOperator()
                     {
-                        group.Expression = item.Value;
-                    }
-                    else
-                    {
-                        group.Expression = new BinaryOperator()
-                        {
-                            Token = Token.AND,
-                            Expression1 = group.Expression,
-                            Expression2 = item.Value
-                        };
-                    }
+                        Token = Token.AND,
+                        Expression1 = group.Expression,
+                        Expression2 = item.Value
+                    };
                 }
             }
 
-            if (group.Expression == null) // no compatible types are found to compare
+            if (group.Expression is null) //NOTE: проверка на всякий случай
             {
                 ThrowUnableToCompareException(comparison.Expression1, comparison.Expression2);
             }
 
             return group;
         }
-        private static void ValidateComparisonMapping(in Dictionary<ColumnPurpose, ComparisonOperator> map)
+        private static void ValidateUnionComparisonOrThrow(in ComparisonOperator comparison, in Dictionary<ColumnPurpose, ComparisonOperator> map)
         {
             List<ColumnPurpose> toRemove = new();
 
             foreach (var item in map)
             {
-                ComparisonOperator comparison = item.Value;
+                ComparisonOperator slot = item.Value;
 
-                if (comparison.Expression1 is null || comparison.Expression2 is null)
+                if (slot.Expression1 is null || slot.Expression2 is null)
                 {
                     toRemove.Add(item.Key);
                 }
@@ -216,22 +239,40 @@ namespace DaJet.Scripting
 
             if (map.Count == 0)
             {
-                throw new InvalidOperationException("[ComparisonOperatorTransformer] failed to compare");
+                ThrowUnableToCompareException(comparison.Expression1, comparison.Expression2);
             }
 
-            if (map.Count == 1) //Исключение: <union> IS <type>
+            if (map.Count == 1)
             {
-                if (map.TryGetValue(ColumnPurpose.Tag, out _))
+                //NOTE: Special case: <union> = TYPEOF(NULL) - проверка на _TYPE = 0x01 (Неопределено)
+                if (comparison.Expression2 is FunctionExpression function && function.Name == nameof(TYPEOF))
                 {
-                    return; // <union> IS <type>
+                    if (function.Parameters is not null && function.Parameters.Count == 1)
+                    {
+                        SyntaxNode parameter = function.Parameters[0];
+
+                        if (parameter is ScalarExpression scalar && scalar.Token == Token.NULL)
+                        {
+                            if (map.TryGetValue(ColumnPurpose.Tag, out _))
+                            {
+                                return; // valid comparison
+                            }
+
+                            ThrowUnableToCompareException(comparison.Expression1, comparison.Expression2);
+                        }
+                    }
                 }
 
-                if (map.TryGetValue(ColumnPurpose.TypeCode, out _))
+                if (comparison.Expression2 is not TypeReference) //NOTE: Special case: <union> IS <type>
                 {
-                    return; // Регистратор IS <type>
+                    ThrowUnableToCompareException(comparison.Expression1, comparison.Expression2);
                 }
 
-                throw new InvalidOperationException("[ComparisonOperatorTransformer] failed to compare");
+                if (map.TryGetValue(ColumnPurpose.Tag, out _)) { return; } // СоставнойТип IS boolean (_TYPE = 0x02)
+
+                if (map.TryGetValue(ColumnPurpose.TypeCode, out _)) { return; } // Регистратор IS Документ.Приход (_RTRef = 0x0000003C)
+
+                ThrowUnableToCompareException(comparison.Expression1, comparison.Expression2);
             }
         }
         private void SetExpression1(ComparisonOperator comparison, SyntaxNode value)
@@ -267,99 +308,6 @@ namespace DaJet.Scripting
                 Identifier = identifier
             };
         }
-        private void ConfigureTag(in Dictionary<ColumnPurpose, ComparisonOperator> map, in ComparisonOperator comparison)
-        {
-            if (!map.TryGetValue(ColumnPurpose.Tag, out ComparisonOperator item)) { return; }
-            
-            if (item.Expression1 is null && item.Expression2 is null) { return; } // Tag column is not used
-            
-            if (item.Expression1 is not null && item.Expression2 is not null) { return; } // Tag column is mapped already
-
-            DataType target;
-            DataType source;
-
-            if (item.Expression1 is null)
-            {
-                target = comparison.Expression1.InferType();
-                source = comparison.Expression2.InferType();
-            }
-            else
-            {
-                target = comparison.Expression2.InferType();
-                source = comparison.Expression1.InferType();
-            }
-
-            //DataType type = target.Type;
-
-            //if (!source.Is(type)) { return; } // incompatible data types
-
-            // $"0x{Convert.ToHexString(new byte[] { (byte)tag })}";
-
-            string literal;
-
-            if (target.IsBoolean) { literal = "0x02"; }
-            else if (target.IsDecimal) { literal = "0x03"; }
-            else if (target.IsDateTime) { literal = "0x04"; }
-            else if (target.IsString) { literal = "0x05"; }
-            else if (target.IsEntity) { literal = "0x08"; }
-            else
-            {
-                return; //FIXME: !?
-            }
-
-            ScalarExpression scalar = new()
-            {
-                Token = Token.Binary,
-                Literal = literal //$"0x{Convert.ToHexString([tag])}"
-            };
-
-            if (item.Expression1 is null)
-            {
-                item.Expression1 = scalar;
-            }
-            else
-            {
-                item.Expression2 = scalar;
-            }
-        }
-        private void ConfigureTypeCode(in Dictionary<ColumnPurpose, ComparisonOperator> map, in ComparisonOperator comparison)
-        {
-            if (!map.TryGetValue(ColumnPurpose.TypeCode, out ComparisonOperator item)) { return; }
-            
-            if (item.Expression1 is null && item.Expression2 is null) { return; } // TypeCode column is not used
-            
-            if (item.Expression1 is not null && item.Expression2 is not null) { return; } // TypeCode column is mapped already
-
-            DataType target;
-
-            if (item.Expression1 is null)
-            {
-                target = comparison.Expression1.InferType();
-            }
-            else
-            {
-                target = comparison.Expression2.InferType();
-            }
-
-            if (!target.IsEntity) { return; } // TypeCode can only be used in conjunction with Entity
-
-            if (target.TypeCode == 0) { return; } // TypeCode must be defined
-
-            ScalarExpression scalar = new()
-            {
-                Token = Token.Binary,
-                Literal = $"0x{Convert.ToHexString(DbUtilities.GetByteArray(target.TypeCode))}"
-            };
-
-            if (item.Expression1 is null)
-            {
-                item.Expression1 = scalar;
-            }
-            else
-            {
-                item.Expression2 = scalar;
-            }
-        }
         private void Transform(in SyntaxNode node, in Dictionary<ColumnPurpose, ComparisonOperator> map, Action<ComparisonOperator, SyntaxNode> setter)
         {
             if (node is TypeReference type)
@@ -385,6 +333,10 @@ namespace DaJet.Scripting
             else if (node is FunctionExpression function)
             {
                 Transform(in function, map, setter);
+            }
+            else if (node is GroupOperator group) // (<expression>) - разворачиваем скобки
+            {
+                Transform(group.Expression, in map, setter);
             }
         }
         private void Transform(in TypeReference node, in Dictionary<ColumnPurpose, ComparisonOperator> map, Action<ComparisonOperator, SyntaxNode> setter)
@@ -720,16 +672,15 @@ namespace DaJet.Scripting
                         }
                     }
                 }
-                else // expression
+                else
                 {
-                    if (map.TryGetValue(ColumnPurpose.Identity, out ComparisonOperator identity))
-                    {
-                        setter(identity, node);
-                    }
+                    //NOTE: не реализовано: функция или выражение, например, CASE
                 }
             }
             else if (node.Binding is Entity entity) // enumeration value
             {
+                //NOTE: значение перечисления, например: СоставнойТип = Перечисление.СтавкиНДС.БезНДС
+
                 if (map.TryGetValue(ColumnPurpose.Tag, out ComparisonOperator tag))
                 {
                     setter(tag, new ScalarExpression() { Token = Token.Binary, Literal = "0x08" });
@@ -861,20 +812,6 @@ namespace DaJet.Scripting
                     });
                 }
             }
-            else if (type.IsUuid)
-            {
-                setter(tag, new ScalarExpression() { Token = Token.Binary, Literal = "0x08" });
-
-                if (map.TryGetValue(ColumnPurpose.Identity, out ComparisonOperator uuid))
-                {
-                    setter(uuid, new FunctionExpression()
-                    {
-                        Token = Token.UDF,
-                        Name = nameof(UUIDOF),
-                        Parameters = { node }
-                    });
-                }
-            }
             else if (type.IsBoolean)
             {
                 setter(tag, new ScalarExpression() { Token = Token.Binary, Literal = "0x02" });
@@ -911,6 +848,21 @@ namespace DaJet.Scripting
                     setter(_string, node);
                 }
             }
+            
+            //else if (type.IsUuid)
+            //{
+            //    setter(tag, new ScalarExpression() { Token = Token.Binary, Literal = "0x08" });
+
+            //    if (map.TryGetValue(ColumnPurpose.Identity, out ComparisonOperator uuid))
+            //    {
+            //        setter(uuid, new FunctionExpression()
+            //        {
+            //            Token = Token.UDF,
+            //            Name = nameof(UUIDOF),
+            //            Parameters = { node }
+            //        });
+            //    }
+            //}
         }
         private void Transform(in MemberAccessExpression node, in Dictionary<ColumnPurpose, ComparisonOperator> map, Action<ComparisonOperator, SyntaxNode> setter)
         {
@@ -945,20 +897,6 @@ namespace DaJet.Scripting
                     });
                 }
             }
-            else if (type.IsUuid)
-            {
-                setter(tag, new ScalarExpression() { Token = Token.Binary, Literal = "0x08" });
-
-                if (map.TryGetValue(ColumnPurpose.Identity, out ComparisonOperator uuid))
-                {
-                    setter(uuid, new FunctionExpression()
-                    {
-                        Token = Token.UDF,
-                        Name = nameof(UUIDOF),
-                        Parameters = { node }
-                    });
-                }
-            }
             else if (type.IsBoolean)
             {
                 setter(tag, new ScalarExpression() { Token = Token.Binary, Literal = "0x02" });
@@ -995,9 +933,29 @@ namespace DaJet.Scripting
                     setter(_string, node);
                 }
             }
+
+            //else if (type.IsUuid)
+            //{
+            //    setter(tag, new ScalarExpression() { Token = Token.Binary, Literal = "0x08" });
+
+            //    if (map.TryGetValue(ColumnPurpose.Identity, out ComparisonOperator uuid))
+            //    {
+            //        setter(uuid, new FunctionExpression()
+            //        {
+            //            Token = Token.UDF,
+            //            Name = nameof(UUIDOF),
+            //            Parameters = { node }
+            //        });
+            //    }
+            //}
         }
         private void Transform(in FunctionExpression node, in Dictionary<ColumnPurpose, ComparisonOperator> map, Action<ComparisonOperator, SyntaxNode> setter)
         {
+            //NOTE: обработка исключительных недокументированных случаев:
+            // 1. СоставнойТип = TYPEOF(NULL)   - проверка _TYPE = 0x01
+            // 2. СоставнойТип = TYPEOF(entity) - извлечение кода типа ссылки
+            // 3. СоставнойТип = UUIDOF(entity) - извлечение идентификатора ссылки
+
             if (!map.TryGetValue(ColumnPurpose.Tag, out ComparisonOperator tag))
             {
                 throw new InvalidOperationException("[ComparisonOperatorTransformer] tag slot is missing");
@@ -1009,7 +967,7 @@ namespace DaJet.Scripting
 
             if (node.Name == nameof(TYPEOF))
             {
-                if (type.IsUndefined) // NULL keyword and literal
+                if (parameter is ScalarExpression scalar && scalar.Token == Token.NULL)
                 {
                     setter(tag, new ScalarExpression() { Token = Token.Binary, Literal = "0x01" });
                 }
