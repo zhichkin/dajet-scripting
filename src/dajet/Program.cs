@@ -64,19 +64,7 @@ namespace DaJet.Host
             //parameters.SetValue("Получатель",  "MS_TEST");
             //_ = host.RunAsync("exchange/stream-pg-ms.djs", in parameters).ContinueWith(ShowAsyncResult);
 
-            //_ = host.RunAsync("totals/get-settings.djs").ContinueWith(ShowAsyncResult);
-            //_ = host.RunAsync("totals/universal.djs").ContinueWith(ShowAsyncResult);
-
-            //_ = host.RunAsync("datetime/example.djs").ContinueWith(ShowAsyncResult);
-            //_ = host.RunAsync("datetime/test.djs").ContinueWith(ShowAsyncResult);
-
-            //_ = host.RunAsync("select/simple.djs").ContinueWith(ShowAsyncResult);
             //_ = host.RunAsync("consume/consume-ms-pg.djs").ContinueWith(ShowAsyncResult);
-
-            //_ = host.RunAsync("change-tracking/example.djs").ContinueWith(ShowAsyncResult);
-
-            //_ = host.RunAsync("turnovers/get-settings.djs").ContinueWith(ShowAsyncResult);
-            _ = host.RunAsync("turnovers/test.djs").ContinueWith(ShowAsyncResult);
 
             Console.WriteLine("Press any key to continue ..."); _ = Console.ReadKey(true);
         }
