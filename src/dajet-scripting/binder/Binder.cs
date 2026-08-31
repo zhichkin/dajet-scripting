@@ -1,5 +1,6 @@
 ﻿using DaJet.Scripting.Model;
 using DaJet.TypeSystem;
+using System.Xml.Linq;
 
 namespace DaJet.Scripting
 {
@@ -610,7 +611,10 @@ namespace DaJet.Scripting
 
                         if (entity is not null)
                         {
-                            node.Binding = entity; // successful binding
+                            if (!string.IsNullOrWhiteSpace(entity.DbName))
+                            {
+                                node.Binding = entity; // successful binding
+                            }
                         }
                     }
                 }
