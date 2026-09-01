@@ -1,7 +1,6 @@
 ﻿using DaJet.Metadata;
 using DaJet.Scripting.Model;
 using System.Text;
-using System.Xml.Linq;
 
 namespace DaJet.Scripting
 {
@@ -32,7 +31,6 @@ namespace DaJet.Scripting
             _statement = consume;
             _statement.Dialect = _provider.DataSource;
             _statement.YearOffset = YearOffset;
-            _statement.Output = consume.Into.Value;
 
             try
             {
@@ -52,34 +50,26 @@ namespace DaJet.Scripting
         {
             throw new NotImplementedException();
         }
-        //private string GetOrdinalParameterName()
-        //{
-        //    string parameterName;
-
-        //    if (_statement.Dialect == Data.DataSourceType.PostgreSql)
-        //    {
-        //        parameterName = string.Format("${0}", _parameterOrdinal);
-        //    }
-        //    else
-        //    {
-        //        parameterName = string.Format("@p{0}", _parameterOrdinal);
-        //    }
-
-        //    _parameterOrdinal++;
-
-        //    return parameterName;
-        //}
         private void Transpile(in ConsumeStatement statement)
         {
             StringBuilder sql = new();
 
-            sql.Append("WITH queue AS");
+            sql.AppendLine("WITH queue AS ").Append('(');
 
-            sql.AppendLine().Append("WHERE ");
+            SelectStatement select = TransformConsumeToSelect(in statement);
 
-            _transformer.Transform(statement.Where);
+            if (!new MsSelectTranspiler().TryTranspile(select, in _provider, out string error))
+            {
+                throw new Exception(error);
+            }
 
-            //Visit(node.Expression, in script);
+            sql.AppendLine(select.Sql).Append(')');
+
+            statement.Input = select.Input;
+            statement.Output = select.GetIntoClause();
+
+            //TODO: DELETE queue OUTPUT ... INTO @tableVariable;
+            //TODO: SELECT * @tableVariable ORDER BY ...
 
             statement.Sql = sql.ToString();
         }
@@ -91,6 +81,7 @@ namespace DaJet.Scripting
                 {
                     Top = consume.Top,
                     From = consume.From,
+                    Into = consume.Into,
                     Where = consume.Where,
                     Order = consume.Order,
                     Columns = consume.Columns

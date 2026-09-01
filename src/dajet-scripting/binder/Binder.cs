@@ -1,6 +1,5 @@
 ﻿using DaJet.Scripting.Model;
 using DaJet.TypeSystem;
-using System.Xml.Linq;
 
 namespace DaJet.Scripting
 {

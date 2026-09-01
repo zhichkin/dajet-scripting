@@ -1,4 +1,5 @@
-﻿using DaJet.Metadata;
+﻿using DaJet.Data;
+using DaJet.Metadata;
 using DaJet.Scripting.Model;
 using DaJet.TypeSystem;
 using System.Text;
@@ -14,6 +15,8 @@ namespace DaJet.Scripting
         public override bool TryTranspile(in SyntaxNode node, in MetadataProvider provider, out string error)
         {
             error = null;
+
+            ArgumentNullException.ThrowIfNull(provider, nameof(provider));
 
             _provider = provider;
 
@@ -154,6 +157,14 @@ namespace DaJet.Scripting
             if (!string.IsNullOrEmpty(node.Alias))
             {
                 script.Append(" AS ").Append(node.Alias);
+            }
+
+            if (_provider.DataSource == DataSourceType.SqlServer)
+            {
+                if (!string.IsNullOrEmpty(node.Hints))
+                {
+                    script.Append(' ').Append(node.Hints); // CONSUME statement support only
+                }
             }
         }
 

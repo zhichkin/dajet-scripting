@@ -8,7 +8,7 @@ namespace DaJet.Scripting.Model
         public DataSourceType Dialect { get; set; } // SqlServer | PostgreSQL
         public int YearOffset { get; set; }
         public string Sql { get; set; }
-        public List<SyntaxNode> Input { get; } = new(); // VariableReference, MemberAccessExpression, FunctionExpression
+        public List<SyntaxNode> Input { get; set; } = new(); // VariableReference, MemberAccessExpression, FunctionExpression
         public SyntaxNode Output { get; set; } // INTO clause VariableReference, TableReference | OUTPUT clause
         public DefineStatement InferSchema()
         {
