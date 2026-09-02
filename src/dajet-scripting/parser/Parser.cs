@@ -1,5 +1,6 @@
 ﻿using DaJet.Scripting.Model;
 using DaJet.TypeSystem;
+using System.Linq.Expressions;
 
 namespace DaJet.Scripting
 {
@@ -3440,9 +3441,32 @@ namespace DaJet.Scripting
             if (Match(Token.ORDER)) { consume.Order = order_clause(); }
             Skip(Token.Comment);
 
-            if (consume.From.Expression is TableReference table && table.Identifier.StartsWith('@'))
+            if (consume.From.TryGetTable(out TableReference table))
             {
-                throw new FormatException($"[CONSUME] {table.Identifier}: table variable targeting is not allowed.");
+                if (table.Identifier.StartsWith('@'))
+                {
+                    throw new FormatException($"[CONSUME] {table.Identifier}: table variable targeting is not allowed.");
+                }
+            }
+            else
+            {
+                throw new FormatException($"[CONSUME] FROM clause must reference database table.");
+            }
+
+            if (consume.Order is not null)
+            {
+                List<OrderExpression> expressions = consume.Order.Expressions;
+
+                if (expressions is not null && expressions.Count > 0)
+                {
+                    foreach (OrderExpression order in expressions)
+                    {
+                        if (order.Expression is not ColumnReference)
+                        {
+                            throw new FormatException($"[CONSUME] ORDER clause must reference table columns.");
+                        }
+                    }
+                }
             }
 
             if (Check(Token.END))

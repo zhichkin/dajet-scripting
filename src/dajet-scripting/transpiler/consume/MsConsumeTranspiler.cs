@@ -1,6 +1,8 @@
 ﻿using DaJet.Metadata;
 using DaJet.Scripting.Model;
+using DaJet.TypeSystem;
 using System.Text;
+using System.Xml.Linq;
 
 namespace DaJet.Scripting
 {
@@ -52,10 +54,6 @@ namespace DaJet.Scripting
         }
         private void Transpile(in ConsumeStatement statement)
         {
-            StringBuilder sql = new();
-
-            sql.AppendLine("WITH queue AS ").Append('(');
-
             SelectStatement select = TransformConsumeToSelect(in statement);
 
             if (!new MsSelectTranspiler().TryTranspile(select, in _provider, out string error))
@@ -63,17 +61,105 @@ namespace DaJet.Scripting
                 throw new Exception(error);
             }
 
-            sql.AppendLine(select.Sql).Append(')');
+            bool ordered = statement.Order is not null && (statement.Order.Expressions.Count > 0);
+
+            StringBuilder sql = new();
+
+            if (ordered)
+            {
+                DeclareTableVariable(in statement, in sql);
+            }
+
+            sql.AppendLine("WITH source AS (");
+
+            sql.Append(select.Sql).Append(')').AppendLine();
 
             statement.Input = select.Input;
             statement.Output = select.GetIntoClause();
 
-            //TODO: DELETE queue OUTPUT ... INTO @tableVariable;
-            //TODO: SELECT * @tableVariable ORDER BY ...
+            if (ordered)
+            {
+                sql.AppendLine("DELETE source OUTPUT DELETED.* INTO @output;");
+
+                sql.Append("SELECT * FROM @output ");
+
+                OrderOutputTable(in statement, in sql);
+
+                sql.Append(';');
+            }
+            else
+            {
+                sql.Append("DELETE source OUTPUT DELETED.*;");
+            }
 
             statement.Sql = sql.ToString();
         }
-        private SelectStatement TransformConsumeToSelect(in ConsumeStatement consume)
+        private static string ToSqlDataType(DataType type)
+        {
+            if (type.IsBoolean)
+            {
+                return "binary(1)";
+            }
+            
+            if (type.IsDecimal)
+            {
+                return string.Format("numeric({0},{1})", type.Precision, type.Scale);
+            }
+            
+            if (type.IsInteger)
+            {
+                if (type.Size == 4)
+                {
+                    return "int";
+                }
+                else
+                {
+                    return "bigint";
+                }
+            }
+
+            if (type.IsDateTime)
+            {
+                return "datetime2";
+            }
+
+            if (type.IsString)
+            {
+                if (type.Size == 0)
+                {
+                    return "nvarchar(max)";
+                }
+                else
+                {
+                    return string.Format("nvarchar({0})", type.Size);
+                }
+            }
+            
+            if (type.IsBinary)
+            {
+                if (type.Size == 0)
+                {
+                    return "varbinary(max)";
+                }
+                else
+                {
+                    return string.Format("binary({0})", type.Size);
+                }
+            }
+            
+            if (type.IsUuid)
+            {
+                return "binary(16)";
+            }
+
+            if (type.IsEntity)
+            {
+                return "binary(16)";
+            }
+
+            throw new InvalidOperationException();
+        }
+        private static SelectStatement TransformConsumeToSelect(in ConsumeStatement consume)
         {
             SelectStatement select = new()
             {
@@ -87,13 +173,170 @@ namespace DaJet.Scripting
                     Columns = consume.Columns
                 }
             };
-
-            if (consume.From.Expression is TableReference table)
+            
+            if (consume.From.TryGetTable(out TableReference table))
             {
                 table.Hints = "WITH (ROWLOCK" + (consume.StrictOrderRequired ? ")" : ", READPAST)");
             }
             
             return select;
+        }
+        private static void DeclareTableVariable(in ConsumeStatement statement, in StringBuilder sql)
+        {
+            sql.Append("DECLARE @output TABLE (");
+            
+            ColumnExpression column;
+            List<ColumnExpression> columns = statement.Columns;
+
+            int count = columns.Count;
+
+            for (int i = 0; i < count; i++)
+            {
+                column = columns[i];
+
+                if (i > 0) { sql.Append(',').Append(' '); }
+
+                DeclareTableColumn(in column, in sql);
+            }
+
+            sql.Append(')').Append(';').AppendLine();
+        }
+        private static void DeclareTableColumn(in ColumnExpression node, in StringBuilder sql)
+        {
+            string alias = node.Alias;
+
+            DataType type = node.InferType();
+
+            if (node.Expression is ColumnReference column)
+            {
+                if (column.Binding is PropertyDefinition property)
+                {
+                    DeclareTableColumn(in alias, in property, in sql);
+                }
+                else if (column.Binding is ColumnExpression derived)
+                {
+                    if (derived.Source is null) // Константа, параметр, функция или выражение
+                    {
+                        sql.Append(node.Alias).Append(' ').Append(ToSqlDataType(type));
+                    }
+                    else
+                    {
+                        DeclareTableColumn(in alias, derived.Source, in sql);
+                    }
+                }
+                else if (column.Binding is Entity) // enumeration
+                {
+                    sql.Append(node.Alias).Append(' ').Append(ToSqlDataType(type));
+                }
+            }
+            else // Константа, параметр, функция или выражение
+            {
+                sql.Append(node.Alias).Append(' ').Append(ToSqlDataType(type));
+            }
+        }
+        private static void DeclareTableColumn(in string name, in PropertyDefinition property, in StringBuilder sql)
+        {
+            ColumnDefinition column;
+
+            for (int i = 0; i < property.Columns.Count; i++)
+            {
+                column = property.Columns[i];
+
+                if (i > 0) { sql.Append(", "); }
+
+                string alias = string.IsNullOrEmpty(name) ? property.Name : name;
+
+                if (property.Columns.Count == 1) // single column
+                {
+                    sql.Append(alias);
+                }
+                else // multiple columns
+                {
+                    sql.Append(alias).Append('_').Append(column.Purpose.GetSuffix());
+                }
+
+                sql.Append(' ').Append(ToSqlDataType(column.Type));
+            }
+        }
+        private static void OrderOutputTable(in ConsumeStatement statement, in StringBuilder sql)
+        {
+            if (statement.Order is not OrderClause clause)
+            {
+                return;
+            }
+
+            sql.Append("ORDER BY ");
+
+            OrderExpression order;
+            List<OrderExpression> expressions = clause.Expressions;
+
+            for (int i = 0; i < expressions.Count; i++)
+            {
+                order = expressions[i];
+
+                if (i > 0) { sql.Append(", "); }
+
+                if (order.Expression is ColumnReference column)
+                {
+                    string identifier = column.ColumnName;
+
+                    if (column.Binding is PropertyDefinition property)
+                    {
+                        OrderOutputColumn(in identifier, order.Token, in property, in sql);
+                    }
+                    else if (column.Binding is ColumnExpression derived)
+                    {
+                        if (derived.Source is not null)
+                        {
+                            OrderOutputColumn(in identifier, order.Token, derived.Source, in sql);
+                        }
+                        else // Константа, параметр, функция или выражение
+                        {
+                            // ??? sql.Append(node.Alias);
+                        }
+                    }
+                    else if (column.Binding is Entity) // enumeration
+                    {
+                        // ???
+                    }
+
+
+                }
+                else // Константа, параметр, функция или выражение
+                {
+                    // ??? sql.Append(node.Alias);
+                }
+            }
+        }
+        private static void OrderOutputColumn(in string identifier, Token order, in PropertyDefinition binding, in StringBuilder sql)
+        {
+            ColumnDefinition column;
+            List<ColumnDefinition> columns = binding.Columns;
+
+            for (int i = 0; i < columns.Count; i++)
+            {
+                column = columns[i];
+
+                if (i > 0) { sql.Append(", "); }
+
+                if (binding.Columns.Count == 1) // single column
+                {
+                    sql.Append(identifier);
+                }
+                else // multiple columns
+                {
+                    sql.Append(identifier).Append('_').Append(column.Purpose.GetSuffix());
+                }
+
+                if (order == Token.ASC)
+                {
+                    sql.Append(" ASC");
+                }
+                else
+                {
+                    sql.Append(" DESC");
+                }
+            }
         }
     }
 }
