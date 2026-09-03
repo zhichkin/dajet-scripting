@@ -3486,9 +3486,24 @@ namespace DaJet.Scripting
                 {
                     foreach (OrderExpression order in expressions)
                     {
-                        if (order.Expression is not ColumnReference)
+                        if (order.Expression is not ColumnReference orderColumn)
                         {
                             throw new FormatException($"[CONSUME] ORDER clause must reference table columns: functions and expressions are not allowed.");
+                        }
+
+                        bool success = false;
+
+                        foreach (ColumnExpression column in consume.Columns)
+                        {
+                            if (column.Expression is ColumnReference outputColumn && outputColumn.Identifier == orderColumn.Identifier)
+                            {
+                                success = true; break;
+                            }
+                        }
+
+                        if (!success)
+                        {
+                            throw new FormatException($"[CONSUME] CONSUME clause must include ORDER column \"{orderColumn.Identifier}\".");
                         }
                     }
                 }
