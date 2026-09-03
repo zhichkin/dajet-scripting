@@ -1,15 +1,22 @@
 
+DECLARE @Получатель string = 'PG'
+
 PRIVATE @Счётчик integer
 PRIVATE @Сообщение object
 
-USE 'MS_TEST'
+WHILE TRUE
+
+SET @Счётчик = 0
+
+USE TRANSACTION 'MS_TEST'
 
    CONSUME TOP 10 НомерСообщения
          , Отправитель, Получатель
          , ТипСообщения, ТелоСообщения
       INTO @Сообщение
       FROM РегистрСведений.ИсходящаяОчередь
-     ORDER BY НомерСообщения ASC
+     WHERE Получатель = @Получатель
+     --ORDER BY НомерСообщения DESC
 
    USE 'PG_TEST'
       INSERT РегистрСведений.ВходящаяОчередь
@@ -22,6 +29,10 @@ USE 'MS_TEST'
 
    SET @Счётчик = @Счётчик + 1
 END
+
+IF @Счётчик = 0 THEN BREAK END
+
+END -- WHILE
 
 PRINT '[CONSUME] MS_TEST > PG_TEST = ' + @Счётчик
 

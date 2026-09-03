@@ -1,6 +1,5 @@
 ﻿using DaJet.Scripting.Model;
 using DaJet.TypeSystem;
-using System.Linq.Expressions;
 
 namespace DaJet.Scripting
 {
@@ -3400,17 +3399,22 @@ namespace DaJet.Scripting
 
             if (Match(Token.String)) //NOTE: stream processor URI
             {
-                return consume_stream_statement(in consume);
+                //TODO: return consume_stream_statement(in consume);
+
+                throw new NotImplementedException("[CONSUME] RabbitMQ and Apache Kafka brokers are not supported yet.");
             }
             else
             {
                 consume.Top = top_clause(); // database queue table consumer
             }
-            
+
+            if (consume.Top is null)
+            {
+                throw new FormatException("[CONSUME] TOP keyword expected.");
+            }
+
             Skip(Token.Comment);
-
-            if (consume.Top is null) { throw new FormatException("[CONSUME] TOP keyword expected."); }
-
+            
             if (Match(Token.WITH))
             {
                 if (Match(Token.STRICT))
@@ -3441,16 +3445,37 @@ namespace DaJet.Scripting
             if (Match(Token.ORDER)) { consume.Order = order_clause(); }
             Skip(Token.Comment);
 
-            if (consume.From.TryGetTable(out TableReference table))
+            if (consume.Into is not IntoClause into)
             {
-                if (table.Identifier.StartsWith('@'))
-                {
-                    throw new FormatException($"[CONSUME] {table.Identifier}: table variable targeting is not allowed.");
-                }
+                throw new FormatException($"[CONSUME] INTO keyword expected.");
             }
-            else
+
+            if (into.Value is null)
             {
-                throw new FormatException($"[CONSUME] FROM clause must reference database table.");
+                throw new FormatException($"[CONSUME] INTO clause must reference variable.");
+            }
+
+            DeclareStatement declare = _script.GetVariableByName(into.Value.Identifier);
+
+            if (declare is null)
+            {
+                throw new FormatException($"[CONSUME] INTO clause variable is not declared.");
+            }
+            else if (!(declare.Type.IsArray || declare.Type.IsObject))
+            {
+                throw new FormatException($"[CONSUME] INTO clause variable must be of type object or array.");
+            }
+
+            if (!declare.Type.IsArray)
+            {
+                consume.IsStream = true;
+            }
+
+            SyntaxNode source = consume.From?.Expression;
+
+            if (source is not TableReference)
+            {
+                throw new FormatException($"[CONSUME] FROM clause must reference database table: table expressions, temporary tables and JOIN operator are not allowed.");
             }
 
             if (consume.Order is not null)
@@ -3463,19 +3488,22 @@ namespace DaJet.Scripting
                     {
                         if (order.Expression is not ColumnReference)
                         {
-                            throw new FormatException($"[CONSUME] ORDER clause must reference table columns.");
+                            throw new FormatException($"[CONSUME] ORDER clause must reference table columns: functions and expressions are not allowed.");
                         }
                     }
                 }
             }
 
-            if (Check(Token.END))
+            if (consume.IsStream)
             {
-                throw new FormatException("[CONSUME] statement block is empty");
+                if (Check(Token.END))
+                {
+                    throw new FormatException("[CONSUME] statement block is empty");
+                }
+
+                consume.Statements = statement_block(Token.END);
             }
-
-            consume.Statements = statement_block(Token.END);
-
+            
             return consume;
         }
         private SyntaxNode consume_stream_statement(in ConsumeStatement consume)

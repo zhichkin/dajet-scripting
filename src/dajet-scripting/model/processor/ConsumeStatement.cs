@@ -10,7 +10,8 @@
         public OrderClause Order { get; set; }
         public bool StrictOrderRequired { get; set; } // do not use hints (ms) READPAST or (pg) SKIP LOCKED
         public IntoClause Into { get; set; }
-        public StatementBlock Statements { get; set; } // statement's data processor
+        public bool IsStream { get; set; } // streaming consume
+        public StatementBlock Statements { get; set; } // stream data processor
 
         // CONSUME <uri> WITH <options> INTO <variable> ... RabbitMQ and Apache Kafka
         public string Target { get; set; } // uri template string

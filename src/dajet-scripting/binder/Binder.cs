@@ -476,7 +476,7 @@ namespace DaJet.Scripting
             int count = columns.Count;
             Dictionary<string, ColumnExpression> aliases = new(count);
 
-            bool ignoreAlias = node.Into is not null && node.IsIntoScalar(); // SELECT COUNT(*) INTO @integer
+            bool ignoreAlias = node.Into is null || node.IsIntoScalar(); // SELECT COUNT(*) INTO @integer
 
             for (int i = 0; i < count; i++)
             {

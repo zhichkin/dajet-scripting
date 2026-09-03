@@ -30,10 +30,22 @@
     <None Update="scripts\change-tracking\table-not-found.djs">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <None Update="scripts\consume\ms-consume-change-tracking.djs">
+    <None Update="scripts\consume\ms\change-tracking.djs">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <None Update="scripts\consume\consume-ms-pg.djs">
+    <None Update="scripts\consume\ms\longrunning-stream.djs">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Update="scripts\consume\ms\simple-stream.djs">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Update="scripts\consume\ms\simple-batch.djs">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Update="scripts\consume\ms\queue-table-stream.djs">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Update="scripts\consume\ms\queue-table-batch.djs">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
     <None Update="scripts\consume\consume-pg-ms.djs">

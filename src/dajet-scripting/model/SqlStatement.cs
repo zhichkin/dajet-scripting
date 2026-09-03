@@ -185,10 +185,14 @@ namespace DaJet.Scripting.Model
             }
             else if (node is ConsumeStatement consume)
             {
-                return consume.Columns;
+                return GetColumnExpressions(in consume);
             }
 
             return null;
+        }
+        private static List<ColumnExpression> GetColumnExpressions(in ConsumeStatement node)
+        {
+            return node.Columns;
         }
         private static List<ColumnExpression> GetColumnExpressions(in SelectStatement node)
         {

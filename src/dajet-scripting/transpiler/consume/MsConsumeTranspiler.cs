@@ -2,15 +2,17 @@
 using DaJet.Scripting.Model;
 using DaJet.TypeSystem;
 using System.Text;
-using System.Xml.Linq;
 
 namespace DaJet.Scripting
 {
     public sealed class MsConsumeTranspiler : SqlTranspiler
     {
-        private static readonly BooleanClauseTransformer _transformer = new();
         private MetadataProvider _provider;
         private ConsumeStatement _statement;
+        public override void Visit(in SyntaxNode expression, in StringBuilder script)
+        {
+            throw new NotImplementedException();
+        }
         public override bool TryTranspile(in SyntaxNode node, in MetadataProvider provider, out string error)
         {
             error = null;
@@ -48,10 +50,6 @@ namespace DaJet.Scripting
 
             return error is null;
         }
-        public override void Visit(in SyntaxNode expression, in StringBuilder script)
-        {
-            throw new NotImplementedException();
-        }
         private void Transpile(in ConsumeStatement statement)
         {
             SelectStatement select = TransformConsumeToSelect(in statement);
@@ -67,19 +65,19 @@ namespace DaJet.Scripting
 
             if (ordered)
             {
-                DeclareTableVariable(in statement, in sql);
+                DeclareTableVariable(in statement, in sql); sql.AppendLine();
             }
 
             sql.AppendLine("WITH source AS (");
 
-            sql.Append(select.Sql).Append(')').AppendLine();
+            sql.Append(select.Sql).AppendLine().Append(')').AppendLine();
 
             statement.Input = select.Input;
             statement.Output = select.GetIntoClause();
 
             if (ordered)
             {
-                sql.AppendLine("DELETE source OUTPUT DELETED.* INTO @output;");
+                sql.AppendLine("DELETE source OUTPUT DELETED.* INTO @output;").AppendLine();
 
                 sql.Append("SELECT * FROM @output ");
 
@@ -96,68 +94,16 @@ namespace DaJet.Scripting
         }
         private static string ToSqlDataType(DataType type)
         {
-            if (type.IsBoolean)
-            {
-                return "binary(1)";
-            }
-            
-            if (type.IsDecimal)
-            {
-                return string.Format("numeric({0},{1})", type.Precision, type.Scale);
-            }
-            
-            if (type.IsInteger)
-            {
-                if (type.Size == 4)
-                {
-                    return "int";
-                }
-                else
-                {
-                    return "bigint";
-                }
-            }
+            if (type.IsBoolean) { return "binary(1)"; }
+            else if (type.IsDecimal) { return string.Format("numeric({0},{1})", type.Precision, type.Scale); }
+            else if (type.IsDateTime) { return "datetime2"; }
+            else if (type.IsString) { return (type.Size == 0) ? "nvarchar(max)" : string.Format("nvarchar({0})", type.Size); }
+            else if (type.IsBinary) { return (type.Size == 0) ? "varbinary(max)" : string.Format("binary({0})", type.Size); }
+            else if (type.IsUuid) { return "binary(16)"; }
+            else if (type.IsEntity) { return "binary(16)"; }
+            else if (type.IsInteger) { return (type.Size == 4) ? "int" : "bigint"; }
 
-            if (type.IsDateTime)
-            {
-                return "datetime2";
-            }
-
-            if (type.IsString)
-            {
-                if (type.Size == 0)
-                {
-                    return "nvarchar(max)";
-                }
-                else
-                {
-                    return string.Format("nvarchar({0})", type.Size);
-                }
-            }
-            
-            if (type.IsBinary)
-            {
-                if (type.Size == 0)
-                {
-                    return "varbinary(max)";
-                }
-                else
-                {
-                    return string.Format("binary({0})", type.Size);
-                }
-            }
-            
-            if (type.IsUuid)
-            {
-                return "binary(16)";
-            }
-
-            if (type.IsEntity)
-            {
-                return "binary(16)";
-            }
-
-            throw new InvalidOperationException();
+            throw new InvalidOperationException("Failed to map DaJet data type to SQL data type.");
         }
         private static SelectStatement TransformConsumeToSelect(in ConsumeStatement consume)
         {

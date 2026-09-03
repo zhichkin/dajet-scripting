@@ -5,6 +5,7 @@ using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.Unicode;
+using System.Timers;
 
 namespace DaJet.Host
 {
@@ -37,7 +38,8 @@ namespace DaJet.Host
         private static readonly string PG_UNF = "Host=127.0.0.1;Port=5432;Database=unf;Username=postgres;Password=postgres;";
         private static readonly string MS_TEST = "Data Source=Z-NOTEBOOK;Initial Catalog=test;Integrated Security=True;Encrypt=False;";
         private static readonly string PG_TEST = "Host=localhost;Port=5432;Database=test;Username=postgres;Password=postgres;";
-
+        private static DaJetHost _host;
+        private static System.Timers.Timer _heartbeat;
         private static readonly JsonSerializerOptions JsonOptions = new()
         {
             WriteIndented = true,
@@ -56,6 +58,7 @@ namespace DaJet.Host
             MetadataProvider.Add("MS_TEST", DataSourceType.SqlServer, in MS_TEST);
             MetadataProvider.Add("PG_TEST", DataSourceType.PostgreSql, in PG_TEST);
 
+            //_host = DaJetHost.Create("scripts").Run(); Heartbeat();
             DaJetHost host = DaJetHost.Create("scripts").Run();
             //DaJetHost host = DaJetHost.Create("scripts").ReadOnly().Run();
 
@@ -64,7 +67,9 @@ namespace DaJet.Host
             //parameters.SetValue("Получатель",  "MS_TEST");
             //_ = host.RunAsync("exchange/stream-pg-ms.djs", in parameters).ContinueWith(ShowAsyncResult);
 
-            _ = host.RunAsync("consume/ms-consume-change-tracking.djs").ContinueWith(ShowAsyncResult);
+            _ = host.RunAsync("consume/ms/longrunning-stream.djs").ContinueWith(ShowAsyncResult);
+            //_ = host.RunAsync("consume/ms/queue-table-stream.djs").ContinueWith(ShowAsyncResult);
+            //_ = host.RunAsync("consume/ms/change-tracking.djs").ContinueWith(ShowAsyncResult);
 
             Console.WriteLine("Press any key to continue ..."); _ = Console.ReadKey(true);
         }
@@ -95,6 +100,30 @@ namespace DaJet.Host
                 Exception error = task.Exception.Flatten().InnerException;
 
                 Console.WriteLine($"Task [{task.Id}] is faulted: {error.Message}");
+            }
+        }
+        private static void Heartbeat()
+        {
+            System.Timers.Timer timer = new();
+
+            if (Interlocked.CompareExchange(ref _heartbeat, timer, null) is not null)
+            {
+                timer.Dispose();
+            }
+            else
+            {
+                _heartbeat.AutoReset = true;
+                _heartbeat.Elapsed += ShowRunningTasks;
+                _heartbeat.Interval = TimeSpan.FromSeconds(1).TotalMilliseconds;
+            }
+
+            _heartbeat.Start();
+        }
+        private static void ShowRunningTasks(object sender, ElapsedEventArgs args)
+        {
+            foreach (RunningTaskStatus status in _host.GetRunningTasks())
+            {
+                Console.WriteLine(status.ToString());
             }
         }
     }

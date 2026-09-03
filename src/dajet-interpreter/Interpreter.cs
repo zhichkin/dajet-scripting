@@ -506,6 +506,39 @@ namespace DaJet.Scripting
 
             return code;
         }
+        private ExitCode Execute(in ConsumeStatement statement)
+        {
+            DataSourceScope use = GetDataSource();
+
+            if (!_processors.TryGetValue(statement, out ProcessorBase processor))
+            {
+                if (use.Type == DataSourceType.SqlServer)
+                {
+                    processor = new MsConsumeProcessor(this, in statement);
+                }
+                else
+                {
+                    //TODO: processor = new PgSelectProcessor(this, in statement);
+
+                    throw new NotImplementedException("[CONSUME] PostgreSQL is not supported yet.");
+                }
+
+                _processors.Add(statement, processor);
+            }
+
+            ExitCode code = ExitCode.Success;
+
+            try
+            {
+                code = processor.Process();
+            }
+            finally
+            {
+                processor.Dispose();
+            }
+
+            return code;
+        }
         private ExitCode Execute(in InsertStatement statement)
         {
             DataSourceScope use = GetDataSource();
@@ -539,7 +572,6 @@ namespace DaJet.Scripting
         }
         private ExitCode Execute(in UpdateStatement statement) { throw new NotImplementedException("Statement is not implemented: UPDATE"); }
         private ExitCode Execute(in DeleteStatement statement) { throw new NotImplementedException("Statement is not implemented: DELETE"); }
-        private ExitCode Execute(in ConsumeStatement statement) { throw new NotImplementedException("Statement is not implemented: CONSUME"); }
         private ExitCode Execute(in SqlStatement statement)
         {
             DataSourceScope use = GetDataSource();
