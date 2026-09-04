@@ -29,8 +29,6 @@ namespace DaJet.Scripting
             }
 
             Visit(node.Expression, in script);
-
-            script.Append(';');
         }
         protected override void Visit(in SelectExpression node, in StringBuilder script)
         {
@@ -57,6 +55,11 @@ namespace DaJet.Scripting
             if (node.Having is not null) { Visit(node.Having, in script); }
             if (node.Order is not null) { Visit(node.Order, in script); }
             if (node.Top is not null) { Visit(node.Top, in script); }
+
+            if (!string.IsNullOrEmpty(node.Options))
+            {
+                script.AppendLine().Append(node.Options).AppendLine();
+            }
         }
         protected override void Visit(in TopClause node, in StringBuilder script)
         {

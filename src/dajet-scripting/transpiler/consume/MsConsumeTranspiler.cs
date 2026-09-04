@@ -97,7 +97,7 @@ namespace DaJet.Scripting
             if (type.IsBoolean) { return "binary(1)"; }
             else if (type.IsDecimal) { return string.Format("numeric({0},{1})", type.Precision, type.Scale); }
             else if (type.IsDateTime) { return "datetime2"; }
-            else if (type.IsString) { return (type.Size == 0) ? "nvarchar(max)" : string.Format("nvarchar({0})", type.Size); }
+            else if (type.IsString) { return (type.Size == 0) ? "nvarchar(max)" : string.Format("{0}({1})", (type.IsFixed) ? "nchar" : "nvarchar", type.Size); }
             else if (type.IsBinary) { return (type.Size == 0) ? "varbinary(max)" : string.Format("binary({0})", type.Size); }
             else if (type.IsUuid) { return "binary(16)"; }
             else if (type.IsEntity) { return "binary(16)"; }
@@ -120,7 +120,7 @@ namespace DaJet.Scripting
                 }
             };
             
-            if (consume.From.TryGetTable(out TableReference table))
+            if (consume.From.Expression is TableReference table)
             {
                 table.Hints = "WITH (ROWLOCK" + (consume.StrictOrderRequired ? ")" : ", READPAST)");
             }

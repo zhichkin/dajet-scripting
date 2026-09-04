@@ -518,9 +518,7 @@ namespace DaJet.Scripting
                 }
                 else
                 {
-                    //TODO: processor = new PgSelectProcessor(this, in statement);
-
-                    throw new NotImplementedException("[CONSUME] PostgreSQL is not supported yet.");
+                    processor = new PgConsumeProcessor(this, in statement);
                 }
 
                 _processors.Add(statement, processor);

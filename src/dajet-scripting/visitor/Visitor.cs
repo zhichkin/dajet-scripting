@@ -1,8 +1,6 @@
 ﻿using DaJet.Scripting.Model;
 using System.Collections;
 using System.Reflection;
-using System.Text.Json.Serialization;
-using System.Xml.Linq;
 
 namespace DaJet.Scripting
 {
@@ -14,15 +12,27 @@ namespace DaJet.Scripting
     }
     public static class Visitor
     {
+        private static HashSet<SyntaxNode> _visited;
         public static void Visit(in SyntaxNode node, in IScriptVisitor visitor)
         {
             ArgumentNullException.ThrowIfNull(node);
             ArgumentNullException.ThrowIfNull(visitor);
 
+            _visited = new HashSet<SyntaxNode>();
+            
             VisitNode(in node, in visitor);
+
+            _visited = null;
         }
         private static void VisitNode(in SyntaxNode node, in IScriptVisitor visitor)
         {
+            if (_visited.Contains(node))
+            {
+                return;
+            }
+
+            _visited.Add(node);
+
             visitor.SayHello(in node);
 
             VisitChildren(in node, in visitor);
@@ -37,11 +47,6 @@ namespace DaJet.Scripting
             {
                 Type propertyType = property.PropertyType;
 
-                if (property.GetCustomAttribute<JsonIgnoreAttribute>() is not null)
-                {
-                    continue;
-                }
-
                 object value = property.GetValue(parent);
 
                 if (value is null)
@@ -49,18 +54,20 @@ namespace DaJet.Scripting
                     continue;
                 }
 
-                if (value is StatementBlock statements)
-                {
-                    visitor.SayHello(statements);
+                //if (value is StatementBlock statements)
+                //{
+                //    visitor.SayHello(statements);
 
-                    for (int i = 0; i < statements.Count; i++)
-                    {
-                        VisitNode(statements[i], in visitor);
-                    }
+                //    for (int i = 0; i < statements.Count; i++)
+                //    {
+                //        VisitNode(statements[i], in visitor);
+                //    }
 
-                    visitor.SayGoodbye(statements);
-                }
-                else if (propertyType.IsSyntaxNode())
+                //    visitor.SayGoodbye(statements);
+                //}
+                //else
+                
+                if (propertyType.IsSyntaxNode())
                 {
                     VisitNode((value as SyntaxNode), in visitor);
                 }

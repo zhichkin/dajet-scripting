@@ -67,7 +67,7 @@ namespace DaJet.Host
             //parameters.SetValue("Получатель",  "MS_TEST");
             //_ = host.RunAsync("exchange/stream-pg-ms.djs", in parameters).ContinueWith(ShowAsyncResult);
 
-            _ = host.RunAsync("consume/ms/simple-stream.djs").ContinueWith(ShowAsyncResult);
+            _ = host.RunAsync("consume/pg/change-tracking.djs").ContinueWith(ShowAsyncResult);
             //_ = host.RunAsync("consume/ms/longrunning-stream.djs").ContinueWith(ShowAsyncResult);
             //_ = host.RunAsync("consume/ms/queue-table-stream.djs").ContinueWith(ShowAsyncResult);
             //_ = host.RunAsync("consume/ms/change-tracking.djs").ContinueWith(ShowAsyncResult);

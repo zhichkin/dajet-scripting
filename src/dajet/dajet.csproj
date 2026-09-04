@@ -51,6 +51,12 @@
     <None Update="scripts\consume\consume-pg-ms.djs">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
+    <None Update="scripts\consume\pg\change-tracking.djs">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Update="scripts\consume\pg\simple-batch.djs">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
     <None Update="scripts\datetime\example.djs">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
