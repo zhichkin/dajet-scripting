@@ -163,6 +163,7 @@ static void Main()
 
   Heartbeat(); // Периодически мониторим состояние долгих скриптов
 
+  // Этот запуск упадёт с ошибкой, так как этот скрипт запускается при старте хоста как singleton
   _ = host.RunAsync("long-task-test.djs").ContinueWith(ShowAsyncResult);
 
   Console.WriteLine("Press any key to exit the program ...");
