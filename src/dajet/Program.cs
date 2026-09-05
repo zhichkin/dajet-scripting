@@ -58,8 +58,8 @@ namespace DaJet.Host
             MetadataProvider.Add("MS_TEST", DataSourceType.SqlServer, in MS_TEST);
             MetadataProvider.Add("PG_TEST", DataSourceType.PostgreSql, in PG_TEST);
 
-            //_host = DaJetHost.Create("scripts").Run(); Heartbeat();
-            DaJetHost host = DaJetHost.Create("scripts").Run();
+            _host = DaJetHost.Create("scripts").Run(); Heartbeat();
+            //DaJetHost host = DaJetHost.Create("scripts").Run();
             //DaJetHost host = DaJetHost.Create("scripts").ReadOnly().Run();
 
             //DataObject parameters = new();
@@ -67,10 +67,7 @@ namespace DaJet.Host
             //parameters.SetValue("Получатель",  "MS_TEST");
             //_ = host.RunAsync("exchange/stream-pg-ms.djs", in parameters).ContinueWith(ShowAsyncResult);
 
-            _ = host.RunAsync("consume/pg/change-tracking.djs").ContinueWith(ShowAsyncResult);
-            //_ = host.RunAsync("consume/ms/longrunning-stream.djs").ContinueWith(ShowAsyncResult);
-            //_ = host.RunAsync("consume/ms/queue-table-stream.djs").ContinueWith(ShowAsyncResult);
-            //_ = host.RunAsync("consume/ms/change-tracking.djs").ContinueWith(ShowAsyncResult);
+            _ = _host.RunAsync("flow_control/while.djs").ContinueWith(ShowAsyncResult);
 
             Console.WriteLine("Press any key to continue ..."); _ = Console.ReadKey(true);
         }
