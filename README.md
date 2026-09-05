@@ -164,7 +164,7 @@ static void Main()
 
   _ = host.RunAsync("long-task-test.djs").ContinueWith(ShowAsyncResult);
 
-  Console.WriteLine("Press any key to exit ...");
+  Console.WriteLine("Press any key to exit the program ...");
 
   _ = Console.ReadKey(true);
 }
@@ -231,7 +231,7 @@ private static void ShowRunningTasks(object sender, ElapsedEventArgs args)
 ```text
 [LONG TASK TEST] START
 LOOP: 1
-Press any key to continue ...
+Press any key to exit the program ...
 Task [32] is faulted: Duplicate singleton run: [long-task-test.djs] {LONG TASK TEST}
 [28] {Running} long-task-test.djs "LONG TASK TEST"
 LOOP: 2
