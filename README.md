@@ -108,7 +108,33 @@ static void Main()
 
 ### Пример использования хоста DaJet Script 2.0
 
-Предполагается, что в корневом каталоге установки хоста DaJet имеется каталог публикации скриптов ```scripts```, в котором уже опубликован скрипт ```test.djs```.
+Предполагается, что в корневом каталоге установки хоста DaJet имеется каталог публикации скриптов ```scripts```, в котором уже опубликован скрипт ```long-task-test.djs```. Ниже следующий скрипт демонстрирует в том числе использование специальных директив выполнения скрипта. Скрипт запускается при старте хоста DaJet, является долгим (выделяется отдельный поток операционной системы), а также в каждый момент времени выполняется единственный экземпляр этого скрипта.
+
+**Код скрипта DaJet ```long-task-test.djs```**
+
+```SQL
+# STARTUP                    -- Запуск скрипта при старте хоста DaJet
+# LONG_TASK                  -- Долгий скрипт (отдельный поток выполнения)
+# SINGLETON 'LONG TASK TEST' -- Директива контроля единственного выполнения
+
+PRIVATE @Счётчик integer
+
+PRINT '[LONG TASK TEST] START'
+
+WHILE @Счётчик < 10
+
+  SET @Счётчик = @Счётчик + 1
+
+  IF @Счётчик = 5 THEN BREAK END
+
+  PRINT 'LOOP: ' + @Счётчик
+
+  SLEEP 3
+
+END
+
+PRINT '[LONG TASK TEST] END'
+```
 
 ```csharp
 private static readonly JsonSerializerOptions JsonOptions = new()
@@ -136,7 +162,7 @@ static void Main()
 
   Heartbeat(); // Периодически мониторим состояние долгих скриптов
 
-  _ = host.RunAsync("test.djs").ContinueWith(ShowAsyncResult);
+  _ = host.RunAsync("long-task-test.djs").ContinueWith(ShowAsyncResult);
 
   Console.WriteLine("Press any key to exit ...");
 
@@ -185,7 +211,7 @@ private static void Heartbeat()
     {
         _heartbeat.AutoReset = true;
         _heartbeat.Elapsed += ShowRunningTasks;
-        _heartbeat.Interval = TimeSpan.FromSeconds(3).TotalMilliseconds;
+        _heartbeat.Interval = TimeSpan.FromSeconds(1).TotalMilliseconds;
     }
 
     _heartbeat.Start();
@@ -198,4 +224,27 @@ private static void ShowRunningTasks(object sender, ElapsedEventArgs args)
         Console.WriteLine(status.ToString());
     }
 }
+```
+
+**Результат выполнения программы (консольный вывод)**
+
+```text
+[LONG TASK TEST] START
+LOOP: 1
+Press any key to continue ...
+Task [32] is faulted: Duplicate singleton run: [long-task-test.djs] {LONG TASK TEST}
+[28] {Running} long-task-test.djs "LONG TASK TEST"
+LOOP: 2
+[28] {Running} long-task-test.djs "LONG TASK TEST"
+[28] {Running} long-task-test.djs "LONG TASK TEST"
+[28] {Running} long-task-test.djs "LONG TASK TEST"
+LOOP: 3
+[28] {Running} long-task-test.djs "LONG TASK TEST"
+[28] {Running} long-task-test.djs "LONG TASK TEST"
+[28] {Running} long-task-test.djs "LONG TASK TEST"
+LOOP: 4
+[28] {Running} long-task-test.djs "LONG TASK TEST"
+[28] {Running} long-task-test.djs "LONG TASK TEST"
+[28] {Running} long-task-test.djs "LONG TASK TEST"
+[LONG TASK TEST] END
 ```
