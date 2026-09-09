@@ -1095,8 +1095,24 @@ namespace DaJet.Scripting
                 Bind(node.CommonTables);
             }
 
-            if (node.Target is not null) { Bind(node.Target); }
             if (node.Source is not null) { Bind(node.Source); }
+            if (node.Target is not null) { Bind(node.Target); }
+
+            foreach (ColumnExpression mapping in node.Values)
+            {
+                Bind(in mapping);
+            }
+
+            if (node.Order is not null && node.Order.Expressions is not null)
+            {
+                foreach (OrderExpression order in node.Order.Expressions)
+                {
+                    if (order.Expression is ColumnReference column)
+                    {
+                        Bind(in column);
+                    }
+                }
+            }
 
             _scope = _scope.CloseScope();
         }

@@ -8,10 +8,13 @@ namespace DaJet.Scripting
     public sealed class InsertTranspiler : SqlTranspiler
     {
         private MetadataProvider _provider;
-        private SelectExpression _source;
         private EntityDefinition _target;
         private InsertStatement _statement;
         private int _parameterOrdinal;
+        public override void Visit(in SyntaxNode statement, in StringBuilder script)
+        {
+            throw new NotImplementedException();
+        }
         public override bool TryTranspile(in SyntaxNode statement, in MetadataProvider provider, out string error)
         {
             error = null;
@@ -23,17 +26,16 @@ namespace DaJet.Scripting
                 throw new InvalidOperationException();
             }
 
-            if (insert.Source is not SelectExpression source)
-            {
-                throw new InvalidOperationException();
-            }
-
             if (insert.Target is not TableReference table || table.Binding is not EntityDefinition target)
             {
                 throw new InvalidOperationException();
             }
-            
-            _source = source;
+
+            if (insert.Source is not null)
+            {
+                throw new InvalidOperationException("BULK INSERT is not implemented yet");
+            }
+
             _target = target;
             _provider = provider;
             _statement = insert;
@@ -53,18 +55,13 @@ namespace DaJet.Scripting
             {
                 error = ExceptionHelper.GetErrorMessage(exception);
             }
-
-            _source = null;
+            
             _target = null;
             _provider = null;
             _statement = null;
             _parameterOrdinal = 0;
 
             return error is null;
-        }
-        public override void Visit(in SyntaxNode statement, in StringBuilder script)
-        {
-            throw new NotImplementedException();
         }
         private void Transpile(in InsertStatement statement)
         {
@@ -84,7 +81,7 @@ namespace DaJet.Scripting
             {
                 property = properties[p];
 
-                if (_source.TryGetColumn(property.Name, out ColumnExpression map))
+                if (statement.TryGetMapping(property.Name, out ColumnExpression map))
                 {
                     if (_statement.Dialect == Data.DataSourceType.PostgreSql)
                     {

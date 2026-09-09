@@ -2980,24 +2980,68 @@ namespace DaJet.Scripting
 
             if (Match(Token.INTO)) { /* do nothing - optional */ }
 
-            InsertStatement insert = new()
-            {
-                Target = table_identifier()
-            };
+            InsertStatement insert = new();
 
-            if (Match(Token.FROM))
+            if (!Match(Token.Identifier))
             {
-                insert.Source = table();
+                throw new FormatException("[INSERT] database table identifier expected.");
             }
-            else if (Check(Token.SELECT))
+
+            insert.Target = new TableReference() { Identifier = Previous().Value };
+
+            Skip(Token.Comment);
+
+            if (Match(Token.FROM)) // optional
             {
-                insert.Source = union();
-            }
-            else
-            {
-                throw new FormatException("INSERT: table source expression expected.");
+                if (!Match(Token.Variable) || variable() is not VariableReference source)
+                {
+                    throw new FormatException("[INSERT] FROM clause must reference variable.");
+                }
+
+                DeclareStatement declare = _script.GetVariableByName(source.Identifier);
+
+                if (declare is null)
+                {
+                    throw new FormatException($"[INSERT] FROM clause variable is not declared.");
+                }
+                else if (!(declare.Type.IsArray && declare.Type.IsObject)) // array of objects
+                {
+                    throw new FormatException($"[INSERT] FROM clause variable must be of type array.");
+                }
+
+                insert.Source = source; // bulk insert batch source
+
+                Skip(Token.Comment);
             }
             
+            if (!Match(Token.SELECT))
+            {
+                throw new FormatException("[INSERT] SELECT clause expected.");
+            }
+
+            parse_column_expressions(insert.Values);
+
+            if (insert.Source is not null) // bulk insert
+            {
+                if (Match(Token.ORDER)) // optional
+                {
+                    insert.Order = order_clause();
+
+                    foreach (OrderExpression order in insert.Order.Expressions)
+                    {
+                        if (order.Expression is not ColumnReference column)
+                        {
+                            throw new FormatException($"[INSERT] ORDER clause must reference table columns: functions and expressions are not allowed.");
+                        }
+
+                        if (!insert.TryGetMapping(column.Identifier, out _))
+                        {
+                            throw new FormatException($"[INSERT] SELECT clause must include ORDER column \"{column.Identifier}\".");
+                        }
+                    }
+                }
+            }
+
             return insert;
         }
         private SyntaxNode values()

@@ -42,11 +42,6 @@ namespace DaJet.Scripting
                 throw new InvalidOperationException();
             }
 
-            if (_statement.Source is not SelectExpression source)
-            {
-                throw new InvalidOperationException();
-            }
-
             _target = target;
 
             PrepareCommand();

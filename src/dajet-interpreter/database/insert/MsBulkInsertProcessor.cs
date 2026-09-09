@@ -7,7 +7,7 @@ using System.Data;
 
 namespace DaJet.Scripting
 {
-    public sealed class MsInsertProcessor : ProcessorBase
+    public sealed class MsBulkInsertProcessor : ProcessorBase
     {
         private readonly static byte[] TRUE = [0x01];
         private readonly static byte[] FALSE = [0x00];
@@ -27,7 +27,7 @@ namespace DaJet.Scripting
         private readonly int _yearOffset;
         private readonly byte[] _buffer = new byte[16];
         private readonly Dictionary<ColumnDefinition, SqlParameter> _parameters = new();
-        public MsInsertProcessor(in ScriptContext context, in InsertStatement statement)
+        public MsBulkInsertProcessor(in ScriptContext context, in InsertStatement statement)
         {
             if (context.GetDataSource() is not MsDataSourceScope)
             {
@@ -60,7 +60,7 @@ namespace DaJet.Scripting
             {
                 if (node is not ColumnExpression map)
                 {
-                    continue;
+                    continue; // default constant value (literal)
                 }
 
                 property = _target.GetPropertyByName(map.Alias);
@@ -372,5 +372,85 @@ namespace DaJet.Scripting
         {
             // do nothing
         }
+
+        private static DataTable CreateFileNamesTable(in string[] fileNames)
+        {
+            DataTable table = new();
+
+            DataColumn column = new()
+            {
+                ColumnName = "FileName",
+                DataType = typeof(string),
+                MaxLength = 128,
+                AllowDBNull = false
+            };
+
+            table.Columns.Add(column);
+
+            for (int i = 0; i < fileNames.Length; i++)
+            {
+                DataRow row = table.NewRow();
+
+                row[0] = fileNames[i];
+
+                table.Rows.Add(row);
+            }
+
+            return table;
+        }
+        
+        //internal override IEnumerable<ConfigFileBuffer> Stream(string tableName, string[] fileNames)
+        //{
+        //    using (SqlConnection connection = new(_connectionString))
+        //    {
+        //        connection.Open();
+
+        //        using (SqlCommand command = connection.CreateCommand())
+        //        {
+        //            command.CommandText = "CREATE TABLE #ConfigFileNames (FileName nvarchar(128) NOT NULL);";
+        //            command.CommandType = CommandType.Text;
+        //            command.CommandTimeout = 10; // seconds
+        //            command.ExecuteNonQuery();
+
+        //            using (SqlBulkCopy insert = new(connection))
+        //            {
+        //                insert.DestinationTableName = "#ConfigFileNames";
+        //                DataTable table = CreateFileNamesTable(in fileNames);
+        //                insert.WriteToServer(table);
+        //            }
+
+        //            command.CommandText = tableName == ConfigTables.Config
+        //                ? MS_CONFIG_STREAM_SCRIPT
+        //                : MS_CONFIG_CAS_STREAM_SCRIPT;
+
+        //            command.CommandType = CommandType.Text;
+        //            command.CommandTimeout = 60; // seconds
+
+        //            using (SqlDataReader reader = command.ExecuteReader())
+        //            {
+        //                while (reader.Read())
+        //                {
+        //                    using (ConfigFileBuffer buffer = new(reader))
+        //                    {
+        //                        yield return buffer;
+        //                    }
+        //                }
+        //                reader.Close();
+        //            }
+        //        }
+        //    }
+        //}
     }
 }
+
+//CREATE TABLE #test
+//(
+//   НомерСообщения int PRIMARY KEY,
+//   ТелоСообщения nvarchar(10)
+//);
+
+//INSERT #test WITH (TABLOCK) VALUES (1, N'test 1'), (2, N'test 2'), (3, N'test 3');
+
+//SELECT NEXT VALUE FOR so_import OVER (ORDER BY НомерСообщения), ТелоСообщения FROM #test;
+
+//DROP TABLE #test;
