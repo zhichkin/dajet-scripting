@@ -14,6 +14,7 @@ using DaJet.TypeSystem;
 using Microsoft.Data.SqlClient;
 using System.Buffers.Binary;
 using System.Data;
+using System.Xml.Linq;
 
 namespace DaJet.Scripting
 {
@@ -21,6 +22,27 @@ namespace DaJet.Scripting
     {
         private readonly static byte[] TRUE = [0x01];
         private readonly static byte[] FALSE = [0x00];
+        private readonly static byte[] EMPTY_TYPE_CODE = [0x00000000];
+        private readonly static byte[] EMPTY_UUID = [0x00000000000000000000000000000000];
+        private readonly static byte[] VALUE_STORAGE = [0x01, 0x01, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xEF, 0xBB, 0xBF, 0x7B, 0x22, 0x55, 0x22, 0x7D];
+
+        private readonly static byte[] TAG_UNDEFINED = [0x01];
+        private readonly static byte[] TAG_BOOLEAN = [0x02];
+        private readonly static byte[] TAG_DECIMAL = [0x03];
+        private readonly static byte[] TAG_DATETIME = [0x04];
+        private readonly static byte[] TAG_STRING = [0x05];
+        private readonly static byte[] TAG_ENTITY = [0x08];
+
+        public readonly static Func<object, object> ConvertTag = InputTag;
+        public readonly static Func<object, object> ConvertBoolean = InputBoolean;
+        public readonly static Func<object, object> ConvertNumeric = InputNumeric;
+        public readonly static Func<object, int, object> ConvertDateTime = InputDateTime;
+        public readonly static Func<object, object> ConvertString = InputString;
+        public readonly static Func<object, object> ConvertBinary = InputBinary;
+        public readonly static Func<object, object> ConvertUuid = InputUuid;
+        public readonly static Func<object, object> ConvertTypeCode = InputTypeCode;
+        public readonly static Func<object, object> ConvertIdentity = InputIdentity;
+        
         private readonly int _yearOffset;
         private readonly byte[] _buffer = new byte[16];
 
@@ -65,6 +87,114 @@ namespace DaJet.Scripting
         }
         public string CommandText { get { return _commandText; } }
         public EntityDefinition OutputSchema { get { return _outputSchema; } }
+
+        private static object InputTag(object value)
+        {
+            if (value is null) { return TAG_UNDEFINED; }
+            else if (value is bool) { return TAG_BOOLEAN; }
+            else if (value is decimal) { return TAG_DECIMAL; }
+            else if (value is DateTime) { return TAG_DATETIME; }
+            else if (value is string) { return TAG_STRING; }
+            else if (value is Entity) { return TAG_ENTITY; }
+
+            return TAG_UNDEFINED;
+        }
+        private static object InputBoolean(object value)
+        {
+            if (value is bool boolean)
+            {
+                return boolean ? TRUE : FALSE;
+            }
+
+            return FALSE;
+        }
+        private static object InputNumeric(object value)
+        {
+            if (value is decimal numeric)
+            {
+                return numeric;
+            }
+
+            return 0M;
+        }
+        private static object InputDateTime(object value, int yearOffset)
+        {
+            if (value is DateTime datetime)
+            {
+                return datetime.AddYears(yearOffset);
+            }
+
+            return DateTime.MinValue.AddYears(yearOffset);
+        }
+        private static object InputString(object value)
+        {
+            if (value is string text)
+            {
+                return text;
+            }
+
+            return string.Empty;
+        }
+        private static object InputBinary(object value)
+        {
+            if (value is bool boolean)
+            {
+                return boolean ? TRUE : FALSE;
+            }
+            else if (value is Entity entity)
+            {
+                return entity.Identity.ToByteArray();
+            }
+            else if (value is Guid uuid)
+            {
+                return uuid.ToByteArray();
+            }
+            else if (value is int integer)
+            {
+                Span<byte> buffer = stackalloc byte[4];
+
+                BinaryPrimitives.WriteInt32BigEndian(buffer, integer);
+
+                return buffer.ToArray();
+            }
+            else if (value is byte[] binary)
+            {
+                return binary;
+            }
+
+            return VALUE_STORAGE;
+        }
+        private static object InputUuid(object value)
+        {
+            if (value is Guid uuid)
+            {
+                return uuid.ToByteArray();
+            }
+
+            return EMPTY_UUID;
+        }
+        private static object InputTypeCode(object value)
+        {
+            if (value is Entity entity)
+            {
+                Span<byte> buffer = stackalloc byte[4];
+
+                BinaryPrimitives.WriteInt32BigEndian(buffer, entity.TypeCode);
+
+                return buffer.ToArray();
+            }
+
+            return EMPTY_TYPE_CODE;
+        }
+        private static object InputIdentity(object value)
+        {
+            if (value is Entity entity)
+            {
+                return entity.Identity.ToByteArray();
+            }
+
+            return EMPTY_UUID;
+        }
 
         public void ProcessInput(in SqlCommand command)
         {

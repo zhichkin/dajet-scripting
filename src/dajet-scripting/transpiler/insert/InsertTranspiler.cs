@@ -30,12 +30,7 @@ namespace DaJet.Scripting
             {
                 throw new InvalidOperationException();
             }
-
-            if (insert.Source is not null)
-            {
-                throw new InvalidOperationException("BULK INSERT is not implemented yet");
-            }
-
+            
             _target = target;
             _provider = provider;
             _statement = insert;

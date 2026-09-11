@@ -2,31 +2,21 @@
 using DaJet.Scripting.Model;
 using DaJet.TypeSystem;
 using Microsoft.Data.SqlClient;
-using System.Buffers.Binary;
 using System.Data;
 
 namespace DaJet.Scripting
 {
     public sealed class MsBulkInsertProcessor : ProcessorBase
     {
-        private readonly static byte[] TRUE = [0x01];
-        private readonly static byte[] FALSE = [0x00];
-        private readonly static byte[] EMPTY_TYPE_CODE = [0x00000000];
-        private readonly static byte[] EMPTY_UUID = [0x00000000000000000000000000000000];
-
-        private readonly static byte[] TAG_UNDEFINED = [0x01];
-        private readonly static byte[] TAG_BOOLEAN = [0x02];
-        private readonly static byte[] TAG_DECIMAL = [0x03];
-        private readonly static byte[] TAG_DATETIME = [0x04];
-        private readonly static byte[] TAG_STRING = [0x05];
-        private readonly static byte[] TAG_ENTITY = [0x08];
-
         private readonly ScriptContext _context;
         private readonly InsertStatement _statement;
         private readonly EntityDefinition _target;
         private readonly int _yearOffset;
-        private readonly byte[] _buffer = new byte[16];
-        private readonly Dictionary<ColumnDefinition, SqlParameter> _parameters = new();
+        private readonly string _bufferName;
+        private readonly string _bufferItem;
+        private readonly DataTable _table = new();
+        private readonly Dictionary<ColumnDefinition, DataColumn> _map = new();
+        private readonly Dictionary<ColumnDefinition, Func<object, object>> _converters = new();
         public MsBulkInsertProcessor(in ScriptContext context, in InsertStatement statement)
         {
             if (context.GetDataSource() is not MsDataSourceScope)
@@ -43,310 +33,149 @@ namespace DaJet.Scripting
                 throw new InvalidOperationException();
             }
 
+            if (_statement.Source is not VariableReference variable
+                || variable.Binding is not DeclareStatement declare
+                || !(declare.Type.IsArray && declare.Type.IsObject))
+            {
+                throw new InvalidOperationException();
+            }
+
             _target = target;
 
-            PrepareCommand();
+            _bufferName = variable.Identifier;
+            _bufferItem = string.Format("{0}{1}", _bufferName, "_Item");
+            
+            _context.CreateVariable(in _bufferItem);
+            
+            PrepareDataTable();
         }
-        private void PrepareCommand()
+        private void PrepareDataTable()
         {
-            int ordinal = 0;
-            string parameterName;
-            SqlParameter parameter;
-            ColumnDefinition column;
-            List<ColumnDefinition> columns;
             PropertyDefinition property;
+            List<PropertyDefinition> properties = _target.Properties;
 
-            foreach (SyntaxNode node in _statement.Input)
+            for (int p = 0; p < properties.Count; p++)
             {
-                if (node is not ColumnExpression map)
-                {
-                    continue; // default constant value (literal)
-                }
+                property = properties[p];
 
-                property = _target.GetPropertyByName(map.Alias);
-
-                columns = property.Columns;
-
-                for (int c = 0; c < columns.Count; c++)
-                {
-                    column = columns[c];
-
-                    if (column.IsGenerated)
-                    {
-                        continue; // timestamp column _Version
-                    }
-
-                    parameterName = string.Format("p{0}", ordinal++);
-
-                    parameter = new SqlParameter()
-                    {
-                        ParameterName = parameterName,
-                        Direction = ParameterDirection.Input
-                    };
-
-                    DataType type = column.Type;
-
-                    if (column.Purpose == ColumnPurpose.Value)
-                    {
-                        if (type.IsBoolean)
-                        {
-                            parameter.Size = 1;
-                            parameter.SqlDbType = SqlDbType.Binary;
-                        }
-                        else if (type.IsDecimal)
-                        {
-                            parameter.SqlDbType = SqlDbType.Decimal;
-                            parameter.Scale = type.Scale;
-                            parameter.Precision = type.Precision;
-                        }
-                        else if (type.IsDateTime)
-                        {
-                            parameter.SqlDbType = SqlDbType.DateTime2;
-                        }
-                        else if (type.IsString)
-                        {
-                            if (column.Type.Size > 0)
-                            {
-                                parameter.Size = column.Type.Size * 2;
-                            }
-                            else
-                            {
-                                parameter.Size = 0; // nvarchar(max)
-                            }
-
-                            if (column.Type.IsFixed)
-                            {
-                                parameter.SqlDbType = SqlDbType.NChar;
-                            }
-                            else
-                            {
-                                parameter.SqlDbType = SqlDbType.NVarChar;
-                            }
-                        }
-                        else if (type.IsBinary)
-                        {
-                            parameter.Size = 0; // varbinary(max)
-                            parameter.SqlDbType = SqlDbType.Binary;
-                        }
-                        else if (type.IsUuid)
-                        {
-                            parameter.Size = 16;
-                            parameter.SqlDbType = SqlDbType.Binary;
-                        }
-                        else if (type.IsEntity)
-                        {
-                            parameter.Size = 16;
-                            parameter.SqlDbType = SqlDbType.Binary;
-                        }
-                    }
-                    else if (column.Purpose == ColumnPurpose.Tag)
-                    {
-                        parameter.Size = 1;
-                        parameter.SqlDbType = SqlDbType.Binary;
-                    }
-                    else if (column.Purpose == ColumnPurpose.TypeCode)
-                    {
-                        parameter.Size = 4;
-                        parameter.SqlDbType = SqlDbType.Binary;
-                    }
-                    else if (column.Purpose == ColumnPurpose.Identity)
-                    {
-                        parameter.Size = 16;
-                        parameter.SqlDbType = SqlDbType.Binary;
-                    }
-                    else if (column.Purpose == ColumnPurpose.Boolean)
-                    {
-                        parameter.Size = 1;
-                        parameter.SqlDbType = SqlDbType.Binary;
-                    }
-                    else if (column.Purpose == ColumnPurpose.Numeric)
-                    {
-                        parameter.SqlDbType = SqlDbType.Decimal;
-                        parameter.Scale = type.Scale;
-                        parameter.Precision = type.Precision;
-                    }
-                    else if (column.Purpose == ColumnPurpose.DateTime)
-                    {
-                        parameter.SqlDbType = SqlDbType.DateTime2;
-                    }
-                    else if (column.Purpose == ColumnPurpose.String)
-                    {
-                        if (column.Type.Size > 0)
-                        {
-                            parameter.Size = type.Size * 2;
-                        }
-                        else
-                        {
-                            parameter.Size = 0; // nvarchar(max)
-                        }
-
-                        if (column.Type.IsFixed)
-                        {
-                            parameter.SqlDbType = SqlDbType.NChar;
-                        }
-                        else
-                        {
-                            parameter.SqlDbType = SqlDbType.NVarChar;
-                        }
-                    }
-
-                    _parameters.Add(column, parameter);
-                }
+                PrepareColumns(in property);
             }
         }
-        private void SetParameters(in SqlCommand command)
+        private void PrepareColumns(in PropertyDefinition property)
         {
-            command.Parameters.Clear();
-
-            foreach (SyntaxNode node in _statement.Input)
+            if (_statement.TryGetMapping(property.Name, out ColumnExpression map))
             {
-                if (node is not ColumnExpression map)
+                if (map.Expression is FunctionExpression function && function.Token == Token.VECTOR)
                 {
-                    continue;
+                    ColumnDefinition column = property.Columns[0];
+
+                    DataColumn target = new()
+                    {
+                        DataType = typeof(int),
+                        ColumnName = column.Name
+                    };
+
+                    _map.Add(column, target);
+
+                    _table.Columns.Add(target);
+
+                    _converters.Add(column, GetRowNumber);
+
+                    return; // generated by SEQUENCE
+                }
+                else if (map.Expression is MemberAccessExpression member && member.GetVariableName() == _bufferName)
+                {
+                    member.Identifier = member.Identifier.Replace(_bufferName, _bufferItem);
+                }
+            }
+            
+            foreach (ColumnDefinition column in property.Columns)
+            {
+                if (column.IsGenerated)
+                {
+                    continue; // database auto-generated column
                 }
 
-                PropertyDefinition property = _target.GetPropertyByName(map.Alias);
+                Type type = typeof(byte[]);
+                DataType source = column.Type;
+                Func<object, object> converter = null;
 
-                object value = _context.Evaluate(map.Expression);
+                DataColumn target = new()
+                {
+                    ColumnName = column.Name
+                };
+                
+                if (column.Purpose == ColumnPurpose.Value)
+                {
+                    if (source.IsBoolean) { converter = MsDataMapper.ConvertBoolean; }
+                    else if (source.IsDecimal) { converter = MsDataMapper.ConvertNumeric; type = typeof(decimal); }
+                    else if (source.IsDateTime) { converter = GetDateTime; type = typeof(DateTime); }
+                    else if (source.IsString) { converter = MsDataMapper.ConvertString; type = typeof(string); }
+                    else if (source.IsBinary)
+                    {
+                        if (property.Type.IsUuid) //TODO: select converter comparing property type to desired column type
+                        {
+                            converter = MsDataMapper.ConvertUuid;
+                        }
+                        else
+                        {
+                            converter = MsDataMapper.ConvertBinary;
+                        }
+                    }
+                    else if (source.IsUuid) { converter = MsDataMapper.ConvertUuid; }
+                    else if (source.IsEntity) { converter = MsDataMapper.ConvertIdentity; }
+                }
+                else if (column.Purpose == ColumnPurpose.Tag) { converter = MsDataMapper.ConvertTag; }
+                else if (column.Purpose == ColumnPurpose.TypeCode) { converter = MsDataMapper.ConvertTypeCode; }
+                else if (column.Purpose == ColumnPurpose.Identity) { converter = MsDataMapper.ConvertIdentity; }
+                else if (column.Purpose == ColumnPurpose.Boolean) { converter = MsDataMapper.ConvertBoolean; }
+                else if (column.Purpose == ColumnPurpose.Numeric) { converter = MsDataMapper.ConvertNumeric; type = typeof(decimal); }
+                else if (column.Purpose == ColumnPurpose.DateTime) { converter = GetDateTime; type = typeof(DateTime); }
+                else if (column.Purpose == ColumnPurpose.String) { converter = MsDataMapper.ConvertString; type = typeof(string); }
 
-                SqlParameter copy = null;
+                target.DataType = type;
+
+                _map.Add(column, target);
+
+                _table.Columns.Add(target);
+
+                _converters.Add(column, converter);
+            }
+        }
+        private object GetDateTime(object value)
+        {
+            return MsDataMapper.ConvertDateTime(value, _yearOffset);
+        }
+        private object GetRowNumber(object value)
+        {
+            return _table.Rows.Count;
+        }
+        private void SetRowValues(in DataRow row)
+        {
+            foreach (PropertyDefinition property in _target.Properties)
+            {
+                object value = null; // default value
+
+                if (_statement.TryGetMapping(property.Name, out ColumnExpression map))
+                {
+                    if (map.Expression is FunctionExpression function && function.Token == Token.VECTOR)
+                    {
+                        value = 0; //TODO: row sequence number
+                    }
+                    else
+                    {
+                        value = _context.Evaluate(map.Expression);
+                    }
+                }
 
                 foreach (ColumnDefinition column in property.Columns)
                 {
-                    if (_parameters.TryGetValue(column, out SqlParameter parameter))
+                    if (!_map.TryGetValue(column, out DataColumn target))
                     {
-                        copy = new SqlParameter()
-                        {
-                            Direction = parameter.Direction,
-                            ParameterName = parameter.ParameterName,
-                            Size = parameter.Size,
-                            SqlDbType = parameter.SqlDbType,
-                            Scale = parameter.Scale,
-                            Precision = parameter.Precision
-                        };
-
-                        if (value is null)
-                        {
-                            copy.Value = DBNull.Value;
-                        }
-                        else if (column.Purpose == ColumnPurpose.Value)
-                        {
-                            if (value is bool boolean)
-                            {
-                                copy.Value = boolean ? TRUE : FALSE;
-                            }
-                            else if (value is decimal numeric)
-                            {
-                                copy.Value = numeric;
-                            }
-                            else if (value is DateTime datetime)
-                            {
-                                copy.Value = datetime.AddYears(_yearOffset);
-                            }
-                            else if (value is string text)
-                            {
-                                copy.Value = text;
-                            }
-                            else if (value is byte[] binary)
-                            {
-                                copy.Value = binary;
-                            }
-                            else if (value is Guid uuid)
-                            {
-                                copy.Value = uuid.ToByteArray();
-                            }
-                            else if (value is Entity entity)
-                            {
-                                copy.Value = entity.Identity.ToByteArray();
-                            }
-                            else
-                            {
-                                copy.Value = value; // this might be error
-                            }
-                        }
-                        else if (column.Purpose == ColumnPurpose.Tag)
-                        {
-                            if (value is null) { copy.Value = TAG_UNDEFINED; }
-                            else if (value is bool) { copy.Value = TAG_BOOLEAN; }
-                            else if (value is decimal) { copy.Value = TAG_DECIMAL; }
-                            else if (value is DateTime) { copy.Value = TAG_DATETIME; }
-                            else if (value is string) { copy.Value = TAG_STRING; }
-                            else
-                            {
-                                copy.Value = TAG_ENTITY;
-                            }
-                        }
-                        else if (column.Purpose == ColumnPurpose.TypeCode)
-                        {
-                            if (value is Entity entity)
-                            {
-                                Span<byte> buffer = _buffer.AsSpan(0, 4);
-                                BinaryPrimitives.WriteInt32BigEndian(buffer, entity.TypeCode);
-                                copy.Value = buffer.ToArray();
-                            }
-                            else
-                            {
-                                copy.Value = EMPTY_TYPE_CODE;
-                            }
-                        }
-                        else if (column.Purpose == ColumnPurpose.Identity)
-                        {
-                            if (value is Entity entity)
-                            {
-                                copy.Value = entity.Identity.ToByteArray();
-                            }
-                            else
-                            {
-                                copy.Value = EMPTY_UUID;
-                            }
-                        }
-                        else if (column.Purpose == ColumnPurpose.Boolean)
-                        {
-                            if (value is bool boolean)
-                            {
-                                parameter.Value = boolean ? TRUE : FALSE;
-                            }
-                            else
-                            {
-                                parameter.Value = FALSE;
-                            }
-                        }
-                        else if (column.Purpose == ColumnPurpose.Numeric)
-                        {
-                            if (value is decimal numeric)
-                            {
-                                copy.Value = numeric;
-                            }
-                            else
-                            {
-                                copy.Value = 0m;
-                            }
-                        }
-                        else if (column.Purpose == ColumnPurpose.DateTime)
-                        {
-                            if (value is DateTime datetime)
-                            {
-                                copy.Value = datetime.AddYears(_yearOffset);
-                            }
-                            else
-                            {
-                                copy.Value = DateTime.MinValue.AddYears(_yearOffset);
-                            }
-                        }
-                        else if (column.Purpose == ColumnPurpose.String)
-                        {
-                            if (value is string text)
-                            {
-                                copy.Value = text;
-                            }
-                            else
-                            {
-                                copy.Value = string.Empty;
-                            }
-                        }
+                        continue; // database auto-generated column
                     }
 
-                    command.Parameters.Add(copy);
+                    row[target] = _converters[column](value);
                 }
             }
         }
@@ -357,46 +186,67 @@ namespace DaJet.Scripting
                 throw new InvalidOperationException();
             }
 
-            using (SqlCommand command = use.CreateCommand())
+            if (_context.GetValue(in _bufferName) is not List<DataObject> buffer)
             {
-                command.CommandText = _statement.Sql;
-
-                SetParameters(in command);
-
-                int recordsAffected = command.ExecuteNonQuery();
+                throw new InvalidOperationException();
             }
 
+            if (buffer.Count == 0)
+            {
+                return ExitCode.Success;
+            }
+
+            _table.Rows.Clear();
+
+            foreach (DataObject record in buffer)
+            {
+                _context.SetValue(in _bufferItem, record);
+
+                DataRow row = _table.NewRow();
+
+                _table.Rows.Add(row);
+
+                SetRowValues(in row);
+            }
+
+            _context.SetValue(in _bufferItem, null);
+
+            SqlBulkCopyOptions options = SqlBulkCopyOptions.Default; // TableLock CacheMetadata
+
+            try
+            {
+                using (SqlBulkCopy insert = new(use.Connection, options, use.Transaction))
+                {
+                    insert.BulkCopyTimeout = 600;
+
+                    insert.DestinationTableName = _target.DbName;
+
+                    foreach (var mapping in _map)
+                    {
+                        insert.ColumnMappings.Add(mapping.Key.Name, mapping.Value.ColumnName);
+                    }
+
+                    //TODO: insert.ColumnOrderHints
+
+                    insert.WriteToServer(_table);
+                    
+                    // int count = insert.RowsCopied;
+                }
+            }
+            catch
+            {
+                throw;
+            }
+            finally
+            {
+                _table.Rows.Clear();
+            }
+            
             return ExitCode.Success;
         }
         public override void Dispose()
         {
             // do nothing
-        }
-
-        private static DataTable CreateFileNamesTable(in string[] fileNames)
-        {
-            DataTable table = new();
-
-            DataColumn column = new()
-            {
-                ColumnName = "FileName",
-                DataType = typeof(string),
-                MaxLength = 128,
-                AllowDBNull = false
-            };
-
-            table.Columns.Add(column);
-
-            for (int i = 0; i < fileNames.Length; i++)
-            {
-                DataRow row = table.NewRow();
-
-                row[0] = fileNames[i];
-
-                table.Rows.Add(row);
-            }
-
-            return table;
         }
         
         //internal override IEnumerable<ConfigFileBuffer> Stream(string tableName, string[] fileNames)

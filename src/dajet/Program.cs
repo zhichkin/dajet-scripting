@@ -67,7 +67,9 @@ namespace DaJet.Host
             //parameters.SetValue("Получатель",  "MS_TEST");
             //_ = host.RunAsync("exchange/stream-pg-ms.djs", in parameters).ContinueWith(ShowAsyncResult);
 
-            _ = _host.RunAsync("insert/ms/bulk.djs").ContinueWith(ShowAsyncResult);
+            //_ = _host.RunAsync("insert/ms/bulk.djs").ContinueWith(ShowAsyncResult);
+            //_ = _host.RunAsync("insert/ms/bulk-catalog.djs").ContinueWith(ShowAsyncResult);
+            _ = _host.RunAsync("insert/test.djs").ContinueWith(ShowAsyncResult);
 
             Console.WriteLine("Press any key to continue ..."); _ = Console.ReadKey(true);
         }

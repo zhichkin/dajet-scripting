@@ -5,6 +5,8 @@ namespace DaJet.Data
     public abstract class DataSourceScope : IDisposable
     {
         public abstract DataSourceType Type { get; }
+        public abstract DbConnection Connection { get; }
+        public abstract DbTransaction Transaction { get; }
         public abstract void Commit();
         public abstract void Rollback();
         public abstract void Dispose();

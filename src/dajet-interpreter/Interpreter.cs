@@ -54,6 +54,14 @@ namespace DaJet.Scripting
         {
             return _context.Evaluate(in expression);
         }
+        public override bool CreateVariable(in string name)
+        {
+            return _data.TryAdd(name, null);
+        }
+        public override void RemoveVariable(in string name)
+        {
+            _ = _data.Remove(name);
+        }
         public override object GetValue(in string name)
         {
             if (_data.TryGetValue(name, out object value))
@@ -545,11 +553,25 @@ namespace DaJet.Scripting
             {
                 if (use.Type == DataSourceType.SqlServer)
                 {
-                    processor = new MsInsertProcessor(this, in statement);
+                    if (statement.Source is null)
+                    {
+                        processor = new MsInsertProcessor(this, in statement);
+                    }
+                    else
+                    {
+                        processor = new MsBulkInsertProcessor(this, in statement);
+                    }
                 }
                 else
                 {
-                    processor = new PgInsertProcessor(this, in statement);
+                    if (statement.Source is null)
+                    {
+                        processor = new PgInsertProcessor(this, in statement);
+                    }
+                    else
+                    {
+                        throw new InvalidOperationException("[BULK INSERT] Statement is not implemented for PostgreSQL yet.");
+                    }
                 }
 
                 _processors.Add(statement, processor);

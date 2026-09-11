@@ -28,6 +28,8 @@ namespace DaJet.Data
             }
         }
         public override DataSourceType Type { get { return DataSourceType.PostgreSql; } }
+        public override NpgsqlConnection Connection { get { return _connection; } }
+        public override NpgsqlTransaction Transaction { get { return _transaction; } }
         public override NpgsqlCommand CreateCommand()
         {
             ObjectDisposedException.ThrowIf(_disposed, typeof(PgDataSourceScope));

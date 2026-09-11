@@ -27,6 +27,8 @@ namespace DaJet.Data
             }
         }
         public override DataSourceType Type { get { return DataSourceType.SqlServer; } }
+        public override SqlConnection Connection { get { return _connection; } }
+        public override SqlTransaction Transaction { get { return _transaction; } }
         public override SqlCommand CreateCommand()
         {
             ObjectDisposedException.ThrowIf(_disposed, typeof(MsDataSourceScope));
