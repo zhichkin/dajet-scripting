@@ -42,7 +42,7 @@ namespace DaJet.Scripting
         public readonly static Func<object, object> ConvertUuid = InputUuid;
         public readonly static Func<object, object> ConvertTypeCode = InputTypeCode;
         public readonly static Func<object, object> ConvertIdentity = InputIdentity;
-        
+
         private readonly int _yearOffset;
         private readonly byte[] _buffer = new byte[16];
 
@@ -91,11 +91,27 @@ namespace DaJet.Scripting
         private static object InputTag(object value)
         {
             if (value is null) { return TAG_UNDEFINED; }
-            else if (value is bool) { return TAG_BOOLEAN; }
-            else if (value is decimal) { return TAG_DECIMAL; }
-            else if (value is DateTime) { return TAG_DATETIME; }
-            else if (value is string) { return TAG_STRING; }
-            else if (value is Entity) { return TAG_ENTITY; }
+
+            if (value is Union union)
+            {
+                return union.Tag switch
+                {
+                    UnionTag.Boolean => TAG_BOOLEAN,
+                    UnionTag.Decimal => TAG_DECIMAL,
+                    UnionTag.DateTime => TAG_DATETIME,
+                    UnionTag.String => TAG_STRING,
+                    UnionTag.Entity => TAG_ENTITY,
+                    _ => TAG_UNDEFINED,
+                };
+            }
+            
+            if (value is bool) { return TAG_BOOLEAN; }
+            if (value is decimal) { return TAG_DECIMAL; }
+            if (value is DateTime) { return TAG_DATETIME; }
+            if (value is string) { return TAG_STRING; }
+            if (value is Entity) { return TAG_ENTITY; }
+            if (value is int) { return TAG_DECIMAL; }
+            if (value is long) { return TAG_DECIMAL; }
 
             return TAG_UNDEFINED;
         }
@@ -106,6 +122,11 @@ namespace DaJet.Scripting
                 return boolean ? TRUE : FALSE;
             }
 
+            if (value is Union union && union.Tag == UnionTag.Boolean)
+            {
+                return union.GetBoolean() ? TRUE : FALSE;
+            }
+            
             return FALSE;
         }
         private static object InputNumeric(object value)
@@ -113,6 +134,19 @@ namespace DaJet.Scripting
             if (value is decimal numeric)
             {
                 return numeric;
+            }
+            else if (value is int integer)
+            {
+                return new decimal(integer);
+            }
+            else if (value is long int64)
+            {
+                return new decimal(int64);
+            }
+
+            if (value is Union union && union.Tag == UnionTag.Decimal)
+            {
+                return union.GetDecimal();
             }
 
             return 0M;
@@ -124,6 +158,11 @@ namespace DaJet.Scripting
                 return datetime.AddYears(yearOffset);
             }
 
+            if (value is Union union && union.Tag == UnionTag.DateTime)
+            {
+                return union.GetDateTime().AddYears(yearOffset);
+            }
+
             return DateTime.MinValue.AddYears(yearOffset);
         }
         private static object InputString(object value)
@@ -133,31 +172,16 @@ namespace DaJet.Scripting
                 return text;
             }
 
+            if (value is Union union && union.Tag == UnionTag.String)
+            {
+                return union.GetString();
+            }
+
             return string.Empty;
         }
         private static object InputBinary(object value)
         {
-            if (value is bool boolean)
-            {
-                return boolean ? TRUE : FALSE;
-            }
-            else if (value is Entity entity)
-            {
-                return entity.Identity.ToByteArray();
-            }
-            else if (value is Guid uuid)
-            {
-                return uuid.ToByteArray();
-            }
-            else if (value is int integer)
-            {
-                Span<byte> buffer = stackalloc byte[4];
-
-                BinaryPrimitives.WriteInt32BigEndian(buffer, integer);
-
-                return buffer.ToArray();
-            }
-            else if (value is byte[] binary)
+            if (value is byte[] binary)
             {
                 return binary;
             }
@@ -175,11 +199,22 @@ namespace DaJet.Scripting
         }
         private static object InputTypeCode(object value)
         {
+            int code = 0;
+
             if (value is Entity entity)
+            {
+                code = entity.TypeCode;
+            }
+            else if (value is Union union && union.Tag == UnionTag.Entity)
+            {
+                code = union.GetEntity().TypeCode;
+            }
+
+            if (code > 0)
             {
                 Span<byte> buffer = stackalloc byte[4];
 
-                BinaryPrimitives.WriteInt32BigEndian(buffer, entity.TypeCode);
+                BinaryPrimitives.WriteInt32BigEndian(buffer, code);
 
                 return buffer.ToArray();
             }
@@ -191,6 +226,11 @@ namespace DaJet.Scripting
             if (value is Entity entity)
             {
                 return entity.Identity.ToByteArray();
+            }
+
+            if (value is Union union && union.Tag == UnionTag.Entity)
+            {
+                return union.GetEntity().Identity.ToByteArray();
             }
 
             return EMPTY_UUID;

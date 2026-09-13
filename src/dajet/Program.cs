@@ -1,6 +1,7 @@
 ﻿using DaJet.Data;
 using DaJet.Json;
 using DaJet.Metadata;
+using System.Diagnostics;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -69,7 +70,14 @@ namespace DaJet.Host
 
             //_ = _host.RunAsync("insert/ms/bulk.djs").ContinueWith(ShowAsyncResult);
             //_ = _host.RunAsync("insert/ms/bulk-catalog.djs").ContinueWith(ShowAsyncResult);
-            _ = _host.RunAsync("insert/test.djs").ContinueWith(ShowAsyncResult);
+
+            Stopwatch watch = new();
+            watch.Start();
+            Task<object> task = _host.RunAsync("insert/ms/bulk-exchange.djs");
+            task.Wait();
+            watch.Stop();
+            ShowAsyncResult(task);
+            Console.WriteLine($"Elapsed {watch.ElapsedMilliseconds} ms");
 
             Console.WriteLine("Press any key to continue ..."); _ = Console.ReadKey(true);
         }

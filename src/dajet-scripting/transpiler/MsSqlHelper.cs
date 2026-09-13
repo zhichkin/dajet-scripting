@@ -1,6 +1,8 @@
-﻿using Microsoft.Data.SqlClient;
+﻿using DaJet.TypeSystem;
+using Microsoft.Data.SqlClient;
 using System.Data;
 using System.Text;
+using System.Xml.Linq;
 
 namespace DaJet.Scripting
 {
@@ -93,6 +95,180 @@ namespace DaJet.Scripting
             }
 
             return list;
+        }
+
+        public static string ToSqlDataType(DataType type)
+        {
+            if (type.IsBoolean) { return "binary(1)"; }
+            else if (type.IsDecimal) { return string.Format("numeric({0},{1})", type.Precision, type.Scale); }
+            else if (type.IsDateTime) { return "datetime2"; }
+            else if (type.IsString) { return (type.Size == 0) ? "nvarchar(max)" : string.Format("{0}({1})", (type.IsFixed) ? "nchar" : "nvarchar", type.Size); }
+            else if (type.IsBinary) { return (type.Size == 0) ? "varbinary(max)" : string.Format("binary({0})", type.Size); }
+            else if (type.IsUuid) { return "binary(16)"; }
+            else if (type.IsEntity) { return "binary(16)"; }
+            else if (type.IsInteger) { return (type.Size == 4) ? "int" : "bigint"; }
+
+            throw new InvalidOperationException("Failed to map DaJet data type to SQL data type.");
+        }
+
+        public static string CreateTable(in EntityDefinition metadata, in string name)
+        {
+            StringBuilder sql = new();
+
+            sql.Append("CREATE TABLE ").Append(name).Append(' ').Append('(');
+
+            int count;
+            bool first = true;
+            ColumnDefinition column;
+            List<ColumnDefinition> columns;
+
+            foreach (PropertyDefinition property in metadata.Properties)
+            {
+                columns = property.Columns;
+
+                if (columns is null || columns.Count == 0)
+                {
+                    continue;
+                }
+
+                count = property.Columns.Count;
+
+                for (int i = 0; i < count; i++)
+                {
+                    column = columns[i];
+
+                    if (column.IsGenerated)
+                    {
+                        continue;
+                    }
+
+                    if (!first) { sql.Append(',').Append(' '); }
+                    
+                    sql.Append(column.Name).Append(' ').Append(ToSqlDataType(column.Type));
+
+                    if (column.IsPrimaryKey)
+                    {
+                        sql.Append(' ').Append("PRIMARY KEY");
+                    }
+
+                    first = false;
+                }
+            }
+
+            sql.Append(')').Append(';');
+
+            return sql.ToString();
+        }
+        public static string CreateType(in EntityDefinition metadata, in string name)
+        {
+            StringBuilder sql = new();
+
+            sql.Append("CREATE TYPE").Append(' ').Append(name).Append(' ').Append("AS TABLE").Append(' ').Append('(');
+
+            int count;
+            bool first = true;
+            ColumnDefinition column;
+            List<ColumnDefinition> columns;
+
+            foreach (PropertyDefinition property in metadata.Properties)
+            {
+                columns = property.Columns;
+
+                if (columns is null || columns.Count == 0)
+                {
+                    continue;
+                }
+
+                count = property.Columns.Count;
+
+                for (int i = 0; i < count; i++)
+                {
+                    column = columns[i];
+
+                    if (column.IsGenerated)
+                    {
+                        continue;
+                    }
+
+                    if (!first) { sql.Append(',').Append(' '); }
+
+                    sql.Append(column.Name).Append(' ').Append(ToSqlDataType(column.Type));
+
+                    if (column.IsPrimaryKey)
+                    {
+                        sql.Append(' ').Append("PRIMARY KEY");
+                    }
+
+                    first = false;
+                }
+            }
+
+            sql.Append(')').Append(';');
+
+            return sql.ToString();
+        }
+        private static void DeclareTableColumn(in PropertyDefinition property, in StringBuilder sql)
+        {
+            ColumnDefinition column;
+
+            for (int i = 0; i < property.Columns.Count; i++)
+            {
+                column = property.Columns[i];
+
+                if (i > 0) { sql.Append(", "); }
+
+                string alias = property.Name;
+
+                if (property.Columns.Count == 1) // single column
+                {
+                    sql.Append(alias);
+                }
+                else // multiple columns
+                {
+                    sql.Append(alias).Append('_').Append(column.Purpose.GetSuffix());
+                }
+
+                sql.Append(' ').Append(ToSqlDataType(column.Type));
+            }
+        }
+        public static string SelectColumns(in EntityDefinition table)
+        {
+            StringBuilder sql = new();
+
+            int count;
+            bool first = true;
+            ColumnDefinition column;
+            List<ColumnDefinition> columns;
+
+            foreach (PropertyDefinition property in table.Properties)
+            {
+                columns = property.Columns;
+
+                if (columns is null || columns.Count == 0)
+                {
+                    continue;
+                }
+
+                count = property.Columns.Count;
+
+                for (int i = 0; i < count; i++)
+                {
+                    column = columns[i];
+
+                    if (column.IsGenerated)
+                    {
+                        continue;
+                    }
+
+                    if (!first) { sql.Append(',').Append(' '); }
+
+                    sql.Append(column.Name);
+
+                    first = false;
+                }
+            }
+
+            return sql.ToString();
         }
     }
 
