@@ -47,6 +47,8 @@ namespace DaJet.Scripting
             else if (node is ForStatement _for) { Visit(in _for); }
             else if (node is WhileStatement _while) { Visit(in _while); }
             else if (node is TryStatement _try) { Visit(in _try); }
+
+            else if (node is CreateTypeStatement || node is DropTypeStatement) { VisitTypeStatement(in node); }
         }
         private void Visit(in StatementBlock node)
         {
@@ -138,6 +140,30 @@ namespace DaJet.Scripting
             }
         }
 
+        private void VisitTypeStatement(in SyntaxNode node)
+        {
+            SqlTranspiler transpiler;
+
+            MetadataProvider provider = _providers.Peek();
+
+            if (provider.DataSource == DataSourceType.SqlServer)
+            {
+                transpiler = new MsTableTypeTranspiler();
+            }
+            //else if (provider.DataSource == DataSourceType.PostgreSql)
+            //{
+            //    transpiler = new PgSequenceTranspiler();
+            //}
+            else
+            {
+                _errors.Add($"Unsupported data provider: {provider.DataSource}"); return;
+            }
+
+            if (!transpiler.TryTranspile(in node, in provider, out string error))
+            {
+                _errors.Add(error);
+            }
+        }
         private void VisitSequenceStatement(in SyntaxNode node)
         {
             SqlTranspiler transpiler;

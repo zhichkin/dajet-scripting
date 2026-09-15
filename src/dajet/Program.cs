@@ -71,10 +71,16 @@ namespace DaJet.Host
             //_ = _host.RunAsync("insert/ms/bulk.djs").ContinueWith(ShowAsyncResult);
             //_ = _host.RunAsync("insert/ms/bulk-catalog.djs").ContinueWith(ShowAsyncResult);
 
+            //_ = _host.RunAsync("type/ms.djs").ContinueWith(ShowAsyncResult);
+
             Stopwatch watch = new();
             watch.Start();
             Task<object> task = _host.RunAsync("insert/ms/bulk-exchange.djs");
-            task.Wait();
+            try
+            {
+                task.Wait();
+            }
+            catch { }
             watch.Stop();
             ShowAsyncResult(task);
             Console.WriteLine($"Elapsed {watch.ElapsedMilliseconds} ms");

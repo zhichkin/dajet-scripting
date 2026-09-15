@@ -26,5 +26,7 @@
         }
         public OrderClause Order { get; set; } // used by bulk insert (optional)
         public VariableReference Source { get; set; } // bulk insert batch source
+        public int Timeout { get; set; } = 300; // command timeout in seconds
+        public int BatchSize { get; set; } = 100; // bulk insert batch size
     }
 }

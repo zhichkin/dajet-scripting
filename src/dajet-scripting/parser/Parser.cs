@@ -1320,6 +1320,11 @@ namespace DaJet.Scripting
                 return drop_sequence();
             }
 
+            if (Match(Token.TYPE))
+            {
+                return drop_type();
+            }
+
             throw new FormatException("Unknown DROP statement.");
         }
         private SyntaxNode apply_statement()
@@ -2991,7 +2996,7 @@ namespace DaJet.Scripting
 
             Skip(Token.Comment);
 
-            if (Match(Token.FROM)) // optional
+            if (Match(Token.FROM)) // optional BULK INSERT
             {
                 if (!Match(Token.Variable) || variable() is not VariableReference source)
                 {
@@ -3012,6 +3017,30 @@ namespace DaJet.Scripting
                 insert.Source = source; // bulk insert batch source
 
                 Skip(Token.Comment);
+
+                if (Match(Token.TIMEOUT))
+                {
+                    if (!Match(Token.Number) || scalar() is not ScalarExpression timeout)
+                    {
+                        throw new FormatException("[INSERT] [TIMEOUT] integer literal expected.");
+                    }
+
+                    insert.Timeout = int.Parse(timeout.Literal);
+                }
+
+                Skip(Token.Comment);
+
+                if (Match(Token.BATCH_SIZE))
+                {
+                    if (!Match(Token.Number) || scalar() is not ScalarExpression batchSize)
+                    {
+                        throw new FormatException("[INSERT] [BATCH_SIZE] integer literal expected.");
+                    }
+
+                    insert.BatchSize = int.Parse(batchSize.Literal);
+                }
+
+                Skip(Token.Comment);
             }
             
             if (!Match(Token.SELECT))
@@ -3020,27 +3049,6 @@ namespace DaJet.Scripting
             }
 
             parse_column_expressions(insert.Values);
-
-            if (insert.Source is not null) // bulk insert
-            {
-                if (Match(Token.ORDER)) // optional
-                {
-                    insert.Order = order_clause();
-
-                    foreach (OrderExpression order in insert.Order.Expressions)
-                    {
-                        if (order.Expression is not ColumnReference column)
-                        {
-                            throw new FormatException($"[INSERT] ORDER clause must reference table columns: functions and expressions are not allowed.");
-                        }
-
-                        if (!insert.TryGetMapping(column.Identifier, out _))
-                        {
-                            throw new FormatException($"[INSERT] SELECT clause must include ORDER column \"{column.Identifier}\".");
-                        }
-                    }
-                }
-            }
 
             return insert;
         }
@@ -3274,37 +3282,55 @@ namespace DaJet.Scripting
         }
         #endregion
 
-        #region "CREATE AND DEFINE TYPE STATEMENT"
+        #region "CREATE TABLE TYPE STATEMENT"
+        private SyntaxNode drop_type()
+        {
+            DropTypeStatement statement = new();
+
+            if (!Match(Token.Identifier))
+            {
+                throw new FormatException("[DROP TYPE] identifier expected.");
+            }
+
+            statement.Table = new TableReference() { Identifier = Previous().Value };
+
+            //statement.Identifier = Previous().Value;
+
+            return statement;
+        }
         private SyntaxNode create_type()
         {
             CreateTypeStatement statement = new();
 
             if (!Match(Token.Identifier))
             {
-                throw new FormatException("Type identifier expected.");
+                throw new FormatException("[CREATE TYPE] identifier expected.");
             }
 
-            statement.Identifier = Previous().Value;
+            statement.Table = new TableReference() { Identifier = Previous().Value };
 
-            if (!Match(Token.OpenRoundBracket))
-            {
-                throw new FormatException("Open round bracket expected.");
-            }
+            //statement.Identifier = Previous().Value;
 
-            statement.Columns.Add(column_definition());
+            //if (!Match(Token.OpenRoundBracket))
+            //{
+            //    throw new FormatException("Open round bracket expected.");
+            //}
 
-            while (Match(Token.Comma))
-            {
-                statement.Columns.Add(column_definition());
-            }
+            //statement.Columns.Add(column_definition());
 
-            if (!Match(Token.CloseRoundBracket))
-            {
-                throw new FormatException("Close round bracket expected.");
-            }
+            //while (Match(Token.Comma))
+            //{
+            //    statement.Columns.Add(column_definition());
+            //}
+
+            //if (!Match(Token.CloseRoundBracket))
+            //{
+            //    throw new FormatException("Close round bracket expected.");
+            //}
 
             return statement;
         }
+
         #endregion
 
         #region "CREATE AND APPLY SEQUENCE (VECTOR)"

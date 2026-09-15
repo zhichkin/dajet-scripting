@@ -26,6 +26,11 @@ namespace DaJet.Scripting
                 throw new InvalidOperationException();
             }
 
+            if (insert.Source is not null)
+            {
+                return true; // BULK INSERT
+            }
+
             if (insert.Target is not TableReference table || table.Binding is not EntityDefinition target)
             {
                 throw new InvalidOperationException();

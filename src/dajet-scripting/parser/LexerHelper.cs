@@ -120,7 +120,8 @@
             { "DEFINE", Token.DEFINE },
             { "STARTUP", Token.STARTUP },
             { "LONG_TASK", Token.LONG_TASK },
-            { "SINGLETON", Token.SINGLETON }
+            { "SINGLETON", Token.SINGLETON },
+            { "BATCH_SIZE", Token.BATCH_SIZE },
         };
         private static Dictionary<string, Token> _function = new(StringComparer.Ordinal)
         {

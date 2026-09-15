@@ -177,6 +177,9 @@ namespace DaJet.Scripting
             else if (node is ContinueStatement _continue) { Bind(in _continue); }
             else if (node is TryStatement _try) { Bind(in _try); }
             else if (node is ThrowStatement _throw) { Bind(in _throw); }
+
+            else if (node is DropTypeStatement drop_type) { Bind(in drop_type); }
+            else if (node is CreateTypeStatement create_type) { Bind(in create_type); }
         }
         private void Bind(in Script node)
         {
@@ -1177,6 +1180,17 @@ namespace DaJet.Scripting
             BindColumn(node.Table.Binding, node.Column.Identifier, node.Column);
         }
         private void Bind(in RevokeSequenceStatement node)
+        {
+            Bind(node.Table);
+        }
+        #endregion
+
+        #region "CREATE AND DROP TABLE TYPE"
+        private void Bind(in CreateTypeStatement node)
+        {
+            Bind(node.Table);
+        }
+        private void Bind(in DropTypeStatement node)
         {
             Bind(node.Table);
         }
