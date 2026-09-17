@@ -3,40 +3,43 @@ using DaJet.TypeSystem;
 using Microsoft.Data.SqlClient.Server;
 using System.Collections;
 using System.Data;
+using System.Diagnostics.CodeAnalysis;
 
 namespace DaJet.Scripting
 {
-    public sealed class MsBulkInsertMapper : IEnumerator<SqlDataRecord>
+    public sealed class MsBulkInsertMapper : IEnumerable<SqlDataRecord>, IEnumerator<SqlDataRecord>, IDataReader
     {
         private int _current;
-        private bool _locked;
-        private int _batchSize;
-
+        private bool _skipped;
         private List<DataObject> _buffer;
+        private readonly int _batchSize;
+        private readonly int _yearOffset;
         private readonly SqlDataRecord _record;
         private readonly ScriptContext _context;
-        private readonly int _yearOffset;
+        private readonly string _bufferItem;
+        private readonly EntityDefinition _table;
         private readonly Func<object, object> _convertDateTime;
         private readonly Dictionary<string, ColumnExpression> _map = new();
         private readonly Dictionary<ColumnDefinition, int> _ordinals = new();
         private readonly Dictionary<ColumnDefinition, Func<object, object>> _converters = new();
-        public MsBulkInsertMapper(in ScriptContext context, in InsertStatement statement, int batchSize)
+        public MsBulkInsertMapper(in ScriptContext context, in InsertStatement statement, in string bufferItem)
         {
             ArgumentNullException.ThrowIfNull(context, nameof(context));
             ArgumentNullException.ThrowIfNull(statement, nameof(statement));
+            ArgumentNullException.ThrowIfNullOrEmpty(bufferItem, nameof(bufferItem));
 
             _context = context;
-
-            _batchSize = batchSize > 0 ? batchSize : 100;
-
+            _batchSize = statement.BatchSize;
             _yearOffset = statement.YearOffset;
-
+            _bufferItem = bufferItem;
             _convertDateTime = ConvertDateTimeWithOffset;
             
             if (statement.Target is not TableReference target || target.Binding is not EntityDefinition table)
             {
                 throw new InvalidOperationException();
             }
+
+            _table = table;
 
             foreach (ColumnExpression map in statement.Values)
             {
@@ -48,101 +51,62 @@ namespace DaJet.Scripting
                 _map.Add(map.Alias, map);
             }
 
-            if (statement.Source is not VariableReference variable
-                || variable.Binding is not DeclareStatement declare
-                || !(declare.Type.IsArray && declare.Type.IsObject))
-            {
-                throw new InvalidOperationException();
-            }
-
-            //_bufferName = variable.Identifier;
-            //_bufferItem = string.Format("{0}{1}", _bufferName, "_Item");
-
-            //_context.CreateVariable(in _bufferItem);
-
-            //foreach (ColumnExpression map in _statement.Values)
-            //{
-            //    if (map.Expression is MemberAccessExpression member && member.GetVariableName() == _bufferName)
-            //    {
-            //        member.Identifier = member.Identifier.Replace(_bufferName, _bufferItem);
-            //    }
-            //}
-
             SqlMetaData[] columns = PrepareTableTypeMetadata(in table);
 
             _record = new SqlDataRecord(columns);
         }
         object IEnumerator.Current { get { return Current; } }
+        public IEnumerator<SqlDataRecord> GetEnumerator() { return this; }
+        IEnumerator IEnumerable.GetEnumerator() { return GetEnumerator(); }
         public IEnumerator<SqlDataRecord> Enumerate(in List<DataObject> buffer)
         {
             ArgumentNullException.ThrowIfNull(buffer, nameof(buffer));
 
             _buffer = buffer; Reset(); return this;
         }
-        public void Reset() { _current = 0; _locked = false; }
-        public SqlDataRecord Current
+        public void Reset() { _current = -1; _skipped = false; }
+        public SqlDataRecord Current { get { return _record; } }
+        public bool CanRead()
         {
-            get
-            {
-                DataObject current;
-
-                if (_current < _buffer.Count)
-                {
-                    current = _buffer[_current];
-                }
-                else
-                {
-                    return null;
-                }
-
-                //TODO: convert object to record
-
-                _context.SetValue(in _bufferItem, current);
-
-                SetDataRecordValues(in _record);
-                
-                return _record;
-            }
-        }
-        public bool HasRecords()
-        {
-            return (_current < _buffer.Count);
+            return (_skipped || (_buffer is not null && _current + 1 < _buffer.Count));
         }
         public bool MoveNext()
         {
-            if (!HasRecords())
+            if (_skipped)
+            {
+                _skipped = false; return true;
+            }
+
+            if (++_current >= _buffer.Count)
             {
                 return false;
             }
 
-            if (_current == 0)
-            {
-                return true;
-            }
+            DataObject current = _buffer[_current];
 
-            if (_locked)
-            {
-                _current++; _locked = false; return true;
-            }
+            _context.SetValue(in _bufferItem, current);
 
-            int next = _current + 1;
+            SetDataRecordValues(in _record, _current);
 
-            if (!(next < _buffer.Count))
+            if (_current > 0 && _current % _batchSize == 0)
             {
-                _current++; return false;
+                _skipped = true; return false;
             }
-
-            if (next % _batchSize == 0)
-            {
-                _locked = true; return false;
-            }
-            
-            _current++;
             
             return true;
         }
         public void Dispose()
         {
+            if (_buffer is null)
+            {
+                return;
+            }
+
+            if (_current < _buffer.Count)
+            {
+                return;
+            }
+
             _buffer = null;
 
             if (_record is not null)
@@ -154,10 +118,6 @@ namespace DaJet.Scripting
             }
         }
 
-        private object ConvertDateTimeWithOffset(object value)
-        {
-            return MsDataMapper.ConvertDateTime(value, _yearOffset);
-        }
         private SqlMetaData[] PrepareTableTypeMetadata(in EntityDefinition table)
         {
             List<SqlMetaData> columns = new();
@@ -251,15 +211,19 @@ namespace DaJet.Scripting
             }
         }
 
-        private void SetDataRecordValues(in SqlDataRecord record)
+        private object ConvertDateTimeWithOffset(object value)
         {
-            record.SetInt32(0, _nextRecord);
+            return MsDataMapper.ConvertDateTime(value, _yearOffset);
+        }
+        private void SetDataRecordValues(in SqlDataRecord record, int rowNumber)
+        {
+            record.SetInt32(0, rowNumber);
 
             int ordinal;
             object value;
             Func<object, object> converter;
 
-            foreach (PropertyDefinition property in table.Properties)
+            foreach (PropertyDefinition property in _table.Properties)
             {
                 value = null; // default value
 
@@ -283,5 +247,48 @@ namespace DaJet.Scripting
                 }
             }
         }
+
+        internal IDataReader GetDataReader(in List<DataObject> buffer)
+        {
+            ArgumentNullException.ThrowIfNull(buffer, nameof(buffer));
+
+            _buffer = buffer; Reset(); return this;
+        }
+        public bool Read() { return MoveNext(); }
+        public int FieldCount { get { return _record.FieldCount; } }
+        public object GetValue(int ordinal) { return _record.GetValue(ordinal); }
+
+        #region "Not implemented IDataReader interface"
+        public int Depth => throw new NotImplementedException();
+        public bool IsClosed => throw new NotImplementedException();
+        public int RecordsAffected => throw new NotImplementedException();
+        public object this[int ordinal] => throw new NotImplementedException();
+        public object this[string name] => throw new NotImplementedException();
+        public void Close() { throw new NotImplementedException(); }
+        public bool NextResult() { throw new NotImplementedException(); }
+        public bool GetBoolean(int i) { throw new NotImplementedException(); }
+        public byte GetByte(int i) { throw new NotImplementedException(); }
+        public char GetChar(int i) { throw new NotImplementedException(); }
+        public string GetDataTypeName(int i) { throw new NotImplementedException(); }
+        public DateTime GetDateTime(int i) { throw new NotImplementedException(); }
+        public decimal GetDecimal(int i) { throw new NotImplementedException(); }
+        public double GetDouble(int i) { throw new NotImplementedException(); }
+        public float GetFloat(int i) { throw new NotImplementedException(); }
+        public Guid GetGuid(int i) { throw new NotImplementedException(); }
+        public short GetInt16(int i) { throw new NotImplementedException(); }
+        public int GetInt32(int i) { throw new NotImplementedException(); }
+        public long GetInt64(int i) { throw new NotImplementedException(); }
+        public string GetName(int i) { throw new NotImplementedException(); }
+        public int GetOrdinal(string name) { throw new NotImplementedException(); }
+        public string GetString(int i) { throw new NotImplementedException(); }
+        public int GetValues(object[] values) { throw new NotImplementedException(); }
+        public bool IsDBNull(int i) { throw new NotImplementedException(); }
+        public DataTable GetSchemaTable() { throw new NotImplementedException(); }
+        public IDataReader GetData(int i) { throw new NotImplementedException(); }
+        public long GetChars(int i, long fieldoffset, char[] buffer, int bufferoffset, int length) { throw new NotImplementedException(); }
+        public long GetBytes(int i, long fieldOffset, byte[] buffer, int bufferoffset, int length) { throw new NotImplementedException(); }
+        [return: DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicFields | DynamicallyAccessedMemberTypes.PublicProperties)]
+        public Type GetFieldType(int i) { throw new NotImplementedException(); }
+        #endregion
     }
 }

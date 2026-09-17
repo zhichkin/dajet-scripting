@@ -1,10 +1,6 @@
 
 PRIVATE @Буфер array
 
-USE 'MS_TEST'
-  CREATE TYPE РегистрСведений.ВходящаяОчередь
-END
-
 USE TRANSACTION 'PG_TEST'
 
   SELECT НомерСообщения
@@ -16,7 +12,7 @@ USE TRANSACTION 'PG_TEST'
 
   USE TRANSACTION 'MS_TEST'
     INSERT РегистрСведений.ВходящаяОчередь
-      FROM @Буфер -- TIMEOUT 10 BATCH_SIZE 14 
+      FROM @Буфер -- TIMEOUT 10 BATCH_SIZE 333
     SELECT НомерСообщения = @Буфер.НомерСообщения -- VECTOR('so_import')
          , Отправитель    = @Буфер.Отправитель
          , Получатель     = @Буфер.Получатель
