@@ -570,7 +570,7 @@ namespace DaJet.Scripting
                     }
                     else
                     {
-                        throw new InvalidOperationException("[BULK INSERT] Statement is not implemented for PostgreSQL yet.");
+                        processor = new PgBulkInsertProcessor(this, in statement);
                     }
                 }
 

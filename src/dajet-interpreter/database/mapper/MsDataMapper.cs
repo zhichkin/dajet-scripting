@@ -14,7 +14,6 @@ using DaJet.TypeSystem;
 using Microsoft.Data.SqlClient;
 using System.Buffers.Binary;
 using System.Data;
-using System.Xml.Linq;
 
 namespace DaJet.Scripting
 {

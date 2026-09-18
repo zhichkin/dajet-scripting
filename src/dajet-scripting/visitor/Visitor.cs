@@ -86,33 +86,229 @@ namespace DaJet.Scripting
 
         public static List<TNode> Extract<TNode>(in SyntaxNode node) where TNode : SyntaxNode
         {
-            List<TNode> nodes = new();
+            List<TNode> found = new();
 
-            IScriptVisitor extractor = new Extractor<TNode>(in nodes);
+            Extract(in node, in found);
 
-            Visit(in node, in extractor);
-
-            return nodes;
+            return found;
         }
-    }
-
-    internal sealed class Extractor<TNode> : IScriptVisitor where TNode : SyntaxNode
-    {
-        private readonly List<TNode> _nodes;
-        internal Extractor(in List<TNode> nodes)
+        private static void Extract<TNode>(in SyntaxNode node, in List<TNode> result) where TNode : SyntaxNode
         {
-            _nodes = nodes;
+            if (node is ColumnExpression expression) { Extract(in expression, in result); }
+            else if (node is ColumnReference column) { Extract(in column, in result); }
+            else if (node is ScalarExpression scalar) { Extract(in scalar, in result); }
+            else if (node is VariableReference variable) { Extract(in variable, in result); }
+            else if (node is MemberAccessExpression member) { Extract(in member, in result); }
+            else if (node is FunctionExpression function) { Extract(in function, in result); }
+            else if (node is CaseExpression _case) { Extract(in _case, in result); }
+            else if (node is GroupOperator group) { Extract(in group, in result); }
+            else if (node is UnaryOperator unary) { Extract(in unary, in result); }
+            else if (node is BinaryOperator binary) { Extract(in binary, in result); }
+            else if (node is ComparisonOperator comparison) { Extract(in comparison, in result); }
+            else if (node is AdditionOperator addition) { Extract(in addition, in result); }
+            else if (node is MultiplyOperator multiply) { Extract(in multiply, in result); }
         }
-        public void SayHello(in SyntaxNode node)
+        private static void Extract<TNode>(in ColumnExpression node, in List<TNode> result) where TNode : SyntaxNode
         {
-            if (node is TNode target)
+            if (node is TNode wanted)
             {
-                _nodes.Add(target);
+                result.Add(wanted);
+            }
+
+            Extract(node.Expression, in result);
+        }
+        private static void Extract<TNode>(in ColumnReference node, in List<TNode> result) where TNode : SyntaxNode
+        {
+            if (node is TNode wanted)
+            {
+                result.Add(wanted);
             }
         }
-        public void SayGoodbye(in SyntaxNode node)
+        private static void Extract<TNode>(in ScalarExpression node, in List<TNode> result) where TNode : SyntaxNode
         {
-            // do nothing
+            if (node is TNode wanted)
+            {
+                result.Add(wanted);
+            }
+        }
+        private static void Extract<TNode>(in VariableReference node, in List<TNode> result) where TNode : SyntaxNode
+        {
+            if (node is TNode wanted)
+            {
+                result.Add(wanted);
+            }
+        }
+        private static void Extract<TNode>(in MemberAccessExpression node, in List<TNode> result) where TNode : SyntaxNode
+        {
+            if (node is TNode wanted)
+            {
+                result.Add(wanted);
+            }
+        }
+        private static void Extract<TNode>(in FunctionExpression node, in List<TNode> result) where TNode : SyntaxNode
+        {
+            if (node is TNode wanted)
+            {
+                result.Add(wanted);
+            }
+
+            if (node.Parameters is not null)
+            {
+                foreach (SyntaxNode parameter in node.Parameters)
+                {
+                    Extract(in parameter, in result);
+                }
+            }
+
+            if (node.Over is not null)
+            {
+                Extract(node.Over, in result);
+            }
+        }
+        private static void Extract<TNode>(in OverClause node, in List<TNode> result) where TNode : SyntaxNode
+        {
+            if (node is TNode wanted)
+            {
+                result.Add(wanted);
+            }
+
+            if (node.Partition is not null)
+            {
+                Extract(node.Partition, in result);
+            }
+
+            if (node.Order is not null)
+            {
+                Extract(node.Order, in result);
+            }
+        }
+        private static void Extract<TNode>(in PartitionClause node, in List<TNode> result) where TNode : SyntaxNode
+        {
+            if (node is TNode wanted)
+            {
+                result.Add(wanted);
+            }
+
+            if (node.Columns is not null)
+            {
+                foreach (SyntaxNode column in node.Columns)
+                {
+                    Extract(in column, in result);
+                }
+            }
+        }
+        private static void Extract<TNode>(in OrderClause node, in List<TNode> result) where TNode : SyntaxNode
+        {
+            if (node is TNode wanted)
+            {
+                result.Add(wanted);
+            }
+
+            if (node.Expressions is not null)
+            {
+                foreach (OrderExpression order in node.Expressions)
+                {
+                    Extract(in order, in result);
+                }
+            }
+
+            if (node.Offset is not null)
+            {
+                Extract(node.Offset, in result);
+
+                if (node.Fetch is not null)
+                {
+                    Extract(node.Fetch, in result);
+                }
+            }
+        }
+        private static void Extract<TNode>(in OrderExpression node, in List<TNode> result) where TNode : SyntaxNode
+        {
+            if (node is TNode wanted)
+            {
+                result.Add(wanted);
+            }
+
+            Extract(node.Expression, in result);
+        }
+        private static void Extract<TNode>(in CaseExpression node, in List<TNode> result) where TNode : SyntaxNode
+        {
+            if (node is TNode wanted)
+            {
+                result.Add(wanted);
+            }
+
+            if (node.CASE is not null)
+            {
+                foreach (WhenClause when in node.CASE)
+                {
+                    Extract(when.WHEN, in result);
+                    Extract(when.THEN, in result);
+                }
+            }
+
+            if (node.ELSE is not null)
+            {
+                Extract(node.ELSE, in result);
+            }
+        }
+        private static void Extract<TNode>(in GroupOperator node, in List<TNode> result) where TNode : SyntaxNode
+        {
+            if (node is TNode wanted)
+            {
+                result.Add(wanted);
+            }
+
+            Extract(node.Expression, in result);
+        }
+        private static void Extract<TNode>(in UnaryOperator node, in List<TNode> result) where TNode : SyntaxNode
+        {
+            if (node is TNode wanted)
+            {
+                result.Add(wanted);
+            }
+
+            Extract(node.Expression, in result);
+        }
+        private static void Extract<TNode>(in BinaryOperator node, in List<TNode> result) where TNode : SyntaxNode
+        {
+            if (node is TNode wanted)
+            {
+                result.Add(wanted);
+            }
+
+            Extract(node.Expression1, in result);
+            Extract(node.Expression2, in result);
+        }
+        private static void Extract<TNode>(in ComparisonOperator node, in List<TNode> result) where TNode : SyntaxNode
+        {
+            if (node is TNode wanted)
+            {
+                result.Add(wanted);
+            }
+
+            Extract(node.Expression1, in result);
+            Extract(node.Expression2, in result);
+        }
+        private static void Extract<TNode>(in AdditionOperator node, in List<TNode> result) where TNode : SyntaxNode
+        {
+            if (node is TNode wanted)
+            {
+                result.Add(wanted);
+            }
+
+            Extract(node.Expression1, in result);
+            Extract(node.Expression2, in result);
+        }
+        private static void Extract<TNode>(in MultiplyOperator node, in List<TNode> result) where TNode : SyntaxNode
+        {
+            if (node is TNode wanted)
+            {
+                result.Add(wanted);
+            }
+
+            Extract(node.Expression1, in result);
+            Extract(node.Expression2, in result);
         }
     }
 }

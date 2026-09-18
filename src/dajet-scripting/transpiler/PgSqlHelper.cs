@@ -1,4 +1,5 @@
-﻿using Npgsql;
+﻿using DaJet.TypeSystem;
+using Npgsql;
 using NpgsqlTypes;
 using System.Data;
 using System.Text;
@@ -96,6 +97,30 @@ namespace DaJet.Scripting
             }
 
             return list;
+        }
+
+        // Исключения из правил:
+        // - _KeyField (табличная часть) binary(4) -> int CanBeNumeric
+        // - _Folder (иерархические ссылочные типы) binary(1) -> bool инвертировать !!!
+        // - _Version (ссылочные типы) timestamp binary(8) -> IsBinary
+        // - _Type (тип значений характеристики) varbinary(max) -> IsBinary nullable
+        // - _RecordKind (вид движения накопления) numeric(1) CanBeNumeric Приход = 0, Расход = 1
+        // - _DimHash numeric(10) ?
+
+        // NOTE: SQL Server rowversion is unsigned big-endian value
+        // NOTE: 1C binary(4) is integer, unsigned big-endian value
+        public static string ToSqlDataType(DataType type)
+        {
+            if (type.IsBoolean) { return "boolean"; }
+            else if (type.IsDecimal) { return string.Format("numeric({0},{1})", type.Precision, type.Scale); }
+            else if (type.IsDateTime) { return "timestamp without time zone"; }
+            else if (type.IsString) { return (type.Size == 0) ? "mvarchar" : string.Format("{0}({1})", (type.IsFixed) ? "mchar" : "mvarchar", type.Size); }
+            else if (type.IsBinary) { return "bytea"; }
+            else if (type.IsUuid) { return "bytea"; }
+            else if (type.IsEntity) { return "bytea"; }
+            else if (type.IsInteger) { return (type.Size == 4) ? "integer" : "bigint"; }
+
+            throw new InvalidOperationException("Failed to map DaJet data type to SQL data type.");
         }
     }
 }

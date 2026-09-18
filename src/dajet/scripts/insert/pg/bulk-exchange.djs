@@ -1,7 +1,7 @@
 
 PRIVATE @Буфер array
 
-USE TRANSACTION 'PG_TEST'
+USE TRANSACTION 'MS_TEST'
 
   SELECT НомерСообщения
        , Отправитель, Получатель
@@ -10,10 +10,10 @@ USE TRANSACTION 'PG_TEST'
     FROM РегистрСведений.ИсходящаяОчередь
    ORDER BY НомерСообщения ASC
 
-  USE TRANSACTION 'MS_TEST'
+  USE TRANSACTION 'PG_TEST'
     INSERT РегистрСведений.ВходящаяОчередь
       FROM @Буфер -- TIMEOUT 10 BATCH_SIZE 333
-    SELECT НомерСообщения = @Буфер.НомерСообщения -- VECTOR('so_import')
+    SELECT НомерСообщения = VECTOR('so_import') -- @Буфер.НомерСообщения
          , Отправитель    = @Буфер.Отправитель
          , ТипСообщения   = (@Буфер.ТипСообщения + @Буфер.НомерСообщения)
          , ТелоСообщения  = @Буфер.ТелоСообщения
@@ -21,4 +21,4 @@ USE TRANSACTION 'PG_TEST'
 
 END
 
-RETURN '[BULK INSERT] обмен сообщениями PG - MS'
+RETURN '[BULK INSERT] обмен сообщениями MS - PG'

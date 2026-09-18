@@ -42,15 +42,20 @@ namespace DaJet.Scripting
             _target = target;
 
             _bufferName = variable.Identifier;
-            _bufferItem = string.Format("{0}{1}", _bufferName, "_Item");
+            _bufferItem = string.Format("{0}{1}", _bufferName, "__item__");
 
             _context.CreateVariable(in _bufferItem);
 
             foreach (ColumnExpression map in _statement.Values)
             {
-                if (map.Expression is MemberAccessExpression member && member.GetVariableName() == _bufferName)
+                List<MemberAccessExpression> members = Visitor.Extract<MemberAccessExpression>(map);
+
+                foreach (MemberAccessExpression member in members)
                 {
-                    member.Identifier = member.Identifier.Replace(_bufferName, _bufferItem);
+                    if (member.GetVariableName() == _bufferName)
+                    {
+                        member.Identifier = member.Identifier.Replace(_bufferName, _bufferItem);
+                    }
                 }
             }
             
