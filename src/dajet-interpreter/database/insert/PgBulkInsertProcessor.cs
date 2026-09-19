@@ -90,8 +90,6 @@ namespace DaJet.Scripting
         {
             int timeout = _statement.Timeout;
 
-            IDataReader reader = _mapper.GetDataReader(in buffer);
-
             string tempTable = PgBulkInsertTranspiler.TempTableName;
             string copyCommand = $"COPY {tempTable} FROM STDIN (FORMAT BINARY)";
 

@@ -19,19 +19,6 @@ namespace DaJet.Scripting
 {
     public sealed class MsDataMapper
     {
-        private readonly static byte[] TRUE = [0x01];
-        private readonly static byte[] FALSE = [0x00];
-        private readonly static byte[] EMPTY_TYPE_CODE = [0x00000000];
-        private readonly static byte[] EMPTY_UUID = [0x00000000000000000000000000000000];
-        private readonly static byte[] VALUE_STORAGE = [0x01, 0x01, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xEF, 0xBB, 0xBF, 0x7B, 0x22, 0x55, 0x22, 0x7D];
-
-        private readonly static byte[] TAG_UNDEFINED = [0x01];
-        private readonly static byte[] TAG_BOOLEAN = [0x02];
-        private readonly static byte[] TAG_DECIMAL = [0x03];
-        private readonly static byte[] TAG_DATETIME = [0x04];
-        private readonly static byte[] TAG_STRING = [0x05];
-        private readonly static byte[] TAG_ENTITY = [0x08];
-
         public readonly static Func<object, object> ConvertTag = InputTag;
         public readonly static Func<object, object> ConvertBoolean = InputBoolean;
         public readonly static Func<object, object> ConvertNumeric = InputNumeric;
@@ -89,44 +76,44 @@ namespace DaJet.Scripting
 
         private static object InputTag(object value)
         {
-            if (value is null) { return TAG_UNDEFINED; }
+            if (value is null) { return Constants.TAG_UNDEFINED; }
 
             if (value is Union union)
             {
                 return union.Tag switch
                 {
-                    UnionTag.Boolean => TAG_BOOLEAN,
-                    UnionTag.Decimal => TAG_DECIMAL,
-                    UnionTag.DateTime => TAG_DATETIME,
-                    UnionTag.String => TAG_STRING,
-                    UnionTag.Entity => TAG_ENTITY,
-                    _ => TAG_UNDEFINED,
+                    UnionTag.Boolean => Constants.TAG_BOOLEAN,
+                    UnionTag.Decimal => Constants.TAG_NUMERIC,
+                    UnionTag.DateTime => Constants.TAG_DATETIME,
+                    UnionTag.String => Constants.TAG_STRING,
+                    UnionTag.Entity => Constants.TAG_ENTITY,
+                    _ => Constants.TAG_UNDEFINED,
                 };
             }
             
-            if (value is bool) { return TAG_BOOLEAN; }
-            if (value is decimal) { return TAG_DECIMAL; }
-            if (value is DateTime) { return TAG_DATETIME; }
-            if (value is string) { return TAG_STRING; }
-            if (value is Entity) { return TAG_ENTITY; }
-            if (value is int) { return TAG_DECIMAL; }
-            if (value is long) { return TAG_DECIMAL; }
+            if (value is bool) { return Constants.TAG_BOOLEAN; }
+            if (value is decimal) { return Constants.TAG_NUMERIC; }
+            if (value is DateTime) { return Constants.TAG_DATETIME; }
+            if (value is string) { return Constants.TAG_STRING; }
+            if (value is Entity) { return Constants.TAG_ENTITY; }
+            if (value is int) { return Constants.TAG_NUMERIC; }
+            if (value is long) { return Constants.TAG_NUMERIC; }
 
-            return TAG_UNDEFINED;
+            return Constants.TAG_UNDEFINED;
         }
         private static object InputBoolean(object value)
         {
             if (value is bool boolean)
             {
-                return boolean ? TRUE : FALSE;
+                return boolean ? Constants.TRUE : Constants.FALSE;
             }
 
             if (value is Union union && union.Tag == UnionTag.Boolean)
             {
-                return union.GetBoolean() ? TRUE : FALSE;
+                return union.GetBoolean() ? Constants.TRUE : Constants.FALSE;
             }
             
-            return FALSE;
+            return Constants.FALSE;
         }
         private static object InputNumeric(object value)
         {
@@ -185,7 +172,7 @@ namespace DaJet.Scripting
                 return binary;
             }
 
-            return VALUE_STORAGE;
+            return Constants.VALUE_STORAGE;
         }
         private static object InputUuid(object value)
         {
@@ -194,7 +181,7 @@ namespace DaJet.Scripting
                 return uuid.ToByteArray();
             }
 
-            return EMPTY_UUID;
+            return Constants.EMPTY_UUID;
         }
         private static object InputTypeCode(object value)
         {
@@ -218,7 +205,7 @@ namespace DaJet.Scripting
                 return buffer.ToArray();
             }
 
-            return EMPTY_TYPE_CODE;
+            return Constants.EMPTY_TYPE_CODE;
         }
         private static object InputIdentity(object value)
         {
@@ -232,7 +219,7 @@ namespace DaJet.Scripting
                 return union.GetEntity().Identity.ToByteArray();
             }
 
-            return EMPTY_UUID;
+            return Constants.EMPTY_UUID;
         }
 
         public void ProcessInput(in SqlCommand command)
@@ -253,7 +240,7 @@ namespace DaJet.Scripting
                 }
                 else if (value is bool boolean)
                 {
-                    command.Parameters.AddWithValue(name, boolean ? TRUE : FALSE);
+                    command.Parameters.AddWithValue(name, boolean ? Constants.TRUE : Constants.FALSE);
                 }
                 else if (value is decimal)
                 {
@@ -347,7 +334,7 @@ namespace DaJet.Scripting
 
                 value = array[p];
 
-                command.Parameters.AddWithValue(name, value ? TRUE : FALSE);
+                command.Parameters.AddWithValue(name, value ? Constants.TRUE : Constants.FALSE);
 
                 if (p > 0) { parameters += ", "; }
 

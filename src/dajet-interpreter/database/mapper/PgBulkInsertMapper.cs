@@ -3,27 +3,217 @@ using DaJet.TypeSystem;
 using Microsoft.Data.SqlClient.Server;
 using Npgsql;
 using NpgsqlTypes;
+using System.Buffers.Binary;
 using System.Collections;
-using System.Data;
-using System.Diagnostics.CodeAnalysis;
 
 namespace DaJet.Scripting
 {
-    public sealed class PgBulkInsertMapper : IEnumerable<SqlDataRecord>, IEnumerator<SqlDataRecord>, IDataReader
+    public sealed class PgBulkInsertMapper : IEnumerable<DataObject>, IEnumerator<DataObject>
     {
         private int _current;
         private bool _skipped;
+        private DataObject _record;
         private List<DataObject> _buffer;
         private readonly int _batchSize;
         private readonly int _yearOffset;
-        private readonly SqlDataRecord _record;
         private readonly ScriptContext _context;
         private readonly string _bufferItem;
         private readonly EntityDefinition _table;
-        private readonly Func<object, object> _convertDateTime;
         private readonly Dictionary<string, ColumnExpression> _map = new();
-        private readonly Dictionary<ColumnDefinition, int> _ordinals = new();
-        private readonly Dictionary<ColumnDefinition, Func<object, object>> _converters = new();
+        private readonly Dictionary<ColumnDefinition, Action<NpgsqlBinaryImporter, object>> _converters = new();
+        private static void ConvertTag(NpgsqlBinaryImporter importer, object value)
+        {
+            if (value is null)
+            {
+                importer.Write(Constants.TAG_UNDEFINED, NpgsqlDbType.Bytea);
+            }
+            else if (value is Union union)
+            {
+                switch (union.Tag)
+                {
+                    case UnionTag.Boolean: importer.Write(Constants.TAG_BOOLEAN, NpgsqlDbType.Bytea); break;
+                    case UnionTag.Decimal: importer.Write(Constants.TAG_NUMERIC, NpgsqlDbType.Bytea); break;
+                    case UnionTag.DateTime: importer.Write(Constants.TAG_DATETIME, NpgsqlDbType.Bytea); break;
+                    case UnionTag.String: importer.Write(Constants.TAG_STRING, NpgsqlDbType.Bytea); break;
+                    case UnionTag.Entity: importer.Write(Constants.TAG_ENTITY, NpgsqlDbType.Bytea); break;
+                    default: importer.Write(Constants.TAG_UNDEFINED, NpgsqlDbType.Bytea); break;
+                }
+            }
+            else
+            {
+                Type type = value.GetType();
+
+                if (type == typeof(bool)) { importer.Write(Constants.TAG_BOOLEAN, NpgsqlDbType.Bytea); }
+                else if (type == typeof(decimal)) { importer.Write(Constants.TAG_NUMERIC, NpgsqlDbType.Bytea); }
+                else if (type == typeof(DateTime)) { importer.Write(Constants.TAG_DATETIME, NpgsqlDbType.Bytea); }
+                else if (type == typeof(string)) { importer.Write(Constants.TAG_STRING, NpgsqlDbType.Bytea); }
+                else if (type == typeof(Entity)) { importer.Write(Constants.TAG_ENTITY, NpgsqlDbType.Bytea); }
+                else if (type == typeof(int)) { importer.Write(Constants.TAG_NUMERIC, NpgsqlDbType.Bytea); }
+                else if (type == typeof(long)) { importer.Write(Constants.TAG_NUMERIC, NpgsqlDbType.Bytea); }
+            }
+
+            throw new InvalidCastException($"Unsupported union data type {value.GetType()}");
+        }
+        private static void ConvertBoolean(NpgsqlBinaryImporter importer, object value)
+        {
+            if (value is null)
+            {
+                importer.Write(false, NpgsqlDbType.Boolean);
+            }
+            else if (value is bool boolean)
+            {
+                importer.Write(boolean, NpgsqlDbType.Boolean);
+            }
+            else if (value is Union union && union.Tag == UnionTag.Boolean)
+            {
+                importer.Write(union.GetBoolean(), NpgsqlDbType.Boolean);
+            }
+            else
+            {
+                throw new InvalidCastException($"Failed to convert {value.GetType()} to boolean");
+            }
+        }
+        private static void ConvertNumeric(NpgsqlBinaryImporter importer, object value)
+        {
+            if (value is null)
+            {
+                importer.Write(0M, NpgsqlDbType.Numeric);
+            }
+            else if (value is decimal numeric)
+            {
+                importer.Write(numeric, NpgsqlDbType.Numeric);
+            }
+            else if (value is int integer)
+            {
+                importer.Write(new decimal(integer), NpgsqlDbType.Numeric);
+            }
+            else if (value is long int64)
+            {
+                importer.Write(new decimal(int64), NpgsqlDbType.Numeric);
+            }
+            else if (value is Union union && union.Tag == UnionTag.Decimal)
+            {
+                importer.Write(union.GetDecimal(), NpgsqlDbType.Numeric);
+            }
+            else
+            {
+                throw new InvalidCastException($"Failed to convert {value.GetType()} to numeric");
+            }
+        }
+        private void ConvertDateTime(NpgsqlBinaryImporter importer, object value)
+        {
+            if (value is null)
+            {
+                importer.Write(DateTime.MinValue.AddYears(_yearOffset), NpgsqlDbType.Timestamp);
+            }
+            else if (value is DateTime datetime)
+            {
+                importer.Write(datetime.AddYears(_yearOffset), NpgsqlDbType.Timestamp);
+            }
+            else if (value is Union union && union.Tag == UnionTag.DateTime)
+            {
+                importer.Write(union.GetDateTime().AddYears(_yearOffset), NpgsqlDbType.Timestamp);
+            }
+            else
+            {
+                throw new InvalidCastException($"Failed to convert {value.GetType()} to timestamp");
+            }
+        }
+        private static void ConvertString(NpgsqlBinaryImporter importer, object value)
+        {
+            if (value is null)
+            {
+                importer.Write(string.Empty, "mvarchar");
+            }
+            else if (value is string text)
+            {
+                importer.Write(text, "mvarchar");
+            }
+            else if (value is Union union && union.Tag == UnionTag.String)
+            {
+                text = union.GetString();
+                importer.Write(text is null ? string.Empty : text, "mvarchar");
+            }
+            else
+            {
+                throw new InvalidCastException($"Failed to convert {value.GetType()} to mvarchar");
+            }
+        }
+        private static void ConvertBinary(NpgsqlBinaryImporter importer, object value)
+        {
+            if (value is null)
+            {
+                importer.Write(Constants.VALUE_STORAGE, NpgsqlDbType.Bytea);
+            }
+            else if (value is byte[] binary)
+            {
+                importer.Write(binary, NpgsqlDbType.Bytea);
+            }
+            else
+            {
+                throw new InvalidCastException($"Failed to convert {value.GetType()} to bytea");
+            }
+        }
+        private static void ConvertUuid(NpgsqlBinaryImporter importer, object value)
+        {
+            if (value is null)
+            {
+                importer.Write(Constants.EMPTY_UUID, NpgsqlDbType.Bytea);
+            }
+            else if (value is Guid uuid)
+            {
+                importer.Write(uuid.ToByteArray(), NpgsqlDbType.Bytea);
+            }
+            else
+            {
+                throw new InvalidCastException($"Failed to convert {value.GetType()} to bytea");
+            }
+        }
+        private static void ConvertTypeCode(NpgsqlBinaryImporter importer, object value)
+        {
+            if (value is null)
+            {
+                importer.Write(Constants.EMPTY_TYPE_CODE, NpgsqlDbType.Bytea); return;
+            }
+
+            int code = 0;
+
+            if (value is Entity entity)
+            {
+                code = entity.TypeCode;
+            }
+            else if (value is Union union && union.Tag == UnionTag.Entity)
+            {
+                code = union.GetEntity().TypeCode;
+            }
+            else
+            {
+                throw new InvalidCastException($"Failed to convert {value.GetType()} to bytea");
+            }
+            
+            Span<byte> buffer = stackalloc byte[4];
+            BinaryPrimitives.WriteInt32BigEndian(buffer, code);
+            importer.Write(buffer.ToArray(), NpgsqlDbType.Bytea);
+        }
+        private static void ConvertIdentity(NpgsqlBinaryImporter importer, object value)
+        {
+            if (value is null)
+            {
+                importer.Write(Constants.EMPTY_UUID, NpgsqlDbType.Bytea);
+            }
+            else if (value is Entity entity)
+            {
+                importer.Write(entity.Identity.ToByteArray(), NpgsqlDbType.Bytea);
+            }
+            else if (value is Union union && union.Tag == UnionTag.Entity)
+            {
+                importer.Write(union.GetEntity().Identity.ToByteArray(), NpgsqlDbType.Bytea);
+            }
+            else
+            {
+                throw new InvalidCastException($"Failed to convert {value.GetType()} to bytea");
+            }
+        }
         public PgBulkInsertMapper(in ScriptContext context, in InsertStatement statement, in string bufferItem)
         {
             ArgumentNullException.ThrowIfNull(context, nameof(context));
@@ -34,14 +224,6 @@ namespace DaJet.Scripting
             _batchSize = statement.BatchSize;
             _yearOffset = statement.YearOffset;
             _bufferItem = bufferItem;
-            _convertDateTime = ConvertDateTimeWithOffset;
-            
-            if (statement.Target is not TableReference target || target.Binding is not EntityDefinition table)
-            {
-                throw new InvalidOperationException();
-            }
-
-            _table = table;
 
             foreach (ColumnExpression map in statement.Values)
             {
@@ -53,21 +235,26 @@ namespace DaJet.Scripting
                 _map.Add(map.Alias, map);
             }
 
-            SqlMetaData[] columns = PrepareTableTypeMetadata(in table);
+            if (statement.Target is not TableReference target || target.Binding is not EntityDefinition table)
+            {
+                throw new InvalidOperationException();
+            }
 
-            _record = new SqlDataRecord(columns);
+            _table = table;
+            
+            PrepareConverters(in _table);
         }
         object IEnumerator.Current { get { return Current; } }
-        public IEnumerator<SqlDataRecord> GetEnumerator() { return this; }
+        public IEnumerator<DataObject> GetEnumerator() { return this; }
         IEnumerator IEnumerable.GetEnumerator() { return GetEnumerator(); }
-        public IEnumerator<SqlDataRecord> Enumerate(in List<DataObject> buffer)
+        public IEnumerator<DataObject> Enumerate(in List<DataObject> buffer)
         {
             ArgumentNullException.ThrowIfNull(buffer, nameof(buffer));
 
             _buffer = buffer; Reset(); return this;
         }
         public void Reset() { _current = -1; _skipped = false; }
-        public SqlDataRecord Current { get { return _record; } }
+        public DataObject Current { get { return _record; } }
         public bool CanRead()
         {
             return (_skipped || (_buffer is not null && _current + 1 < _buffer.Count));
@@ -88,7 +275,7 @@ namespace DaJet.Scripting
 
             _context.SetValue(in _bufferItem, current);
 
-            SetDataRecordValues(in _record, _current);
+            _record = current;
 
             if (_current > 0 && _current % _batchSize == 0)
             {
@@ -101,133 +288,65 @@ namespace DaJet.Scripting
         {
             if (_buffer is null)
             {
-                return;
+                return; // disposed
             }
 
             if (_current < _buffer.Count)
             {
-                return;
+                return; // skipped
             }
 
             _buffer = null;
-
-            if (_record is not null)
-            {
-                for (int i = 0; i < _record.FieldCount; i++)
-                {
-                    _record.SetValue(i, null);
-                }
-            }
+            _record = null;
         }
 
-        private SqlMetaData[] PrepareTableTypeMetadata(in EntityDefinition table)
+        private void PrepareConverters(in EntityDefinition table)
         {
-            List<SqlMetaData> columns = new();
-
-            columns.Add(new SqlMetaData("order_column", SqlDbType.Int));
-
             foreach (PropertyDefinition property in table.Properties)
             {
-                PrepareTableTypeColumns(in property, in columns);
-            }
+                DataType input = property.Type;
 
-            return columns.ToArray();
-        }
-        private void PrepareTableTypeColumns(in PropertyDefinition property, in List<SqlMetaData> columns)
-        {
-            int ordinal = columns.Count;
-
-            DataType input = property.Type;
-
-            foreach (ColumnDefinition column in property.Columns)
-            {
-                if (column.IsGenerated)
+                foreach (ColumnDefinition column in property.Columns)
                 {
-                    continue; // database auto-generated column
-                }
-
-                SqlDbType type = SqlDbType.Binary;
-                Func<object, object> converter = null;
-
-                if (column.Purpose == ColumnPurpose.Value)
-                {
-                    if (input.IsBoolean) { converter = MsDataMapper.ConvertBoolean; }
-                    else if (input.IsDecimal) { converter = MsDataMapper.ConvertNumeric; type = SqlDbType.Decimal; }
-                    else if (input.IsInteger) { converter = MsDataMapper.ConvertNumeric; type = SqlDbType.Decimal; }
-                    else if (input.IsDateTime) { converter = _convertDateTime; type = SqlDbType.DateTime2; }
-                    else if (input.IsString)
+                    if (column.IsGenerated)
                     {
-                        converter = MsDataMapper.ConvertString;
-
-                        type = (column.Type.IsFixed) ? SqlDbType.NChar : SqlDbType.NVarChar;
+                        continue; // database auto-generated column
                     }
-                    else if (input.IsBinary) { converter = MsDataMapper.ConvertBinary; type = SqlDbType.VarBinary; }
-                    else if (input.IsUuid) { converter = MsDataMapper.ConvertUuid; }
-                    else if (input.IsEntity) { converter = MsDataMapper.ConvertIdentity; }
-                }
-                else if (column.Purpose == ColumnPurpose.Tag) { converter = MsDataMapper.ConvertTag; }
-                else if (column.Purpose == ColumnPurpose.Boolean) { converter = MsDataMapper.ConvertBoolean; }
-                else if (column.Purpose == ColumnPurpose.Numeric) { converter = MsDataMapper.ConvertNumeric; type = SqlDbType.Decimal; }
-                else if (column.Purpose == ColumnPurpose.DateTime) { converter = _convertDateTime; type = type = SqlDbType.DateTime2; }
-                else if (column.Purpose == ColumnPurpose.String)
-                {
-                    converter = MsDataMapper.ConvertString;
 
-                    type = type = (column.Type.IsFixed) ? SqlDbType.NChar : SqlDbType.NVarChar;
-                }
-                else if (column.Purpose == ColumnPurpose.TypeCode) { converter = MsDataMapper.ConvertTypeCode; }
-                else if (column.Purpose == ColumnPurpose.Identity) { converter = MsDataMapper.ConvertIdentity; }
+                    Action<NpgsqlBinaryImporter, object> converter = null;
 
-                SqlMetaData metadata;
-
-                if (type == SqlDbType.NChar)
-                {
-                    metadata = new SqlMetaData(column.Name, type, input.Size);
+                    if (column.Purpose == ColumnPurpose.Value)
+                    {
+                        if (input.IsBoolean) { converter = ConvertBoolean; }
+                        else if (input.IsDecimal) { converter = ConvertNumeric; }
+                        else if (input.IsInteger) { converter = ConvertNumeric; }
+                        else if (input.IsDateTime) { converter = ConvertDateTime; }
+                        else if (input.IsString) { converter = ConvertString; }
+                        else if (input.IsBinary) { converter = ConvertBinary; }
+                        else if (input.IsUuid) { converter = ConvertUuid; }
+                        else if (input.IsEntity) { converter = ConvertIdentity; }
+                    }
+                    else if (column.Purpose == ColumnPurpose.Tag) { converter = ConvertTag; }
+                    else if (column.Purpose == ColumnPurpose.Boolean) { converter = ConvertBoolean; }
+                    else if (column.Purpose == ColumnPurpose.Numeric) { converter = ConvertNumeric; }
+                    else if (column.Purpose == ColumnPurpose.DateTime) { converter = ConvertDateTime; }
+                    else if (column.Purpose == ColumnPurpose.String) { converter = ConvertString; }
+                    else if (column.Purpose == ColumnPurpose.TypeCode) { converter = ConvertTypeCode; }
+                    else if (column.Purpose == ColumnPurpose.Identity) { converter = ConvertIdentity; }
+                    
+                    _converters.Add(column, converter);
                 }
-                else if (type == SqlDbType.NVarChar)
-                {
-                    metadata = new SqlMetaData(column.Name, type, (input.Size == 0) ? -1 : input.Size);
-                }
-                else if (type == SqlDbType.Binary)
-                {
-                    metadata = new SqlMetaData(column.Name, type, input.Size);
-                }
-                else if (type == SqlDbType.VarBinary)
-                {
-                    metadata = new SqlMetaData(column.Name, type, -1);
-                }
-                else if (type == SqlDbType.Decimal)
-                {
-                    metadata = new SqlMetaData(column.Name, type, input.Precision, input.Scale);
-                }
-                else
-                {
-                    metadata = new SqlMetaData(column.Name, type);
-                }
-
-                columns.Add(metadata);
-
-                _ordinals.Add(column, ordinal++);
-
-                _converters.Add(column, converter);
             }
-        }
-
-        private object ConvertDateTimeWithOffset(object value)
-        {
-            return MsDataMapper.ConvertDateTime(value, _yearOffset);
         }
         public void WriteRowValues(in NpgsqlBinaryImporter importer)
         {
-            DataObject record = null;
+            DataObject record = Current;
 
             importer.StartRow();
             importer.Write(_current, NpgsqlDbType.Integer); // order_column
-            importer.Write("test", "mvarchar");
-
-            int ordinal;
+            
             object value;
-            Func<object, object> converter;
+            Action<NpgsqlBinaryImporter, object> converter;
 
             foreach (PropertyDefinition property in _table.Properties)
             {
@@ -240,104 +359,16 @@ namespace DaJet.Scripting
 
                 foreach (ColumnDefinition column in property.Columns)
                 {
-                    if (!_ordinals.TryGetValue(column, out ordinal))
+                    if (column.IsGenerated)
                     {
                         continue; // database auto-generated column
                     }
 
                     converter = _converters[column];
 
-                    value = converter(value);
-
-                    //FIXME: column metadata is provided by DaJet as SQL Server data types
-                    bool boolean = (column.Purpose == ColumnPurpose.Boolean) ||
-                        (column.Purpose == ColumnPurpose.Value && property.Type.IsBoolean);
-
-                    if (boolean)
-                    {
-                        importer.Write((bool)value, NpgsqlDbType.Boolean);
-                    }
-                    else
-                    {
-                        importer.Write("test", "mvarchar");
-                    }
+                    converter(importer, value);
                 }
             }
         }
-        private void SetDataRecordValues(in SqlDataRecord record, int rowNumber)
-        {
-            record.SetInt32(0, rowNumber);
-
-            int ordinal;
-            object value;
-            Func<object, object> converter;
-
-            foreach (PropertyDefinition property in _table.Properties)
-            {
-                value = null; // default value
-
-                if (_map.TryGetValue(property.Name, out ColumnExpression map))
-                {
-                    value = _context.Evaluate(map.Expression);
-                }
-
-                foreach (ColumnDefinition column in property.Columns)
-                {
-                    if (!_ordinals.TryGetValue(column, out ordinal))
-                    {
-                        continue; // database auto-generated column
-                    }
-
-                    converter = _converters[column];
-
-                    value = converter(value);
-
-                    record.SetValue(ordinal, value);
-                }
-            }
-        }
-
-        internal IDataReader GetDataReader(in List<DataObject> buffer)
-        {
-            ArgumentNullException.ThrowIfNull(buffer, nameof(buffer));
-
-            _buffer = buffer; Reset(); return this;
-        }
-        public bool Read() { return MoveNext(); }
-        public int FieldCount { get { return _record.FieldCount; } }
-        public object GetValue(int ordinal) { return _record.GetValue(ordinal); }
-
-        #region "Not implemented IDataReader interface"
-        public int Depth => throw new NotImplementedException();
-        public bool IsClosed => throw new NotImplementedException();
-        public int RecordsAffected => throw new NotImplementedException();
-        public object this[int ordinal] => throw new NotImplementedException();
-        public object this[string name] => throw new NotImplementedException();
-        public void Close() { throw new NotImplementedException(); }
-        public bool NextResult() { throw new NotImplementedException(); }
-        public bool GetBoolean(int i) { throw new NotImplementedException(); }
-        public byte GetByte(int i) { throw new NotImplementedException(); }
-        public char GetChar(int i) { throw new NotImplementedException(); }
-        public string GetDataTypeName(int i) { throw new NotImplementedException(); }
-        public DateTime GetDateTime(int i) { throw new NotImplementedException(); }
-        public decimal GetDecimal(int i) { throw new NotImplementedException(); }
-        public double GetDouble(int i) { throw new NotImplementedException(); }
-        public float GetFloat(int i) { throw new NotImplementedException(); }
-        public Guid GetGuid(int i) { throw new NotImplementedException(); }
-        public short GetInt16(int i) { throw new NotImplementedException(); }
-        public int GetInt32(int i) { throw new NotImplementedException(); }
-        public long GetInt64(int i) { throw new NotImplementedException(); }
-        public string GetName(int i) { throw new NotImplementedException(); }
-        public int GetOrdinal(string name) { throw new NotImplementedException(); }
-        public string GetString(int i) { throw new NotImplementedException(); }
-        public int GetValues(object[] values) { throw new NotImplementedException(); }
-        public bool IsDBNull(int i) { throw new NotImplementedException(); }
-        public DataTable GetSchemaTable() { throw new NotImplementedException(); }
-        public IDataReader GetData(int i) { throw new NotImplementedException(); }
-        public long GetChars(int i, long fieldoffset, char[] buffer, int bufferoffset, int length) { throw new NotImplementedException(); }
-        public long GetBytes(int i, long fieldOffset, byte[] buffer, int bufferoffset, int length) { throw new NotImplementedException(); }
-        [return: DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicFields | DynamicallyAccessedMemberTypes.PublicProperties)]
-        public Type GetFieldType(int i) { throw new NotImplementedException(); }
-        #endregion
     }
 }
