@@ -19,15 +19,15 @@ namespace DaJet.Scripting
 {
     public sealed class MsDataMapper
     {
-        public readonly static Func<object, object> ConvertTag = InputTag;
-        public readonly static Func<object, object> ConvertBoolean = InputBoolean;
-        public readonly static Func<object, object> ConvertNumeric = InputNumeric;
-        public readonly static Func<object, int, object> ConvertDateTime = InputDateTime;
-        public readonly static Func<object, object> ConvertString = InputString;
-        public readonly static Func<object, object> ConvertBinary = InputBinary;
-        public readonly static Func<object, object> ConvertUuid = InputUuid;
-        public readonly static Func<object, object> ConvertTypeCode = InputTypeCode;
-        public readonly static Func<object, object> ConvertIdentity = InputIdentity;
+        public readonly static Func<ColumnDefinition, object, object> ConvertTag = InputTag;
+        public readonly static Func<ColumnDefinition, object, object> ConvertBoolean = InputBoolean;
+        public readonly static Func<ColumnDefinition, object, object> ConvertNumeric = InputNumeric;
+        public readonly static Func<ColumnDefinition, object, int, object> ConvertDateTime = InputDateTime;
+        public readonly static Func<ColumnDefinition, object, object> ConvertString = InputString;
+        public readonly static Func<ColumnDefinition, object, object> ConvertBinary = InputBinary;
+        public readonly static Func<ColumnDefinition, object, object> ConvertUuid = InputUuid;
+        public readonly static Func<ColumnDefinition, object, object> ConvertTypeCode = InputTypeCode;
+        public readonly static Func<ColumnDefinition, object, object> ConvertIdentity = InputIdentity;
 
         private readonly int _yearOffset;
         private readonly byte[] _buffer = new byte[16];
@@ -74,7 +74,7 @@ namespace DaJet.Scripting
         public string CommandText { get { return _commandText; } }
         public EntityDefinition OutputSchema { get { return _outputSchema; } }
 
-        private static object InputTag(object value)
+        private static object InputTag(ColumnDefinition column, object value)
         {
             if (value is null) { return Constants.TAG_UNDEFINED; }
 
@@ -101,7 +101,7 @@ namespace DaJet.Scripting
 
             return Constants.TAG_UNDEFINED;
         }
-        private static object InputBoolean(object value)
+        private static object InputBoolean(ColumnDefinition column, object value)
         {
             if (value is bool boolean)
             {
@@ -115,7 +115,7 @@ namespace DaJet.Scripting
             
             return Constants.FALSE;
         }
-        private static object InputNumeric(object value)
+        private static object InputNumeric(ColumnDefinition column, object value)
         {
             if (value is decimal numeric)
             {
@@ -137,35 +137,55 @@ namespace DaJet.Scripting
 
             return 0M;
         }
-        private static object InputDateTime(object value, int yearOffset)
+        private static object InputDateTime(ColumnDefinition column, object value, int yearOffset)
         {
+            DateTime timestamp;
+
             if (value is DateTime datetime)
             {
-                return datetime.AddYears(yearOffset);
+                timestamp = datetime.AddYears(yearOffset);
             }
-
-            if (value is Union union && union.Tag == UnionTag.DateTime)
+            else if (value is Union union && union.Tag == UnionTag.DateTime)
             {
-                return union.GetDateTime().AddYears(yearOffset);
+                timestamp = union.GetDateTime().AddYears(yearOffset);
+            }
+            else
+            {
+                timestamp = DateTime.MinValue.AddYears(yearOffset);
             }
 
-            return DateTime.MinValue.AddYears(yearOffset);
+            return new DateTime(timestamp.Year, timestamp.Month, timestamp.Day,
+                timestamp.Hour, timestamp.Minute, timestamp.Second, DateTimeKind.Unspecified);
         }
-        private static object InputString(object value)
+        private static object InputString(ColumnDefinition column, object value)
         {
+            DataType type = column.Type;
+
             if (value is string text)
             {
+                if (type.Size > 0 && text.Length > type.Size)
+                {
+                    throw new InvalidCastException($"[DATA MAPPER] String data would be truncated for column {column.Name}");
+                }
+
                 return text;
             }
 
             if (value is Union union && union.Tag == UnionTag.String)
             {
-                return union.GetString();
+                text = union.GetString();
+
+                if (type.Size > 0 && text.Length > type.Size)
+                {
+                    throw new InvalidCastException($"[DATA MAPPER] String data would be truncated for column {column.Name}");
+                }
+
+                return text is null ? string.Empty : text;
             }
 
             return string.Empty;
         }
-        private static object InputBinary(object value)
+        private static object InputBinary(ColumnDefinition column, object value)
         {
             if (value is byte[] binary)
             {
@@ -174,7 +194,7 @@ namespace DaJet.Scripting
 
             return Constants.VALUE_STORAGE;
         }
-        private static object InputUuid(object value)
+        private static object InputUuid(ColumnDefinition column, object value)
         {
             if (value is Guid uuid)
             {
@@ -183,7 +203,7 @@ namespace DaJet.Scripting
 
             return Constants.EMPTY_UUID;
         }
-        private static object InputTypeCode(object value)
+        private static object InputTypeCode(ColumnDefinition column, object value)
         {
             int code = 0;
 
@@ -207,7 +227,7 @@ namespace DaJet.Scripting
 
             return Constants.EMPTY_TYPE_CODE;
         }
-        private static object InputIdentity(object value)
+        private static object InputIdentity(ColumnDefinition column, object value)
         {
             if (value is Entity entity)
             {

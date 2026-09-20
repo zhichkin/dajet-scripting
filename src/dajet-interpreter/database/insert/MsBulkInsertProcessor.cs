@@ -127,12 +127,12 @@ namespace DaJet.Scripting
                         command.CommandTimeout = 10; // seconds
                         command.ExecuteNonQuery();
                     }
-
-                    command.CommandText = $"DROP TABLE {tempTable};";
-                    command.CommandType = CommandType.Text;
-                    command.CommandTimeout = 10; // seconds
-                    command.ExecuteNonQuery();
                 }
+
+                command.CommandText = $"DROP TABLE {tempTable};";
+                command.CommandType = CommandType.Text;
+                command.CommandTimeout = 10; // seconds
+                command.ExecuteNonQuery();
             }
 
             _context.SetValue(in _bufferItem, null);

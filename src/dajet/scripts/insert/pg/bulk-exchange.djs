@@ -1,5 +1,6 @@
 
 PRIVATE @Буфер array
+PRIVATE @Запись object
 
 USE TRANSACTION 'MS_TEST'
 
@@ -13,12 +14,19 @@ USE TRANSACTION 'MS_TEST'
   USE TRANSACTION 'PG_TEST'
     INSERT РегистрСведений.ВходящаяОчередь
       FROM @Буфер -- TIMEOUT 10 BATCH_SIZE 333
-    SELECT НомерСообщения = VECTOR('so_import') -- @Буфер.НомерСообщения
+    SELECT НомерСообщения = @Буфер.НомерСообщения -- VECTOR('so_import')
          , Отправитель    = @Буфер.Отправитель
-         , ТипСообщения   = (@Буфер.ТипСообщения + @Буфер.НомерСообщения)
+         , ТипСообщения   = @Буфер.ТипСообщения
          , ТелоСообщения  = @Буфер.ТелоСообщения
+         --, ДатаВремя      = '0001-01-01T00:00:01' -- NOW()
   END
 
 END
+
+USE 'PG_TEST'
+  SELECT TOP 1 ДатаВремя INTO @Запись FROM РегистрСведений.ВходящаяОчередь WHERE ДатаВремя = '0001-01-01T00:00:00'
+END
+
+PRINT JSON(@Запись)
 
 RETURN '[BULK INSERT] обмен сообщениями MS - PG'

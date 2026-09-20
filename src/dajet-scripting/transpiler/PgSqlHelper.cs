@@ -113,7 +113,7 @@ namespace DaJet.Scripting
         {
             if (type.IsBoolean) { return "boolean"; }
             else if (type.IsDecimal) { return string.Format("numeric({0},{1})", type.Precision, type.Scale); }
-            else if (type.IsDateTime) { return "timestamp without time zone"; }
+            else if (type.IsDateTime) { return "timestamp"; } // without time zone
             else if (type.IsString) { return (type.Size == 0) ? "mvarchar" : string.Format("{0}({1})", (type.IsFixed) ? "mchar" : "mvarchar", type.Size); }
             else if (type.IsBinary) { return "bytea"; }
             else if (type.IsUuid) { return "bytea"; }

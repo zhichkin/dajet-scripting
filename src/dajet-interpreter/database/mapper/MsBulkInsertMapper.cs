@@ -18,10 +18,10 @@ namespace DaJet.Scripting
         private readonly ScriptContext _context;
         private readonly string _bufferItem;
         private readonly EntityDefinition _table;
-        private readonly Func<object, object> _convertDateTime;
+        private readonly Func<ColumnDefinition, object, object> _convertDateTime;
         private readonly Dictionary<string, ColumnExpression> _map = new();
         private readonly Dictionary<ColumnDefinition, int> _ordinals = new();
-        private readonly Dictionary<ColumnDefinition, Func<object, object>> _converters = new();
+        private readonly Dictionary<ColumnDefinition, Func<ColumnDefinition, object, object>> _converters = new();
         public MsBulkInsertMapper(in ScriptContext context, in InsertStatement statement, in string bufferItem)
         {
             ArgumentNullException.ThrowIfNull(context, nameof(context));
@@ -145,7 +145,7 @@ namespace DaJet.Scripting
                 }
 
                 SqlDbType type = SqlDbType.Binary;
-                Func<object, object> converter = null;
+                Func<ColumnDefinition, object, object> converter = null;
 
                 if (column.Purpose == ColumnPurpose.Value)
                 {
@@ -211,9 +211,9 @@ namespace DaJet.Scripting
             }
         }
 
-        private object ConvertDateTimeWithOffset(object value)
+        private object ConvertDateTimeWithOffset(ColumnDefinition column, object value)
         {
-            return MsDataMapper.ConvertDateTime(value, _yearOffset);
+            return MsDataMapper.ConvertDateTime(column, value, _yearOffset);
         }
         private void SetDataRecordValues(in SqlDataRecord record, int rowNumber)
         {
@@ -221,7 +221,7 @@ namespace DaJet.Scripting
 
             int ordinal;
             object value;
-            Func<object, object> converter;
+            Func<ColumnDefinition, object, object> converter;
 
             foreach (PropertyDefinition property in _table.Properties)
             {
@@ -241,7 +241,7 @@ namespace DaJet.Scripting
 
                     converter = _converters[column];
 
-                    value = converter(value);
+                    value = converter(column, value);
 
                     record.SetValue(ordinal, value);
                 }

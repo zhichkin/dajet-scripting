@@ -99,31 +99,43 @@ namespace DaJet.Scripting
                 command.CommandType = CommandType.Text;
                 command.CommandTimeout = 10; // seconds
                 command.ExecuteNonQuery();
-                
-                while (_mapper.CanRead()) // Next batch to write
-                {
-                    using (NpgsqlBinaryImporter importer = use.Connection.BeginBinaryImport(copyCommand))
-                    {
-                        importer.Timeout = TimeSpan.FromSeconds(timeout);
 
-                        while (_mapper.MoveNext()) // Write batch to temp table
+                NpgsqlBatch insert = new(use.Connection, use.Transaction)
+                {
+                    Timeout = timeout,
+                    BatchCommands =
+                    {
+                        new NpgsqlBatchCommand(_insertTempTable),
+                        new NpgsqlBatchCommand($"TRUNCATE TABLE {tempTable};")
+                    }
+                };
+
+                using (_mapper)
+                {
+                    _ = _mapper.Enumerate(in buffer);
+
+                    while (_mapper.CanRead()) // Next batch to write
+                    {
+                        using (NpgsqlBinaryImporter importer = use.Connection.BeginBinaryImport(copyCommand))
                         {
-                            _mapper.WriteRowValues(in importer);
+                            importer.Timeout = TimeSpan.FromSeconds(timeout);
+
+                            while (_mapper.MoveNext()) // Write batch to temp table
+                            {
+                                _mapper.WriteRowValues(in importer);
+                            }
+
+                            importer.Complete(); // Commit batch write
                         }
 
-                        importer.Complete(); // Commit batch write
+                        insert.ExecuteNonQuery();
                     }
-
-                    command.CommandText = _insertTempTable;
-                    command.CommandType = CommandType.Text;
-                    command.CommandTimeout = timeout; // seconds
-                    command.ExecuteNonQuery();
-
-                    command.CommandText = $"TRUNCATE TABLE {tempTable};";
-                    command.CommandType = CommandType.Text;
-                    command.CommandTimeout = 10; // seconds
-                    command.ExecuteNonQuery();
                 }
+
+                command.CommandText = $"DROP TABLE {tempTable};";
+                command.CommandType = CommandType.Text;
+                command.CommandTimeout = 10; // seconds
+                command.ExecuteNonQuery();
             }
 
             _context.SetValue(in _bufferItem, null);

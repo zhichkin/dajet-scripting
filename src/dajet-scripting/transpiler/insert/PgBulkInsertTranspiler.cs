@@ -70,6 +70,11 @@ namespace DaJet.Scripting
                     
                     type = PgSqlHelper.ToSqlDataType(boolean ? DataType.Boolean : column.Type);
 
+                    if (column.Type.IsString)
+                    {
+                        type = (column.Type.Size == 0) ? "varchar" : string.Format("{0}({1})", (column.Type.IsFixed) ? "char" : "varchar", column.Type.Size);
+                    }
+
                     sql.Append(column.Name.ToLowerInvariant()).Append(' ').Append(type);
                 }
             }
@@ -112,6 +117,11 @@ namespace DaJet.Scripting
                     else
                     {
                         select.Append(column.Name.ToLowerInvariant());
+
+                        if (column.Type.IsString)
+                        {
+                            select.Append("::").Append(PgSqlHelper.ToSqlDataType(column.Type));
+                        }
                     }
 
                     first = false;
