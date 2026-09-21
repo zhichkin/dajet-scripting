@@ -131,12 +131,19 @@ namespace DaJet.Scripting
             {
                 text = union.GetString();
 
-                if (type.Size > 0 && text.Length > type.Size)
+                if (text is null)
                 {
-                    throw new InvalidCastException($"[DATA MAPPER] String data would be truncated for column {column.Name}");
+                    importer.Write(string.Empty, dbType);
                 }
+                else
+                {
+                    if (type.Size > 0 && text.Length > type.Size)
+                    {
+                        throw new InvalidCastException($"[DATA MAPPER] String data would be truncated for column {column.Name}");
+                    }
 
-                importer.Write(text is null ? string.Empty : text, dbType);
+                    importer.Write(text, dbType);
+                }
             }
             else
             {

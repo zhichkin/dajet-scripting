@@ -175,12 +175,17 @@ namespace DaJet.Scripting
             {
                 text = union.GetString();
 
+                if (text is null)
+                {
+                    return string.Empty;
+                }
+
                 if (type.Size > 0 && text.Length > type.Size)
                 {
                     throw new InvalidCastException($"[DATA MAPPER] String data would be truncated for column {column.Name}");
                 }
 
-                return text is null ? string.Empty : text;
+                return text;
             }
 
             return string.Empty;
