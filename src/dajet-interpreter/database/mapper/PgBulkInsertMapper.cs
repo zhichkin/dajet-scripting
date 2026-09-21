@@ -19,8 +19,8 @@ namespace DaJet.Scripting
         private readonly string _bufferItem;
         private readonly EntityDefinition _table;
         private readonly Dictionary<string, ColumnExpression> _map = new();
-        private readonly Dictionary<ColumnDefinition, Action<NpgsqlBinaryImporter, ColumnDefinition, object>> _converters = new();
-        private static void ConvertTag(NpgsqlBinaryImporter importer, ColumnDefinition column, object value)
+        private readonly Dictionary<ColumnDefinition, Action<NpgsqlBinaryImporter, DataType, object>> _converters = new();
+        private static void ConvertTag(NpgsqlBinaryImporter importer, DataType target, object value)
         {
             if (value is null)
             {
@@ -40,19 +40,19 @@ namespace DaJet.Scripting
             }
             else
             {
-                Type type = value.GetType();
+                Type source = value.GetType();
 
-                if (type == typeof(bool)) { importer.Write(Constants.TAG_BOOLEAN, NpgsqlDbType.Bytea); }
-                else if (type == typeof(decimal)) { importer.Write(Constants.TAG_NUMERIC, NpgsqlDbType.Bytea); }
-                else if (type == typeof(DateTime)) { importer.Write(Constants.TAG_DATETIME, NpgsqlDbType.Bytea); }
-                else if (type == typeof(string)) { importer.Write(Constants.TAG_STRING, NpgsqlDbType.Bytea); }
-                else if (type == typeof(Entity)) { importer.Write(Constants.TAG_ENTITY, NpgsqlDbType.Bytea); }
-                else if (type == typeof(int)) { importer.Write(Constants.TAG_NUMERIC, NpgsqlDbType.Bytea); }
-                else if (type == typeof(long)) { importer.Write(Constants.TAG_NUMERIC, NpgsqlDbType.Bytea); }
-                else { throw new InvalidCastException($"Unsupported union data type {value.GetType()}"); }
+                if (source == typeof(bool)) { importer.Write(Constants.TAG_BOOLEAN, NpgsqlDbType.Bytea); }
+                else if (source == typeof(decimal)) { importer.Write(Constants.TAG_NUMERIC, NpgsqlDbType.Bytea); }
+                else if (source == typeof(DateTime)) { importer.Write(Constants.TAG_DATETIME, NpgsqlDbType.Bytea); }
+                else if (source == typeof(string)) { importer.Write(Constants.TAG_STRING, NpgsqlDbType.Bytea); }
+                else if (source == typeof(Entity)) { importer.Write(Constants.TAG_ENTITY, NpgsqlDbType.Bytea); }
+                else if (source == typeof(int)) { importer.Write(Constants.TAG_NUMERIC, NpgsqlDbType.Bytea); }
+                else if (source == typeof(long)) { importer.Write(Constants.TAG_NUMERIC, NpgsqlDbType.Bytea); }
+                else { throw new InvalidCastException($"[DATA MAPPER] Unsupported union data type {source}"); }
             }
         }
-        private static void ConvertBoolean(NpgsqlBinaryImporter importer, ColumnDefinition column, object value)
+        private static void ConvertBoolean(NpgsqlBinaryImporter importer, DataType target, object value)
         {
             if (value is bool boolean)
             {
@@ -67,7 +67,7 @@ namespace DaJet.Scripting
                 importer.Write(false, NpgsqlDbType.Boolean);
             }
         }
-        private static void ConvertNumeric(NpgsqlBinaryImporter importer, ColumnDefinition column, object value)
+        private static void ConvertNumeric(NpgsqlBinaryImporter importer, DataType target, object value)
         {
             if (value is decimal numeric)
             {
@@ -90,7 +90,7 @@ namespace DaJet.Scripting
                 importer.Write(0M, NpgsqlDbType.Numeric);
             }
         }
-        private void ConvertDateTime(NpgsqlBinaryImporter importer, ColumnDefinition column, object value)
+        private void ConvertDateTime(NpgsqlBinaryImporter importer, DataType target, object value)
         {
             DateTime timestamp;
 
@@ -112,17 +112,15 @@ namespace DaJet.Scripting
 
             importer.Write(timestamp, NpgsqlDbType.Timestamp);
         }
-        private static void ConvertString(NpgsqlBinaryImporter importer, ColumnDefinition column, object value)
+        private static void ConvertString(NpgsqlBinaryImporter importer, DataType target, object value)
         {
-            DataType type = column.Type;
-
-            NpgsqlDbType dbType = type.IsFixed ? NpgsqlDbType.Char : NpgsqlDbType.Varchar;
+            NpgsqlDbType dbType = target.IsFixed ? NpgsqlDbType.Char : NpgsqlDbType.Varchar;
 
             if (value is string text)
             {
-                if (type.Size > 0 && text.Length > type.Size)
+                if (target.Size > 0 && text.Length > target.Size)
                 {
-                    throw new InvalidCastException($"[DATA MAPPER] String data would be truncated for column {column.Name} (length {text.Length}, max {type.Size})");
+                    throw new InvalidCastException($"[DATA MAPPER] String data would be truncated (length {text.Length}, max {target.Size}).");
                 }
 
                 importer.Write(text, dbType);
@@ -137,9 +135,9 @@ namespace DaJet.Scripting
                 }
                 else
                 {
-                    if (type.Size > 0 && text.Length > type.Size)
+                    if (target.Size > 0 && text.Length > target.Size)
                     {
-                        throw new InvalidCastException($"[DATA MAPPER] String data would be truncated for column {column.Name} (length {text.Length}, max {type.Size})");
+                        throw new InvalidCastException($"[DATA MAPPER] String data would be truncated (length {text.Length}, max {target.Size}).");
                     }
 
                     importer.Write(text, dbType);
@@ -150,7 +148,7 @@ namespace DaJet.Scripting
                 importer.Write(string.Empty, dbType);
             }
         }
-        private static void ConvertBinary(NpgsqlBinaryImporter importer, ColumnDefinition column, object value)
+        private static void ConvertBinary(NpgsqlBinaryImporter importer, DataType target, object value)
         {
             if (value is byte[] binary)
             {
@@ -161,7 +159,7 @@ namespace DaJet.Scripting
                 importer.Write(Constants.VALUE_STORAGE, NpgsqlDbType.Bytea);
             }
         }
-        private static void ConvertUuid(NpgsqlBinaryImporter importer, ColumnDefinition column, object value)
+        private static void ConvertUuid(NpgsqlBinaryImporter importer, DataType target, object value)
         {
             if (value is Guid uuid)
             {
@@ -172,7 +170,7 @@ namespace DaJet.Scripting
                 importer.Write(Constants.EMPTY_UUID, NpgsqlDbType.Bytea);
             }
         }
-        private static void ConvertTypeCode(NpgsqlBinaryImporter importer, ColumnDefinition column, object value)
+        private static void ConvertTypeCode(NpgsqlBinaryImporter importer, DataType target, object value)
         {
             int code = 0;
 
@@ -198,7 +196,7 @@ namespace DaJet.Scripting
                 importer.Write(Constants.EMPTY_TYPE_CODE, NpgsqlDbType.Bytea);
             }
         }
-        private static void ConvertIdentity(NpgsqlBinaryImporter importer, ColumnDefinition column, object value)
+        private static void ConvertIdentity(NpgsqlBinaryImporter importer, DataType target, object value)
         {
             if (value is Entity entity)
             {
@@ -312,7 +310,7 @@ namespace DaJet.Scripting
                         continue; // database auto-generated column
                     }
 
-                    Action<NpgsqlBinaryImporter, ColumnDefinition, object> converter = null;
+                    Action<NpgsqlBinaryImporter, DataType, object> converter = null;
 
                     if (column.Purpose == ColumnPurpose.Value)
                     {
@@ -345,7 +343,7 @@ namespace DaJet.Scripting
             importer.Write(_current, NpgsqlDbType.Integer); // order_column
             
             object value;
-            Action<NpgsqlBinaryImporter, ColumnDefinition, object> converter;
+            Action<NpgsqlBinaryImporter, DataType, object> converter;
 
             foreach (PropertyDefinition property in _table.Properties)
             {
@@ -367,11 +365,11 @@ namespace DaJet.Scripting
 
                     try
                     {
-                        converter(importer, column, value);
+                        converter(importer, column.Type, value);
                     }
                     catch (InvalidCastException error)
                     {
-                        throw new InvalidCastException($"{error.Message} [record {_current + 1}]");
+                        throw new InvalidCastException($"[BULK INSERT] {error.Message} Column: {column.Name} [record {_current + 1}]", error);
                     }
                 }
             }

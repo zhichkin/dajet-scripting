@@ -18,10 +18,10 @@ namespace DaJet.Scripting
         private readonly ScriptContext _context;
         private readonly string _bufferItem;
         private readonly EntityDefinition _table;
-        private readonly Func<ColumnDefinition, object, object> _convertDateTime;
+        private readonly Func<DataType, object, object> _convertDateTime;
         private readonly Dictionary<string, ColumnExpression> _map = new();
         private readonly Dictionary<ColumnDefinition, int> _ordinals = new();
-        private readonly Dictionary<ColumnDefinition, Func<ColumnDefinition, object, object>> _converters = new();
+        private readonly Dictionary<ColumnDefinition, Func<DataType, object, object>> _converters = new();
         public MsBulkInsertMapper(in ScriptContext context, in InsertStatement statement, in string bufferItem)
         {
             ArgumentNullException.ThrowIfNull(context, nameof(context));
@@ -145,7 +145,7 @@ namespace DaJet.Scripting
                 }
 
                 SqlDbType type = SqlDbType.Binary;
-                Func<ColumnDefinition, object, object> converter = null;
+                Func<DataType, object, object> converter = null;
 
                 if (column.Purpose == ColumnPurpose.Value)
                 {
@@ -211,9 +211,9 @@ namespace DaJet.Scripting
             }
         }
 
-        private object ConvertDateTimeWithOffset(ColumnDefinition column, object value)
+        private object ConvertDateTimeWithOffset(DataType target, object value)
         {
-            return MsDataMapper.ConvertDateTime(column, value, _yearOffset);
+            return MsDataMapper.ConvertDateTime(target, value, _yearOffset);
         }
         private void SetDataRecordValues(in SqlDataRecord record, int rowNumber)
         {
@@ -222,7 +222,7 @@ namespace DaJet.Scripting
             int ordinal;
             object value;
             object converted;
-            Func<ColumnDefinition, object, object> converter;
+            Func<DataType, object, object> converter;
 
             foreach (PropertyDefinition property in _table.Properties)
             {
@@ -244,11 +244,11 @@ namespace DaJet.Scripting
 
                     try
                     {
-                        converted = converter(column, value);
+                        converted = converter(column.Type, value);
                     }
                     catch (InvalidCastException error)
                     {
-                        throw new InvalidCastException($"{error.Message} [record {rowNumber + 1}]");
+                        throw new InvalidCastException($"[BULK INSERT] {error.Message} Column: {column.Name} [record {rowNumber + 1}]", error);
                     }
 
                     record.SetValue(ordinal, converted);
