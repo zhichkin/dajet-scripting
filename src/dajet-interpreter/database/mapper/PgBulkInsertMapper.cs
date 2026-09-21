@@ -122,7 +122,7 @@ namespace DaJet.Scripting
             {
                 if (type.Size > 0 && text.Length > type.Size)
                 {
-                    throw new InvalidCastException($"[DATA MAPPER] String data would be truncated for column {column.Name}");
+                    throw new InvalidCastException($"[DATA MAPPER] String data would be truncated for column {column.Name} (length {text.Length}, max {type.Size})");
                 }
 
                 importer.Write(text, dbType);
@@ -139,7 +139,7 @@ namespace DaJet.Scripting
                 {
                     if (type.Size > 0 && text.Length > type.Size)
                     {
-                        throw new InvalidCastException($"[DATA MAPPER] String data would be truncated for column {column.Name}");
+                        throw new InvalidCastException($"[DATA MAPPER] String data would be truncated for column {column.Name} (length {text.Length}, max {type.Size})");
                     }
 
                     importer.Write(text, dbType);
@@ -365,7 +365,14 @@ namespace DaJet.Scripting
 
                     converter = _converters[column];
 
-                    converter(importer, column, value);
+                    try
+                    {
+                        converter(importer, column, value);
+                    }
+                    catch (InvalidCastException error)
+                    {
+                        throw new InvalidCastException($"{error.Message} [record {_current + 1}]");
+                    }
                 }
             }
         }

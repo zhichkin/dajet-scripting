@@ -241,7 +241,14 @@ namespace DaJet.Scripting
 
                     converter = _converters[column];
 
-                    value = converter(column, value);
+                    try
+                    {
+                        value = converter(column, value);
+                    }
+                    catch (InvalidCastException error)
+                    {
+                        throw new InvalidCastException($"{error.Message} [record {rowNumber + 1}]");
+                    }
 
                     record.SetValue(ordinal, value);
                 }
