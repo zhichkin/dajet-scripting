@@ -221,6 +221,7 @@ namespace DaJet.Scripting
 
             int ordinal;
             object value;
+            object converted;
             Func<ColumnDefinition, object, object> converter;
 
             foreach (PropertyDefinition property in _table.Properties)
@@ -243,14 +244,14 @@ namespace DaJet.Scripting
 
                     try
                     {
-                        value = converter(column, value);
+                        converted = converter(column, value);
                     }
                     catch (InvalidCastException error)
                     {
                         throw new InvalidCastException($"{error.Message} [record {rowNumber + 1}]");
                     }
 
-                    record.SetValue(ordinal, value);
+                    record.SetValue(ordinal, converted);
                 }
             }
         }
