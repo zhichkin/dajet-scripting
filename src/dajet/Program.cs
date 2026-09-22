@@ -68,19 +68,19 @@ namespace DaJet.Host
             //parameters.SetValue("Получатель",  "MS_TEST");
             //_ = host.RunAsync("exchange/stream-pg-ms.djs", in parameters).ContinueWith(ShowAsyncResult);
 
-            _ = _host.RunAsync("insert/ms/complex-type.djs").ContinueWith(ShowAsyncResult);
+            //_ = _host.RunAsync("insert/ms/complex-type.djs").ContinueWith(ShowAsyncResult);
 
-            //Stopwatch watch = new();
-            //watch.Start();
-            //Task<object> task = _host.RunAsync("insert/pg/bulk-exchange.djs");
-            //try
-            //{
-            //    task.Wait();
-            //}
-            //catch { }
-            //watch.Stop();
-            //ShowAsyncResult(task);
-            //Console.WriteLine($"Elapsed {watch.ElapsedMilliseconds} ms");
+            Stopwatch watch = new();
+            watch.Start();
+            Task<object> task = _host.RunAsync("insert/pg/bulk-exchange.djs");
+            try
+            {
+                task.Wait();
+            }
+            catch { }
+            watch.Stop();
+            ShowAsyncResult(task);
+            Console.WriteLine($"Elapsed {watch.ElapsedMilliseconds} ms");
 
             Console.WriteLine("Press any key to continue ..."); _ = Console.ReadKey(true);
         }
