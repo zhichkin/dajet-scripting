@@ -51,7 +51,7 @@ namespace DaJet.Scripting
                 _map.Add(map.Alias, map);
             }
 
-            SqlMetaData[] columns = PrepareTableTypeMetadata(in table);
+            SqlMetaData[] columns = PrepareTableMetadata(in table);
 
             _record = new SqlDataRecord(columns);
         }
@@ -118,7 +118,7 @@ namespace DaJet.Scripting
             }
         }
 
-        private SqlMetaData[] PrepareTableTypeMetadata(in EntityDefinition table)
+        private SqlMetaData[] PrepareTableMetadata(in EntityDefinition table)
         {
             List<SqlMetaData> columns = new();
 
@@ -126,12 +126,12 @@ namespace DaJet.Scripting
 
             foreach (PropertyDefinition property in table.Properties)
             {
-                PrepareTableTypeColumns(in property, in columns);
+                PrepareTableColumns(in property, in columns);
             }
 
             return columns.ToArray();
         }
-        private void PrepareTableTypeColumns(in PropertyDefinition property, in List<SqlMetaData> columns)
+        private void PrepareTableColumns(in PropertyDefinition property, in List<SqlMetaData> columns)
         {
             int ordinal = columns.Count;
 
@@ -166,7 +166,7 @@ namespace DaJet.Scripting
                 else if (column.Purpose == ColumnPurpose.Tag) { converter = MsDataMapper.ConvertTag; }
                 else if (column.Purpose == ColumnPurpose.Boolean) { converter = MsDataMapper.ConvertBoolean; }
                 else if (column.Purpose == ColumnPurpose.Numeric) { converter = MsDataMapper.ConvertNumeric; type = SqlDbType.Decimal; }
-                else if (column.Purpose == ColumnPurpose.DateTime) { converter = _convertDateTime; type = type = SqlDbType.DateTime2; }
+                else if (column.Purpose == ColumnPurpose.DateTime) { converter = _convertDateTime; type = SqlDbType.DateTime2; }
                 else if (column.Purpose == ColumnPurpose.String)
                 {
                     converter = MsDataMapper.ConvertString;
@@ -178,17 +178,19 @@ namespace DaJet.Scripting
 
                 SqlMetaData metadata;
 
+                DataType target = column.Type;
+
                 if (type == SqlDbType.NChar)
                 {
-                    metadata = new SqlMetaData(column.Name, type, input.Size);
+                    metadata = new SqlMetaData(column.Name, type, target.Size);
                 }
                 else if (type == SqlDbType.NVarChar)
                 {
-                    metadata = new SqlMetaData(column.Name, type, (input.Size == 0) ? -1 : input.Size);
+                    metadata = new SqlMetaData(column.Name, type, (target.Size == 0) ? -1 : target.Size);
                 }
                 else if (type == SqlDbType.Binary)
                 {
-                    metadata = new SqlMetaData(column.Name, type, input.Size);
+                    metadata = new SqlMetaData(column.Name, type, target.Size);
                 }
                 else if (type == SqlDbType.VarBinary)
                 {
@@ -196,7 +198,7 @@ namespace DaJet.Scripting
                 }
                 else if (type == SqlDbType.Decimal)
                 {
-                    metadata = new SqlMetaData(column.Name, type, input.Precision, input.Scale);
+                    metadata = new SqlMetaData(column.Name, type, target.Precision, target.Scale);
                 }
                 else
                 {
