@@ -354,7 +354,7 @@ namespace DaJet.Scripting
                 script.Append(' ');
             }
 
-            script.Append(LexerHelper.GetComparisonLiteral(node.Token));
+            script.Append(LexerHelper.GetComparisonLiteral(GetComparisonToken(in node)));
 
             script.Append(' ');
 

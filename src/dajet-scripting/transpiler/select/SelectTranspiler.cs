@@ -612,6 +612,80 @@ namespace DaJet.Scripting
 
             Visit(node.Expression2, in script);
         }
+        protected static Token GetComparisonToken(in ComparisonOperator node)
+        {
+            //NOTE: Реквизит ЭтоГруппа хранится в СУБД инвертированным: группа = 0x00, элемент = 0x01.
+            //NOTE: При чтении значение инвертируется (MsDataMapper, PgDataMapper), поэтому при сравнении
+            //NOTE: ЭтоГруппа с логическим значением оператор = заменяется на <> и наоборот.
+            //NOTE: Узел синтаксического дерева не изменяется - повторная транспиляция даёт тот же SQL.
+
+            if (node.Token != Token.Equals && node.Token != Token.NotEquals)
+            {
+                return node.Token;
+            }
+
+            bool folder1 = IsFolderColumn(node.Expression1);
+            bool folder2 = IsFolderColumn(node.Expression2);
+
+            if (folder1 == folder2)
+            {
+                return node.Token; // ЭтоГруппа = ЭтоГруппа или колонки ЭтоГруппа в сравнении нет
+            }
+
+            SyntaxNode value = folder1 ? node.Expression2 : node.Expression1;
+
+            if (!IsBooleanValue(in value))
+            {
+                return node.Token; // Например, ЭтоГруппа = 0x00 - сравнение с двоичным значением как есть
+            }
+
+            return (node.Token == Token.Equals) ? Token.NotEquals : Token.Equals;
+        }
+        private static SyntaxNode UnwrapGroupOperator(in SyntaxNode node)
+        {
+            SyntaxNode target = node;
+
+            while (target is GroupOperator group)
+            {
+                target = group.Expression;
+            }
+
+            return target;
+        }
+        private static bool IsFolderColumn(in SyntaxNode node)
+        {
+            if (UnwrapGroupOperator(in node) is not ColumnReference column)
+            {
+                return false; // Константа, функция, параметр или выражение
+            }
+
+            PropertyDefinition source = column.InferSource();
+
+            if (source.Columns is null || source.Columns.Count != 1)
+            {
+                return false;
+            }
+
+            string name = source.Columns[0].Name;
+
+            return (name == "_Folder" || name == "_folder"); // ЭтоГруппа
+        }
+        private static bool IsBooleanValue(in SyntaxNode node)
+        {
+            SyntaxNode target = UnwrapGroupOperator(in node);
+
+            if (target is ScalarExpression scalar)
+            {
+                return (scalar.Token == Token.Boolean); // TRUE или FALSE
+            }
+
+            if (target is VariableReference || target is ColumnReference)
+            {
+                return target.InferSource().Type.IsBoolean; // Параметр или колонка логического типа
+            }
+
+            return false;
+        }
         protected virtual void Visit(in ComparisonOperator node, in StringBuilder script)
         {
             Visit(node.Expression1, in script);
@@ -625,7 +699,7 @@ namespace DaJet.Scripting
                 script.Append(' ');
             }
 
-            script.Append(LexerHelper.GetComparisonLiteral(node.Token));
+            script.Append(LexerHelper.GetComparisonLiteral(GetComparisonToken(in node)));
 
             script.Append(' ');
 
