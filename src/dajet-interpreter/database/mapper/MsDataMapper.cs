@@ -589,11 +589,6 @@ namespace DaJet.Scripting
 
             bool value = (_buffer[0] == 1);
 
-            if (column.Name == "_Folder" || column.Name == "_folder") // ЭтоГруппа
-            {
-                value = !value; // invert - exceptional 1C case
-            }
-
             return value;
         }
         private decimal GetDecimal(in SqlDataReader reader, in PropertyDefinition output)

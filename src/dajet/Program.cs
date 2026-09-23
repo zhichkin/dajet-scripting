@@ -72,7 +72,7 @@ namespace DaJet.Host
 
             Stopwatch watch = new();
             watch.Start();
-            Task<object> task = _host.RunAsync("insert/pg/bulk-exchange.djs");
+            Task<object> task = _host.RunAsync("select/cte/hierarchy.djs");
             try
             {
                 task.Wait();

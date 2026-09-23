@@ -2,13 +2,13 @@
 --# LONG_TASK
 --# SINGLETON 'Select product by code'
 
-DECLARE @Код string = '00001'
+DECLARE @Код string = 'ФР-00000001'
 
 PRIVATE @Таблица array
 
-USE 'MS_TEST'
+USE 'MS_UNF'
 
-  SELECT Ссылка, Код, Наименование
+  SELECT Ссылка, Код, Наименование, ЭтоЭлемент --, ЭтоГруппа
     INTO @Таблица
     FROM Справочник.Номенклатура
    WHERE Код = @Код
