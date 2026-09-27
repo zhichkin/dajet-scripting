@@ -46,9 +46,11 @@ namespace DaJet.Data
         {
             ObjectDisposedException.ThrowIf(_disposed, typeof(PgDataSourceScope));
 
+            base.Synchronize(true);
+
             _transaction?.Commit();
         }
-        public override void Rollback()
+        public override void Cancel()
         {
             ObjectDisposedException.ThrowIf(_disposed, typeof(PgDataSourceScope));
 
@@ -60,6 +62,8 @@ namespace DaJet.Data
             {
                 _transaction = null;
             }
+
+            base.Synchronize(false);
         }
         public override void Dispose()
         {

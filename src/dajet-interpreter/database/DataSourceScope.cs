@@ -8,8 +8,21 @@ namespace DaJet.Data
         public abstract DbConnection Connection { get; }
         public abstract DbTransaction Transaction { get; }
         public abstract void Commit();
-        public abstract void Rollback();
+        public abstract void Cancel();
         public abstract void Dispose();
+        public event EventHandler OnCommit;
+        public event EventHandler OnCancel;
+        protected virtual void Synchronize(bool success)
+        {
+            if (success)
+            {
+                OnCommit?.Invoke(this, EventArgs.Empty);
+            }
+            else
+            {
+                OnCancel?.Invoke(this, EventArgs.Empty);
+            }
+        }
     }
     public abstract class DataSourceScope<T> : DataSourceScope where T : DbCommand
     {

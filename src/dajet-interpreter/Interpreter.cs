@@ -204,6 +204,8 @@ namespace DaJet.Scripting
             else if (node is ConsumeStatement consume) { return Execute(in consume); }
             else if (node is SqlStatement statement) { return Execute(in statement); }
 
+            else if (node is ProduceStatement produce) { return Execute(in produce); }
+
             return ExitCode.Success;
         }
         private ExitCode Execute(in StatementBlock statements)
@@ -469,12 +471,12 @@ namespace DaJet.Scripting
                 }
                 else
                 {
-                    use.Rollback();
+                    use.Cancel();
                 }
             }
             catch
             {
-                use.Rollback(); throw;
+                use.Cancel(); throw;
             }
             finally
             {
@@ -620,6 +622,20 @@ namespace DaJet.Scripting
             {
                 processor.Dispose();
             }
+
+            return code;
+        }
+
+        private ExitCode Execute(in ProduceStatement statement)
+        {
+            if (!_processors.TryGetValue(statement, out ProcessorBase processor))
+            {
+                processor = new RabbitMQ.Producer(this, in statement);
+
+                _processors.Add(statement, processor);
+            }
+
+            ExitCode code = processor.Process();
 
             return code;
         }
