@@ -6,6 +6,7 @@ using DaJet.Utilities;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
 using System.Buffers;
+using System.Collections.Concurrent;
 using System.Text;
 using RmqConstants = RabbitMQ.Client.Constants;
 
@@ -13,36 +14,28 @@ namespace DaJet.RabbitMQ
 {
     public sealed class Producer : ProcessorBase
     {
-        private bool _disposed;
-        private readonly ScriptContext _context;
-        private readonly DataSourceScope _scope;
-        private readonly ProduceStatement _statement;
-
-        #region "PROCESSOR STATE MANAGEMENT"
-        private int _state;
-        private const int STATE_READY = 0;
-        private const int STATE_ACTIVE = 1;
-        private const int STATE_BROKEN = 2;
-
+        #region "CONSTANTS"
         private const string ERROR_STATE_IS_BROKEN = "Broken state";
         private const string ERROR_CHANNEL_SHUTDOWN = "Channel shutdown: [{0}] {1}";
         private const string ERROR_CONNECTION_SHUTDOWN = "Connection shutdown: [{0}] {1}";
         private const string ERROR_CONNECTION_IS_BLOCKED = "Connection blocked: {0}";
         private const string ERROR_WAIT_FOR_CONFIRMS = "Wait for confirms timed out";
         private const string ERROR_PUBLISHER_CONFIRMS = "Publisher confirms nacked";
-
         private const string HEADER_CC = "CC";
         private const string HEADER_BCC = "BCC";
-
         #endregion
+
+        private bool _disposed;
+        private readonly ScriptContext _context;
+        private readonly DataSourceScope _scope;
+        private readonly ProduceStatement _statement;
 
         private byte[] _buffer;
         private IChannel _channel;
         private IConnection _connection;
         private BasicProperties _properties;
-        private TaskCompletionSource _acks;
-        private int _produced;
-        private readonly List<bool> _published = new(1000);
+        private TaskCompletionSource _state;
+        private readonly ConcurrentDictionary<ulong, bool> _published = new();
         public Producer(in ScriptContext context, in ProduceStatement statement)
         {
             _context = context;
@@ -53,6 +46,7 @@ namespace DaJet.RabbitMQ
                 _scope = scope;
                 _scope.OnCommit += SynchronizeCommit;
                 _scope.OnCancel += SynchronizeCancel;
+                _scope.OnDispose += SynchronizeDispose;
             }
 
             //InitializeUri();
@@ -68,22 +62,31 @@ namespace DaJet.RabbitMQ
             
             ExitCode code = ExitCode.Success;
 
+            _state ??= new TaskCompletionSource();
+
             try
             {
                 ThrowIfStateIsBroken();
                 
                 EnsureProcessorIsActive();
 
-                Task publisher = PublishMessageAsync();
+                Task<ulong> publisher = PublishMessageAsync();
 
                 if (!publisher.IsCompleted)
                 {
                     publisher.GetAwaiter().GetResult();
                 }
+
+                ulong deliveryTag = publisher.Result;
+
+                if (!_published.TryAdd(publisher.Result, false))
+                {
+                    throw new InvalidOperationException($"Failed to track the publisher confirmation for sequence number '{deliveryTag}' because it already exists.");
+                }
             }
             catch
             {
-                DisposeProcessor(); throw;
+                ResetState(); throw;
             }
 
             return code;
@@ -392,7 +395,9 @@ namespace DaJet.RabbitMQ
         #region "CONNECTION AND CHANNEL MANAGEMENT"
         private void ThrowIfStateIsBroken()
         {
-            if (_acks.Task.IsFaulted)
+            TaskCompletionSource state = _state;
+
+            if (state is null || state.Task.IsFaulted)
             {
                 throw new InvalidOperationException(ERROR_STATE_IS_BROKEN);
             }
@@ -417,13 +422,6 @@ namespace DaJet.RabbitMQ
             {
                 activator.GetAwaiter().GetResult();
             }
-            
-            _produced = 0;
-            _published.Clear();
-
-            _acks = new TaskCompletionSource();
-
-            _state = STATE_ACTIVE;
         }
         private async Task ActivateProcessorAsync()
         {
@@ -455,9 +453,11 @@ namespace DaJet.RabbitMQ
         }
         private Task HandleConnectionBlocked(object sender, ConnectionBlockedEventArgs args)
         {
-            _state = STATE_BROKEN;
+            string message = string.Format(ERROR_CONNECTION_IS_BLOCKED, args.Reason);
 
-            FileLogger.Default.Write(string.Format(ERROR_CONNECTION_IS_BLOCKED, args.Reason));
+            _ = _state?.TrySetException(new Exception(message));
+
+            FileLogger.Default.Write(message);
             
             return Task.CompletedTask;
         }
@@ -469,9 +469,11 @@ namespace DaJet.RabbitMQ
         }
         private Task ConnectionShutdownHandler(object sender, ShutdownEventArgs args)
         {
-            _state = STATE_BROKEN;
+            string message = string.Format(ERROR_CONNECTION_SHUTDOWN, args.ReplyCode.ToString(), args.ReplyText);
 
-            FileLogger.Default.Write(string.Format(ERROR_CONNECTION_SHUTDOWN, args.ReplyCode.ToString(), args.ReplyText));
+            _ = _state?.TrySetException(new Exception(message));
+
+            FileLogger.Default.Write(message);
             
             return Task.CompletedTask;
         }
@@ -502,7 +504,7 @@ namespace DaJet.RabbitMQ
         }
         private Task BasicNacksHandler(object sender, BasicNackEventArgs args)
         {
-            _ = _acks.TrySetException(new Exception(ERROR_PUBLISHER_CONFIRMS));
+            _ = _state?.TrySetException(new Exception(ERROR_PUBLISHER_CONFIRMS));
 
             return Task.CompletedTask;
         }
@@ -515,9 +517,11 @@ namespace DaJet.RabbitMQ
         }
         private Task BasicReturnHandler(object sender, BasicReturnEventArgs args)
         {
-            _state = STATE_BROKEN;
+            string message = GetReturnReason(in args);
 
-            FileLogger.Default.Write(GetReturnReason(in args));
+            _ = _state?.TrySetException(new Exception(message));
+
+            FileLogger.Default.Write(message);
             
             return Task.CompletedTask;
 
@@ -547,7 +551,7 @@ namespace DaJet.RabbitMQ
         {
             string message = string.Format(ERROR_CHANNEL_SHUTDOWN, args.ReplyCode.ToString(), args.ReplyText);
 
-            _ = _acks.TrySetException(new Exception(message));
+            _ = _state?.TrySetException(new Exception(message));
 
             FileLogger.Default.Write(message);
 
@@ -555,25 +559,51 @@ namespace DaJet.RabbitMQ
         }
         private Task HandlePublisherConfirm(ulong deliveryTag, bool multiple)
         {
-            lock (_published)
+            if (multiple)
             {
-                _published.Add(multiple);
+                foreach (KeyValuePair<ulong, bool> pair in _published.ToArray())
+                {
+                    if (pair.Key <= deliveryTag)
+                    {
+                        if (_published.TryRemove(pair.Key, out _))
+                        {
+                            //tcs.SetResult(true);
+                        }
+                    }
+                }
+            }
+            else
+            {
+                if (_published.TryRemove(deliveryTag, out _))
+                {
+                    //tcs.SetResult(true);
+                }
             }
 
-            _ = _acks.TrySetResult();
-
+            if (_published.IsEmpty)
+            {
+                _ = _state?.TrySetResult();
+            }
+            
             return Task.CompletedTask;
         }
         private void WaitForPublisherConfirms()
         {
-            bool timedout = _acks.Task.Wait(PublisherConfirmsTimeout);
+            TaskCompletionSource state = _state;
+
+            if (state is null)
+            {
+                throw new OperationCanceledException(ERROR_STATE_IS_BROKEN);
+            }
+
+            bool timedout = state.Task.Wait(PublisherConfirmsTimeout, _context.Cancellation);
             
             if (timedout)
             {
                 throw new OperationCanceledException(ERROR_WAIT_FOR_CONFIRMS);
             }
 
-            if (!_acks.Task.IsCompletedSuccessfully)
+            if (!state.Task.IsCompletedSuccessfully)
             {
                 throw new OperationCanceledException(ERROR_PUBLISHER_CONFIRMS);
             }
@@ -581,7 +611,7 @@ namespace DaJet.RabbitMQ
         #endregion
 
         #region "PUBLISH MESSAGE ASYNCHRONOUSLY"
-        private async Task PublishMessageAsync()
+        private async Task<ulong> PublishMessageAsync()
         {
             ulong deliveryTag = await _channel.GetNextPublishSequenceNumberAsync().ConfigureAwait(false);
 
@@ -611,7 +641,7 @@ namespace DaJet.RabbitMQ
                 await _channel.BasicPublishAsync(GetExchange(), GetRoutingKey(), GetMandatory(), _properties, payload).ConfigureAwait(false);
             }
 
-            Interlocked.Increment(ref _produced);
+            return deliveryTag;
         }
         private void ConfigureMessageHeaders(ulong deliveryTag)
         {
@@ -693,7 +723,7 @@ namespace DaJet.RabbitMQ
         {
             if (_context.IsCancellationRequested)
             {
-                DisposeProcessor(); return;
+                return;
             }
 
             try
@@ -704,20 +734,29 @@ namespace DaJet.RabbitMQ
             }
             finally
             {
-                DisposeProcessor();
+                ResetState();
             }
         }
         private void SynchronizeCancel(object sender, EventArgs args)
         {
-            DisposeProcessor();
-        }
-        private void DisposeProcessor()
-        {
-            if (_state == STATE_READY)
+            if (_context.IsCancellationRequested)
             {
                 return;
             }
-            
+
+            ResetState();
+        }
+        private void SynchronizeDispose(object sender, EventArgs args)
+        {
+            ResetState();
+        }
+        private void ResetState()
+        {
+            if (_state is null)
+            {
+                return;
+            }
+
             _properties = null;
 
             IChannel channel = _channel;
@@ -730,6 +769,7 @@ namespace DaJet.RabbitMQ
                 channel.ChannelShutdownAsync -= ChannelShutdownHandler;
 
                 try { channel.Dispose(); }
+                catch { /* do nothing */ }
                 finally { _channel = null; }
             }
 
@@ -742,6 +782,7 @@ namespace DaJet.RabbitMQ
                 connection.ConnectionShutdownAsync -= ConnectionShutdownHandler;
 
                 try { connection.Dispose(); }
+                catch { /* do nothing */ }
                 finally { _connection = null; }
             }
             
@@ -752,11 +793,9 @@ namespace DaJet.RabbitMQ
                 _buffer = null;
             }
 
-            _acks = null;
-            _produced = 0;
-            _published.Clear();
+            _state = null;
 
-            _state = STATE_READY;
+            _published.Clear();
         }
         public override void Dispose()
         {
@@ -764,9 +803,13 @@ namespace DaJet.RabbitMQ
             {
                 return;
             }
-            
-            _scope?.OnCommit -= SynchronizeCommit;
-            _scope?.OnCancel -= SynchronizeCancel;
+
+            if (_scope is not null)
+            {
+                _scope.OnCommit -= SynchronizeCommit;
+                _scope.OnCancel -= SynchronizeCancel;
+                _scope.OnDispose -= SynchronizeDispose;
+            }
 
             _disposed = true;
         }

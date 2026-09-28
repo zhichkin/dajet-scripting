@@ -12,6 +12,11 @@ namespace DaJet.Data
         public abstract void Dispose();
         public event EventHandler OnCommit;
         public event EventHandler OnCancel;
+        public event EventHandler OnDispose;
+        protected virtual void Disposed()
+        {
+            OnDispose?.Invoke(this, EventArgs.Empty);
+        }
         protected virtual void Synchronize(bool success)
         {
             if (success)

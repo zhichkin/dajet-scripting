@@ -57,6 +57,10 @@ namespace DaJet.Data
             {
                 _transaction?.Rollback();
             }
+            catch
+            {
+                // do nothing
+            }
             finally
             {
                 _transaction = null;
@@ -68,11 +72,23 @@ namespace DaJet.Data
         {
             if (_disposed) { return; }
 
-            _transaction?.Dispose(); //NOTE: rolls back uncommitted transaction
-            _transaction = null;
-
-            _connection?.Dispose();
-            _connection = null;
+            try
+            {
+                _transaction?.Dispose(); //NOTE: rolls back uncommitted transaction
+                
+                _connection?.Dispose();
+                
+                base.Disposed();
+            }
+            catch
+            {
+                // do nothing
+            }
+            finally
+            {
+                _connection = null;
+                _transaction = null;
+            }
 
             _disposed = true;
         }
