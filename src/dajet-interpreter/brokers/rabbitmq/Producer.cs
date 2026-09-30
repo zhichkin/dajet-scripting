@@ -5,8 +5,10 @@ using DaJet.TypeSystem;
 using DaJet.Utilities;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
+using RabbitMQ.Client.Exceptions;
 using System.Buffers;
 using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.Text;
 using RmqConstants = RabbitMQ.Client.Constants;
 
@@ -16,9 +18,11 @@ namespace DaJet.RabbitMQ
     {
         #region "CONSTANTS"
         private const string ERROR_STATE_IS_BROKEN = "Broken state";
+        private const string WARNING_FLOW_CONTROL = "Flow control: {0}";
         private const string ERROR_CHANNEL_SHUTDOWN = "Channel shutdown: [{0}] {1}";
         private const string ERROR_CONNECTION_SHUTDOWN = "Connection shutdown: [{0}] {1}";
         private const string ERROR_CONNECTION_IS_BLOCKED = "Connection blocked: {0}";
+        private const string ERROR_FAILED_TO_ACK = "Failed to confirm delivery tag: {0} ({1})";
         private const string ERROR_WAIT_FOR_CONFIRMS = "Wait for confirms timed out";
         private const string ERROR_PUBLISHER_CONFIRMS = "Publisher confirms nacked";
         private const string HEADER_CC = "CC";
@@ -34,8 +38,10 @@ namespace DaJet.RabbitMQ
         private IChannel _channel;
         private IConnection _connection;
         private BasicProperties _properties;
-        private TaskCompletionSource _state;
-        private readonly ConcurrentDictionary<ulong, bool> _published = new();
+        private TaskCompletionSource _state; // batch state
+        private ulong _deliveryTag; // current tag published
+        private ulong _trackingTag; // the last tag to wait ack for
+        private readonly ConcurrentDictionary<ulong, bool> _published = new(2, 1000);
         public Producer(in ScriptContext context, in ProduceStatement statement)
         {
             _context = context;
@@ -51,7 +57,7 @@ namespace DaJet.RabbitMQ
 
             //InitializeUri();
 
-            PublisherConfirmsTimeout = GetPublisherConfirmsTimeout();
+            //PublisherConfirmsTimeout = GetPublisherConfirmsTimeout();
         }
         public override ExitCode Process()
         {
@@ -59,7 +65,7 @@ namespace DaJet.RabbitMQ
             {
                 return ExitCode.Cancel;
             }
-            
+
             ExitCode code = ExitCode.Success;
 
             _state ??= new TaskCompletionSource();
@@ -67,21 +73,23 @@ namespace DaJet.RabbitMQ
             try
             {
                 ThrowIfStateIsBroken();
-                
+
                 EnsureProcessorIsActive();
 
-                Task<ulong> publisher = PublishMessageAsync();
+                ValueTask<ulong> publisher = PublishMessageAsync();
 
-                if (!publisher.IsCompleted)
+                if (publisher.IsCompleted)
                 {
-                    publisher.GetAwaiter().GetResult();
+                    _deliveryTag = publisher.Result;
+                }
+                else
+                {
+                    _deliveryTag = publisher.GetAwaiter().GetResult();
                 }
 
-                ulong deliveryTag = publisher.Result;
-
-                if (!_published.TryAdd(publisher.Result, false))
+                if (!_published.TryAdd(_deliveryTag, false))
                 {
-                    throw new InvalidOperationException($"Failed to track the publisher confirmation for sequence number '{deliveryTag}' because it already exists.");
+                    throw new InvalidOperationException($"Failed to track the publisher confirmation for sequence number '{_deliveryTag}' because it already exists.");
                 }
             }
             catch
@@ -124,7 +132,7 @@ namespace DaJet.RabbitMQ
         private string VirtualHost { get; set; } = "/";
         private string UserName { get; set; } = "guest";
         private string Password { get; set; } = "guest";
-        private TimeSpan PublisherConfirmsTimeout { get; set; } = TimeSpan.FromSeconds(60);
+        private TimeSpan PublisherConfirmsTimeout { get; set; } = TimeSpan.FromSeconds(10);
         private TimeSpan GetPublisherConfirmsTimeout()
         {
             //if (StreamFactory.TryGetOption(in _scope, "PublisherConfirmsTimeout", out object value))
@@ -135,7 +143,7 @@ namespace DaJet.RabbitMQ
             //    }
             //}
 
-            return TimeSpan.FromSeconds(60);
+            return TimeSpan.FromSeconds(10);
         }
         private TimeSpan GetRequestedHeartbeat()
         {
@@ -405,7 +413,7 @@ namespace DaJet.RabbitMQ
         private void EnsureProcessorIsActive()
         {
             IChannel channel = _channel;
-            
+
             if (channel is not null)
             {
                 if (channel.IsOpen)
@@ -458,7 +466,7 @@ namespace DaJet.RabbitMQ
             _ = _state?.TrySetException(new Exception(message));
 
             FileLogger.Default.Write(message);
-            
+
             return Task.CompletedTask;
         }
         private Task HandleConnectionUnblocked(object sender, AsyncEventArgs args)
@@ -474,11 +482,18 @@ namespace DaJet.RabbitMQ
             _ = _state?.TrySetException(new Exception(message));
 
             FileLogger.Default.Write(message);
-            
+
             return Task.CompletedTask;
         }
         private async Task InitializeChannel()
         {
+            _properties = new BasicProperties()
+            {
+                Persistent = true,
+                ContentType = "application/json",
+                ContentEncoding = "UTF-8"
+            };
+
             CreateChannelOptions options = new(
                 publisherConfirmationsEnabled: true,
                 publisherConfirmationTrackingEnabled: false);
@@ -490,60 +505,12 @@ namespace DaJet.RabbitMQ
             _channel.BasicReturnAsync += BasicReturnHandler;
             _channel.FlowControlAsync += FlowControlHandler;
             _channel.ChannelShutdownAsync += ChannelShutdownHandler;
-
-            _properties = new BasicProperties()
-            {
-                Persistent = true,
-                ContentType = "application/json",
-                ContentEncoding = "UTF-8"
-            };
-        }
-        private Task BasicAcksHandler(object sender, BasicAckEventArgs args)
-        {
-            return HandlePublisherConfirm(args.DeliveryTag, args.Multiple);
-        }
-        private Task BasicNacksHandler(object sender, BasicNackEventArgs args)
-        {
-            _ = _state?.TrySetException(new Exception(ERROR_PUBLISHER_CONFIRMS));
-
-            return Task.CompletedTask;
-        }
-        private static string GetReturnReason(in BasicReturnEventArgs args)
-        {
-            return "Message return (" + args.ReplyCode.ToString() + "): " +
-                (string.IsNullOrWhiteSpace(args.ReplyText) ? "(empty)" : args.ReplyText) + ". " +
-                "Exchange: " + (string.IsNullOrWhiteSpace(args.Exchange) ? "(empty)" : args.Exchange) + ". " +
-                "RoutingKey: " + (string.IsNullOrWhiteSpace(args.RoutingKey) ? "(empty)" : args.RoutingKey) + ".";
-        }
-        private Task BasicReturnHandler(object sender, BasicReturnEventArgs args)
-        {
-            string message = GetReturnReason(in args);
-
-            _ = _state?.TrySetException(new Exception(message));
-
-            FileLogger.Default.Write(message);
-            
-            return Task.CompletedTask;
-
-            //ulong deliveryTag = 0;
-
-            //IDictionary<string, object> headers = args.BasicProperties?.Headers;
-
-            //if (headers is not null)
-            //{
-            //    object value = headers[RmqConstants.PublishSequenceNumberHeader];
-
-            //    if (value is long int64)
-            //    {
-            //        deliveryTag = (ulong)int64;
-            //    }
-            //}
-
-            //return HandlePublisherConfirm(deliveryTag, false);
         }
         private Task FlowControlHandler(object sender, FlowControlEventArgs args)
         {
-            //SetSessionToBrokenState(string.Format(ERROR_CHANNEL_SHUTDOWN, args.ReplyCode.ToString(), args.ReplyText));
+            string message = string.Format(WARNING_FLOW_CONTROL, args.Active);
+
+            FileLogger.Default.Write(message);
 
             return Task.CompletedTask;
         }
@@ -557,61 +524,10 @@ namespace DaJet.RabbitMQ
 
             return Task.CompletedTask;
         }
-        private Task HandlePublisherConfirm(ulong deliveryTag, bool multiple)
-        {
-            if (multiple)
-            {
-                foreach (KeyValuePair<ulong, bool> pair in _published.ToArray())
-                {
-                    if (pair.Key <= deliveryTag)
-                    {
-                        if (_published.TryRemove(pair.Key, out _))
-                        {
-                            //tcs.SetResult(true);
-                        }
-                    }
-                }
-            }
-            else
-            {
-                if (_published.TryRemove(deliveryTag, out _))
-                {
-                    //tcs.SetResult(true);
-                }
-            }
-
-            if (_published.IsEmpty)
-            {
-                _ = _state?.TrySetResult();
-            }
-            
-            return Task.CompletedTask;
-        }
-        private void WaitForPublisherConfirms()
-        {
-            TaskCompletionSource state = _state;
-
-            if (state is null)
-            {
-                throw new OperationCanceledException(ERROR_STATE_IS_BROKEN);
-            }
-
-            bool timedout = state.Task.Wait(PublisherConfirmsTimeout, _context.Cancellation);
-            
-            if (timedout)
-            {
-                throw new OperationCanceledException(ERROR_WAIT_FOR_CONFIRMS);
-            }
-
-            if (!state.Task.IsCompletedSuccessfully)
-            {
-                throw new OperationCanceledException(ERROR_PUBLISHER_CONFIRMS);
-            }
-        }
         #endregion
 
         #region "PUBLISH MESSAGE ASYNCHRONOUSLY"
-        private async Task<ulong> PublishMessageAsync()
+        private async ValueTask<ulong> PublishMessageAsync()
         {
             ulong deliveryTag = await _channel.GetNextPublishSequenceNumberAsync().ConfigureAwait(false);
 
@@ -719,6 +635,117 @@ namespace DaJet.RabbitMQ
         }
         #endregion
 
+        #region "MESSAGE DELIVERY HANDLERS"
+        private Task BasicAcksHandler(object sender, BasicAckEventArgs args)
+        {
+            return HandlePublisherConfirm(args.DeliveryTag, args.Multiple);
+        }
+        private Task BasicNacksHandler(object sender, BasicNackEventArgs args)
+        {
+            _ = _state?.TrySetException(new Exception(ERROR_PUBLISHER_CONFIRMS));
+
+            return Task.CompletedTask;
+        }
+        private static string GetReturnReason(in BasicReturnEventArgs args)
+        {
+            return "Message return (" + args.ReplyCode.ToString() + "): " +
+                (string.IsNullOrWhiteSpace(args.ReplyText) ? "(empty)" : args.ReplyText) + ". " +
+                "Exchange: " + (string.IsNullOrWhiteSpace(args.Exchange) ? "(empty)" : args.Exchange) + ". " +
+                "RoutingKey: " + (string.IsNullOrWhiteSpace(args.RoutingKey) ? "(empty)" : args.RoutingKey) + ".";
+        }
+        private Task BasicReturnHandler(object sender, BasicReturnEventArgs args)
+        {
+            string message = GetReturnReason(in args);
+
+            _ = _state?.TrySetException(new Exception(message));
+
+            FileLogger.Default.Write(message);
+
+            return Task.CompletedTask;
+
+            //ulong deliveryTag = 0;
+
+            //IDictionary<string, object> headers = args.BasicProperties?.Headers;
+
+            //if (headers is not null)
+            //{
+            //    object value = headers[RmqConstants.PublishSequenceNumberHeader];
+
+            //    if (value is long int64)
+            //    {
+            //        deliveryTag = (ulong)int64;
+            //    }
+            //}
+
+            //return HandlePublisherConfirm(deliveryTag, false);
+        }
+        private Task HandlePublisherConfirm(ulong deliveryTag, bool multiple)
+        {
+            if (_trackingTag == deliveryTag && multiple)
+            {
+                _ = _state?.TrySetResult();
+
+                return Task.CompletedTask;
+            }
+
+            if (multiple)
+            {
+                foreach (KeyValuePair<ulong, bool> pending in _published.ToArray())
+                {
+                    if (pending.Key <= deliveryTag)
+                    {
+                        if (!_published.TryRemove(pending.Key, out _))
+                        {
+                            FileLogger.Default.Write(string.Format(ERROR_FAILED_TO_ACK, deliveryTag, "multiple"));
+                        }
+                    }
+                }
+            }
+            else
+            {
+                if (!_published.TryRemove(deliveryTag, out _))
+                {
+                    FileLogger.Default.Write(string.Format(ERROR_FAILED_TO_ACK, deliveryTag, "single"));
+                }
+            }
+
+            if (_trackingTag == deliveryTag && _published.IsEmpty)
+            {
+                _ = _state?.TrySetResult();
+            }
+
+            return Task.CompletedTask;
+        }
+        private void WaitForPublisherConfirms()
+        {
+            TaskCompletionSource state = _state;
+
+            if (state is null)
+            {
+                throw new OperationCanceledException(ERROR_STATE_IS_BROKEN);
+            }
+
+            if (state.Task.IsCompletedSuccessfully)
+            {
+                return;
+            }
+
+            _trackingTag = _deliveryTag; // the last delivery tag awaiting confirmation from server
+
+            bool timedout = state.Task.Wait(PublisherConfirmsTimeout, _context.Cancellation);
+
+            if (timedout)
+            {
+                throw new OperationCanceledException(ERROR_WAIT_FOR_CONFIRMS);
+            }
+
+            if (!state.Task.IsCompletedSuccessfully)
+            {
+                throw new OperationCanceledException(ERROR_PUBLISHER_CONFIRMS);
+            }
+        }
+        #endregion
+
         private void SynchronizeCommit(object sender, EventArgs args)
         {
             if (_context.IsCancellationRequested)
@@ -757,6 +784,10 @@ namespace DaJet.RabbitMQ
                 return;
             }
 
+            _state = null;
+            _deliveryTag = 0UL;
+            _trackingTag = 0UL;
+            _published.Clear();
             _properties = null;
 
             IChannel channel = _channel;
@@ -785,17 +816,13 @@ namespace DaJet.RabbitMQ
                 catch { /* do nothing */ }
                 finally { _connection = null; }
             }
-            
+
             if (_buffer is not null)
             {
                 ArrayPool<byte>.Shared.Return(_buffer, true);
 
                 _buffer = null;
             }
-
-            _state = null;
-
-            _published.Clear();
         }
         public override void Dispose()
         {
@@ -804,14 +831,220 @@ namespace DaJet.RabbitMQ
                 return;
             }
 
-            if (_scope is not null)
+            DataSourceScope scope = _scope;
+
+            if (scope is not null)
             {
-                _scope.OnCommit -= SynchronizeCommit;
-                _scope.OnCancel -= SynchronizeCancel;
-                _scope.OnDispose -= SynchronizeDispose;
+                scope.OnCommit -= SynchronizeCommit;
+                scope.OnCancel -= SynchronizeCancel;
+                scope.OnDispose -= SynchronizeDispose;
             }
 
             _disposed = true;
+        }
+
+
+
+        private bool _onlyAcksReceived = true;
+        private readonly object _confirmLock = new object();
+        private readonly LinkedList<ulong> _pendingDeliveryTags = new();
+        private readonly CountdownEvent _deliveryTagsCountdown = new(0);
+        public ShutdownEventArgs CloseReason { get; private set; }
+        public bool IsOpen
+        {
+            get { return CloseReason == null; }
+        }
+        public ulong NextPublishSeqNo { get; private set; }
+        public void ConfirmSelect()
+        {
+            if (NextPublishSeqNo == 0UL)
+            {
+                NextPublishSeqNo = 1;
+            }
+
+            //_Private_ConfirmSelect(false);
+        }
+        public void BasicPublish(string exchange, string routingKey, bool mandatory, IBasicProperties basicProperties, ReadOnlyMemory<byte> body)
+        {
+            if (routingKey == null)
+            {
+                throw new ArgumentNullException(nameof(routingKey));
+            }
+
+            if (basicProperties == null)
+            {
+                //basicProperties = _emptyBasicProperties;
+            }
+
+            if (NextPublishSeqNo > 0)
+            {
+                lock (_confirmLock)
+                {
+                    if (_deliveryTagsCountdown.IsSet)
+                    {
+                        _deliveryTagsCountdown.Reset(1);
+                    }
+                    else
+                    {
+                        _deliveryTagsCountdown.AddCount();
+                    }
+
+                    _pendingDeliveryTags.AddLast(NextPublishSeqNo++);
+                }
+            }
+
+            try
+            {
+                //_Private_BasicPublish(exchange,
+                //    routingKey,
+                //    mandatory,
+                //    basicProperties,
+                //    body);
+            }
+            catch
+            {
+                if (NextPublishSeqNo > 0)
+                {
+                    lock (_confirmLock)
+                    {
+                        NextPublishSeqNo--;
+
+                        _pendingDeliveryTags.RemoveLast();
+
+                        _deliveryTagsCountdown.Reset(_pendingDeliveryTags.Count);
+                    }
+                }
+
+                throw;
+            }
+        }
+        private void OnModelShutdown(ShutdownEventArgs reason)
+        {
+            //_continuationQueue.HandleModelShutdown(reason);
+            //EventHandler<ShutdownEventArgs> handler;
+            //lock (_shutdownLock)
+            //{
+            //    handler = _modelShutdown;
+            //    _modelShutdown = null;
+            //}
+            //if (handler != null)
+            //{
+            //    foreach (EventHandler<ShutdownEventArgs> h in handler.GetInvocationList())
+            //    {
+            //        try
+            //        {
+            //            h(this, reason);
+            //        }
+            //        catch (Exception e)
+            //        {
+            //            OnCallbackException(CallbackExceptionEventArgs.Build(e, "OnModelShutdown"));
+            //        }
+            //    }
+            //}
+
+            _deliveryTagsCountdown.Reset(0);
+            //_flowControlBlock.Set();
+        }
+        private void OnBasicReturn(BasicReturnEventArgs args)
+        {
+            //foreach (EventHandler<BasicReturnEventArgs> h in BasicReturn?.GetInvocationList() ?? Array.Empty<Delegate>())
+            //{
+            //    try
+            //    {
+            //        h(this, args);
+            //    }
+            //    catch (Exception e)
+            //    {
+            //        OnCallbackException(CallbackExceptionEventArgs.Build(e, "OnBasicReturn"));
+            //    }
+            //}
+        }
+        private void HandleAckNack(ulong deliveryTag, bool multiple, bool isNack)
+        {
+            // No need to do this if publisher confirms have never been enabled.
+            if (NextPublishSeqNo > 0)
+            {
+                // let's take a lock so we can assume that deliveryTags are unique, never duplicated and always sorted
+                lock (_confirmLock)
+                {
+                    // No need to do anything if there are no delivery tags in the list
+                    if (_pendingDeliveryTags.Count > 0)
+                    {
+                        if (multiple)
+                        {
+                            int count = 0;
+                            while (_pendingDeliveryTags.First.Value < deliveryTag)
+                            {
+                                _pendingDeliveryTags.RemoveFirst(); count++;
+                            }
+
+                            if (_pendingDeliveryTags.First.Value == deliveryTag)
+                            {
+                                _pendingDeliveryTags.RemoveFirst(); count++;
+                            }
+
+                            if (count > 0)
+                            {
+                                _deliveryTagsCountdown.Signal(count);
+                            }
+                        }
+                        else
+                        {
+                            if (_pendingDeliveryTags.Remove(deliveryTag))
+                            {
+                                _deliveryTagsCountdown.Signal();
+                            }
+                        }
+                    }
+
+                    _onlyAcksReceived = _onlyAcksReceived && !isNack;
+                }
+            }
+        }
+        public bool WaitForConfirms(TimeSpan timeout, out bool timedOut)
+        {
+            if (NextPublishSeqNo == 0UL)
+            {
+                throw new InvalidOperationException("Confirms not selected");
+            }
+            bool isWaitInfinite = timeout.TotalMilliseconds == Timeout.Infinite;
+
+            Stopwatch stopwatch = Stopwatch.StartNew();
+
+            while (true)
+            {
+                if (!IsOpen)
+                {
+                    throw new AlreadyClosedException(CloseReason);
+                }
+
+                if (_deliveryTagsCountdown.IsSet)
+                {
+                    bool aux = _onlyAcksReceived;
+                    
+                    _onlyAcksReceived = true;
+                    
+                    timedOut = false;
+
+                    return aux;
+                }
+
+                if (isWaitInfinite)
+                {
+                    _deliveryTagsCountdown.Wait();
+                }
+                else
+                {
+                    TimeSpan elapsed = stopwatch.Elapsed;
+
+                    if (elapsed > timeout || !_deliveryTagsCountdown.Wait(timeout - elapsed))
+                    {
+                        timedOut = true;
+
+                        return _onlyAcksReceived;
+                    }
+                }
+            }
         }
     }
 }
