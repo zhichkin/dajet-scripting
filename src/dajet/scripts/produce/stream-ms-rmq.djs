@@ -1,24 +1,29 @@
 
 DECLARE @Отправитель string = 'MS_TEST'
 
-PRIVATE @message  object
+PRIVATE @message object
+PRIVATE @headers object
 PRIVATE @Счётчик integer
+
+SET @headers.version = '1.0'
 
 USE 'MS_TEST'
 
-   STREAM TOP 10
-          Ссылка, Код, Наименование, ПометкаУдаления, Вид
+   STREAM TOP 10 НомерСообщения
+        , Отправитель, Получатель
+        , ТипСообщения, ТелоСообщения
      INTO @message
-     FROM Справочник.Номенклатура
-    ORDER BY Код ASC
+     FROM РегистрСведений.ИсходящаяОчередь
+    ORDER BY НомерСообщения ASC
 
-   PRODUCE 'amqp://guest:guest@localhost:5672/dajet'
-    SELECT AppId      = 'MS_TEST'
+   PRODUCE 'amqp://guest:guest@localhost:5672' -- /dajet
+    SELECT AppId      = @message.Отправитель
+         , Headers    = @headers
          , Exchange   = 'test-exchange'
          , RoutingKey = @message.Получатель
          , MessageId  = @message.НомерСообщения
          , Type       = @message.ТипСообщения
-         , Body       = @message.ТелоСообщения
+         , Body       = @message.ТелоСообщения -- JSON(@message)
 
    SET @Счётчик = @Счётчик + 1
 

@@ -5,11 +5,10 @@ using DaJet.TypeSystem;
 using DaJet.Utilities;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
-using RabbitMQ.Client.Exceptions;
 using System.Buffers;
 using System.Collections.Concurrent;
-using System.Diagnostics;
 using System.Text;
+using System.Web;
 using RmqConstants = RabbitMQ.Client.Constants;
 
 namespace DaJet.RabbitMQ
@@ -33,31 +32,29 @@ namespace DaJet.RabbitMQ
         private readonly ScriptContext _context;
         private readonly DataSourceScope _scope;
         private readonly ProduceStatement _statement;
+        private readonly Dictionary<string, SyntaxNode> _select = new();
 
         private byte[] _buffer;
         private IChannel _channel;
         private IConnection _connection;
         private BasicProperties _properties;
-        private TaskCompletionSource _state; // batch state
-        private ulong _deliveryTag; // current tag published
-        private ulong _trackingTag; // the last tag to wait ack for
+        private TaskCompletionSource _state;
+        private readonly Lock _confirmLock = new();
+        private readonly CountdownEvent _confirmCountdown = new(0);
         private readonly ConcurrentDictionary<ulong, bool> _published = new(2, 1000);
         public Producer(in ScriptContext context, in ProduceStatement statement)
         {
             _context = context;
             _statement = statement;
-
-            if (context.GetDataSource() is DataSourceScope scope)
+            
+            foreach (ColumnExpression column in _statement.Columns)
             {
-                _scope = scope;
-                _scope.OnCommit += SynchronizeCommit;
-                _scope.OnCancel += SynchronizeCancel;
-                _scope.OnDispose += SynchronizeDispose;
+                _select.Add(column.Alias, column.Expression);
             }
 
-            //InitializeUri();
+            ConfigureConnectionSettings();
 
-            //PublisherConfirmsTimeout = GetPublisherConfirmsTimeout();
+            PublisherConfirmsTimeout = GetPublisherConfirmsTimeout();
         }
         public override ExitCode Process()
         {
@@ -68,29 +65,26 @@ namespace DaJet.RabbitMQ
 
             ExitCode code = ExitCode.Success;
 
-            _state ??= new TaskCompletionSource();
+            if (_state is null)
+            {
+                _state = new TaskCompletionSource();
 
+                if (_context.GetDataSource() is DataSourceScope scope)
+                {
+                    //_scope = scope;
+                    scope.OnCommit += SynchronizeCommit;
+                    scope.OnCancel += SynchronizeCancel;
+                    scope.OnDispose += SynchronizeDispose;
+                }
+            }
+            
             try
             {
                 ThrowIfStateIsBroken();
 
                 EnsureProcessorIsActive();
 
-                ValueTask<ulong> publisher = PublishMessageAsync();
-
-                if (publisher.IsCompleted)
-                {
-                    _deliveryTag = publisher.Result;
-                }
-                else
-                {
-                    _deliveryTag = publisher.GetAwaiter().GetResult();
-                }
-
-                if (!_published.TryAdd(_deliveryTag, false))
-                {
-                    throw new InvalidOperationException($"Failed to track the publisher confirmation for sequence number '{_deliveryTag}' because it already exists.");
-                }
+                PublishMessageOrThrow();
             }
             catch
             {
@@ -99,32 +93,52 @@ namespace DaJet.RabbitMQ
 
             return code;
         }
+        private void ResetState()
+        {
+            if (_state is null)
+            {
+                return;
+            }
 
-        //private void InitializeUri()
-        //{
-        //    Uri uri = _scope.GetUri(_options.Target);
+            _state = null;
+            _properties = null;
+            _published.Clear();
+            _confirmCountdown.Reset(0);
 
-        //    if (uri.Scheme != "amqp")
-        //    {
-        //        throw new InvalidOperationException($"[URI] amqp scheme expected");
-        //    }
+            IChannel channel = _channel;
 
-        //    HostName = uri.Host;
-        //    HostPort = uri.Port;
+            if (channel is not null)
+            {
+                channel.BasicAcksAsync -= BasicAcksHandler;
+                channel.BasicNacksAsync -= BasicNacksHandler;
+                channel.BasicReturnAsync -= BasicReturnHandler;
+                channel.ChannelShutdownAsync -= ChannelShutdownHandler;
 
-        //    string[] userpass = uri.UserInfo.Split(':');
+                try { channel.Dispose(); }
+                catch { /* do nothing */ }
+                finally { _channel = null; }
+            }
 
-        //    if (userpass is not null && userpass.Length == 2)
-        //    {
-        //        UserName = HttpUtility.UrlDecode(userpass[0], Encoding.UTF8);
-        //        Password = HttpUtility.UrlDecode(userpass[1], Encoding.UTF8);
-        //    }
+            IConnection connection = _connection;
 
-        //    if (uri.Segments is not null && uri.Segments.Length > 1)
-        //    {
-        //        VirtualHost = HttpUtility.UrlDecode(uri.Segments[1].TrimEnd('/'), Encoding.UTF8);
-        //    }
-        //}
+            if (connection is not null)
+            {
+                connection.ConnectionBlockedAsync -= HandleConnectionBlocked;
+                connection.ConnectionUnblockedAsync -= HandleConnectionUnblocked;
+                connection.ConnectionShutdownAsync -= ConnectionShutdownHandler;
+
+                try { connection.Dispose(); }
+                catch { /* do nothing */ }
+                finally { _connection = null; }
+            }
+
+            if (_buffer is not null)
+            {
+                ArrayPool<byte>.Shared.Return(_buffer, true);
+
+                _buffer = null;
+            }
+        }
 
         #region "CONFIGURATION OPTIONS"
         private string HostName { get; set; } = "localhost";
@@ -132,271 +146,378 @@ namespace DaJet.RabbitMQ
         private string VirtualHost { get; set; } = "/";
         private string UserName { get; set; } = "guest";
         private string Password { get; set; } = "guest";
+        private void ConfigureConnectionSettings()
+        {
+            Uri uri = _context.GetUri(_statement.Target);
+
+            if (uri.Scheme != "amqp")
+            {
+                throw new InvalidOperationException($"[URI] amqp scheme expected");
+            }
+
+            HostName = uri.Host;
+            HostPort = uri.Port;
+
+            string[] userpass = uri.UserInfo.Split(':');
+
+            if (userpass is not null && userpass.Length == 2)
+            {
+                UserName = HttpUtility.UrlDecode(userpass[0], Encoding.UTF8);
+                Password = HttpUtility.UrlDecode(userpass[1], Encoding.UTF8);
+            }
+
+            if (uri.Segments is not null && uri.Segments.Length > 1)
+            {
+                VirtualHost = HttpUtility.UrlDecode(uri.Segments[1].TrimEnd('/'), Encoding.UTF8);
+            }
+        }
         private TimeSpan PublisherConfirmsTimeout { get; set; } = TimeSpan.FromSeconds(10);
         private TimeSpan GetPublisherConfirmsTimeout()
         {
-            //if (StreamFactory.TryGetOption(in _scope, "PublisherConfirmsTimeout", out object value))
-            //{
-            //    if (value is int seconds)
-            //    {
-            //        return TimeSpan.FromSeconds(seconds);
-            //    }
-            //}
+            if (_select.TryGetValue("PublisherConfirmsTimeout", out SyntaxNode expression))
+            {
+                object value = _context.Evaluate(in expression);
+
+                if (value is int seconds)
+                {
+                    return TimeSpan.FromSeconds(seconds);
+                }
+            }
 
             return TimeSpan.FromSeconds(10);
         }
         private TimeSpan GetRequestedHeartbeat()
         {
-            //if (StreamFactory.TryGetOption(in _scope, "RequestedHeartbeat", out object value))
-            //{
-            //    if (value is int seconds)
-            //    {
-            //        return TimeSpan.FromSeconds(seconds);
-            //    }
-            //}
+            if (_select.TryGetValue("RequestedHeartbeat", out SyntaxNode expression))
+            {
+                object value = _context.Evaluate(in expression);
+
+                if (value is int seconds)
+                {
+                    return TimeSpan.FromSeconds(seconds);
+                }
+            }
 
             return TimeSpan.FromSeconds(60);
         }
         private bool GetAutomaticRecoveryEnabled()
         {
-            //if (StreamFactory.TryGetOption(in _scope, "AutomaticRecoveryEnabled", out object value))
-            //{
-            //    if (value is bool boolean)
-            //    {
-            //        return boolean;
-            //    }
-            //}
+            if (_select.TryGetValue("AutomaticRecoveryEnabled", out SyntaxNode expression))
+            {
+                object value = _context.Evaluate(in expression);
+
+                if (value is bool boolean)
+                {
+                    return boolean;
+                }
+            }
 
             return true;
         }
         private TimeSpan GetNetworkRecoveryInterval()
         {
-            //if (StreamFactory.TryGetOption(in _scope, "NetworkRecoveryInterval", out object value))
-            //{
-            //    if (value is int seconds)
-            //    {
-            //        return TimeSpan.FromSeconds(seconds);
-            //    }
-            //}
+            if (_select.TryGetValue("NetworkRecoveryInterval", out SyntaxNode expression))
+            {
+                object value = _context.Evaluate(in expression);
+
+                if (value is int seconds)
+                {
+                    return TimeSpan.FromSeconds(seconds);
+                }
+            }
 
             return TimeSpan.FromSeconds(5);
         }
         private TimeSpan GetContinuationTimeout()
         {
-            //if (StreamFactory.TryGetOption(in _scope, "ContinuationTimeout", out object value))
-            //{
-            //    if (value is int seconds)
-            //    {
-            //        return TimeSpan.FromSeconds(seconds);
-            //    }
-            //}
+            if (_select.TryGetValue("ContinuationTimeout", out SyntaxNode expression))
+            {
+                object value = _context.Evaluate(in expression);
+
+                if (value is int seconds)
+                {
+                    return TimeSpan.FromSeconds(seconds);
+                }
+            }
 
             return TimeSpan.FromSeconds(30);
         }
         private TimeSpan GetRequestedConnectionTimeout()
         {
-            //if (StreamFactory.TryGetOption(in _scope, "RequestedConnectionTimeout", out object value))
-            //{
-            //    if (value is int seconds)
-            //    {
-            //        return TimeSpan.FromSeconds(seconds);
-            //    }
-            //}
+            if (_select.TryGetValue("RequestedConnectionTimeout", out SyntaxNode expression))
+            {
+                object value = _context.Evaluate(in expression);
+
+                if (value is int seconds)
+                {
+                    return TimeSpan.FromSeconds(seconds);
+                }
+            }
 
             return TimeSpan.FromSeconds(30);
         }
         #endregion
 
         #region "MESSAGE OPTIONS AND VALUES"
+        private bool GetMandatory()
+        {
+            if (_select.TryGetValue("Mandatory", out SyntaxNode expression))
+            {
+                object value = _context.Evaluate(in expression);
+
+                if (value is bool boolean)
+                {
+                    return boolean;
+                }
+            }
+
+            return false;
+        }
         private string GetExchange()
         {
-            //if (StreamFactory.TryGetOption(in _scope, "Exchange", out object value))
-            //{
-            //    return value.ToString();
-            //}
+            if (_select.TryGetValue("Exchange", out SyntaxNode expression))
+            {
+                object value = _context.Evaluate(in expression);
+
+                if (value is string text)
+                {
+                    return text;
+                }
+            }
 
             return string.Empty;
         }
         private string GetRoutingKey()
         {
-            //if (StreamFactory.TryGetOption(in _scope, "RoutingKey", out object value))
-            //{
-            //    return value.ToString();
-            //}
+            if (_select.TryGetValue("RoutingKey", out SyntaxNode expression))
+            {
+                object value = _context.Evaluate(in expression);
+
+                if (value is string text)
+                {
+                    return text;
+                }
+            }
 
             return string.Empty;
         }
-        private bool GetMandatory()
-        {
-            //if (StreamFactory.TryGetOption(in _scope, "Mandatory", out object value))
-            //{
-            //    if (value is bool boolean)
-            //    {
-            //        return boolean;
-            //    }
-            //}
-
-            return false;
-        }
         private string GetMessageBody()
         {
-            //if (StreamFactory.TryGetOption(in _scope, "Body", out object value))
-            //{
-            //    return value.ToString();
-            //}
+            if (_select.TryGetValue("Body", out SyntaxNode expression))
+            {
+                object value = _context.Evaluate(in expression);
+
+                if (value is string text)
+                {
+                    return text;
+                }
+            }
 
             return string.Empty;
         }
         private DataObject GetHeaders()
         {
-            //if (StreamFactory.TryGetOption(in _scope, "Headers", out object value) && value is DataObject record)
-            //{
-            //    return record;
-            //}
+            if (_select.TryGetValue("Headers", out SyntaxNode expression))
+            {
+                object value = _context.Evaluate(in expression);
+
+                if (value is DataObject headers)
+                {
+                    return headers;
+                }
+            }
 
             return null;
         }
         private string[] GetBlindCopy()
         {
-            //if (StreamFactory.TryGetOption(in _scope, "BlindCopy", out object value))
-            //{
-            //    if (value is List<DataObject> list && list.Count > 0)
-            //    {
-            //        string[] array = new string[list.Count];
+            if (_select.TryGetValue("BlindCopy", out SyntaxNode expression))
+            {
+                object value = _context.Evaluate(in expression);
 
-            //        for (int i = 0; i < list.Count; i++)
-            //        {
-            //            array[i] = list[i].GetValue(0).ToString();
-            //        }
+                if (value is List<DataObject> list && list.Count > 0)
+                {
+                    string[] array = new string[list.Count];
 
-            //        return array;
-            //    }
-            //    else
-            //    {
-            //        return value.ToString().Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-            //    }
-            //}
+                    for (int i = 0; i < list.Count; i++)
+                    {
+                        array[i] = list[i].GetValue(0).ToString();
+                    }
 
+                    return array;
+                }
+                else
+                {
+                    return value.ToString().Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+                }
+            }
+            
             return null;
         }
         private string[] GetCarbonCopy()
         {
-            //if (StreamFactory.TryGetOption(in _scope, "CarbonCopy", out object value))
-            //{
-            //    if (value is List<DataObject> list && list.Count > 0)
-            //    {
-            //        string[] array = new string[list.Count];
+            if (_select.TryGetValue("CarbonCopy", out SyntaxNode expression))
+            {
+                object value = _context.Evaluate(in expression);
 
-            //        for (int i = 0; i < list.Count; i++)
-            //        {
-            //            array[i] = list[i].GetValue(0).ToString();
-            //        }
+                if (value is List<DataObject> list && list.Count > 0)
+                {
+                    string[] array = new string[list.Count];
 
-            //        return array;
-            //    }
-            //    else
-            //    {
-            //        return value.ToString().Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-            //    }
-            //}
+                    for (int i = 0; i < list.Count; i++)
+                    {
+                        array[i] = list[i].GetValue(0).ToString();
+                    }
+
+                    return array;
+                }
+                else
+                {
+                    return value.ToString().Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+                }
+            }
 
             return null;
         }
         private string GetAppId()
         {
-            //if (StreamFactory.TryGetOption(in _scope, nameof(IBasicProperties.AppId), out object value))
-            //{
-            //    return value.ToString();
-            //}
+            if (_select.TryGetValue("AppId", out SyntaxNode expression))
+            {
+                object value = _context.Evaluate(in expression);
+
+                if (value is string text)
+                {
+                    return text;
+                }
+            }
 
             return null;
         }
         private string GetMessageId()
         {
-            //if (StreamFactory.TryGetOption(in _scope, nameof(IBasicProperties.MessageId), out object value))
-            //{
-            //    return value.ToString();
-            //}
+            if (_select.TryGetValue("MessageId", out SyntaxNode expression))
+            {
+                object value = _context.Evaluate(in expression);
+
+                if (value is string text)
+                {
+                    return text;
+                }
+            }
 
             return null;
         }
         private string GetMessageType()
         {
-            //if (StreamFactory.TryGetOption(in _scope, nameof(IBasicProperties.Type), out object value))
-            //{
-            //    return value.ToString();
-            //}
+            if (_select.TryGetValue("Type", out SyntaxNode expression))
+            {
+                object value = _context.Evaluate(in expression);
+
+                if (value is string text)
+                {
+                    return text;
+                }
+            }
 
             return null;
         }
         private string GetCorrelationId()
         {
-            //if (StreamFactory.TryGetOption(in _scope, nameof(IBasicProperties.CorrelationId), out object value))
-            //{
-            //    return value.ToString();
-            //}
+            if (_select.TryGetValue("CorrelationId", out SyntaxNode expression))
+            {
+                object value = _context.Evaluate(in expression);
+
+                if (value is string text)
+                {
+                    return text;
+                }
+            }
 
             return null;
         }
         private byte GetPriority()
         {
-            //if (StreamFactory.TryGetOption(in _scope, nameof(IBasicProperties.Priority), out object value))
-            //{
-            //    if (value is not null && byte.TryParse(value.ToString(), out byte priority))
-            //    {
-            //        return priority;
-            //    }
-            //}
+            if (_select.TryGetValue("Priority", out SyntaxNode expression))
+            {
+                object value = _context.Evaluate(in expression);
 
-            return 0;
-        }
-        private DeliveryModes GetDeliveryMode()
-        {
-            //if (StreamFactory.TryGetOption(in _scope, nameof(IBasicProperties.DeliveryMode), out object value))
-            //{
-            //    if (value is not null && byte.TryParse(value.ToString(), out byte mode))
-            //    {
-            //        return mode;
-            //    }
-            //}
+                if (value is byte priority)
+                {
+                    return priority;
+                }
+            }
 
-            return DeliveryModes.Persistent;
+            return (byte)0;
         }
         private string GetContentType()
         {
-            //if (StreamFactory.TryGetOption(in _scope, nameof(IBasicProperties.ContentType), out object value))
-            //{
-            //    return value.ToString();
-            //}
+            if (_select.TryGetValue("ContentType", out SyntaxNode expression))
+            {
+                object value = _context.Evaluate(in expression);
+
+                if (value is string text)
+                {
+                    return text;
+                }
+            }
 
             return "application/json";
         }
         private string GetContentEncoding()
         {
-            //if (StreamFactory.TryGetOption(in _scope, nameof(IBasicProperties.ContentEncoding), out object value))
-            //{
-            //    return value.ToString();
-            //}
+            if (_select.TryGetValue("ContentEncoding", out SyntaxNode expression))
+            {
+                object value = _context.Evaluate(in expression);
+
+                if (value is string text)
+                {
+                    return text;
+                }
+            }
 
             return "UTF-8";
         }
         private string GetReplyTo()
         {
-            //if (StreamFactory.TryGetOption(in _scope, nameof(IBasicProperties.ReplyTo), out object value))
-            //{
-            //    return value.ToString();
-            //}
+            if (_select.TryGetValue("ReplyTo", out SyntaxNode expression))
+            {
+                object value = _context.Evaluate(in expression);
+
+                if (value is string text)
+                {
+                    return text;
+                }
+            }
 
             return null;
         }
         private string GetExpiration()
         {
-            //if (StreamFactory.TryGetOption(in _scope, nameof(IBasicProperties.Expiration), out object value))
-            //{
-            //    return value.ToString();
-            //}
+            if (_select.TryGetValue("Expiration", out SyntaxNode expression))
+            {
+                object value = _context.Evaluate(in expression);
+
+                if (value is string text)
+                {
+                    return text;
+                }
+            }
 
             return null;
+        }
+        private DeliveryModes GetDeliveryMode()
+        {
+            if (_select.TryGetValue("DeliveryMode", out SyntaxNode expression))
+            {
+                object value = _context.Evaluate(in expression);
+
+                if (value is byte mode)
+                {
+                    return mode == 1 ? DeliveryModes.Transient : DeliveryModes.Persistent;
+                }
+            }
+
+            return DeliveryModes.Persistent;
         }
         #endregion
 
@@ -526,42 +647,76 @@ namespace DaJet.RabbitMQ
         }
         #endregion
 
-        #region "PUBLISH MESSAGE ASYNCHRONOUSLY"
-        private async ValueTask<ulong> PublishMessageAsync()
+        #region "PUBLISH MESSAGE SYNC-OVER-ASYNC"
+        private void PublishMessageOrThrow()
         {
-            ulong deliveryTag = await _channel.GetNextPublishSequenceNumberAsync().ConfigureAwait(false);
+            Task publisher = PublishMessageAsync();
 
-            ConfigureMessageHeaders(deliveryTag);
-
-            ConfigureMessageProperties();
-
-            ReadOnlyMemory<byte> payload = EncodeMessageBody(GetMessageBody());
-
-            if (string.IsNullOrWhiteSpace(GetExchange()))
+            if (!publisher.IsCompleted)
             {
-                // clear CC and BCC headers if present
-                _ = _properties?.Headers?.Remove(HEADER_CC); // carbon copy
-                _ = _properties?.Headers?.Remove(HEADER_BCC); // blind carbon copy
-
-                // send message directly to the specified queue (default exchange)
-                await _channel.BasicPublishAsync(string.Empty, GetRoutingKey(), GetMandatory(), _properties, payload).ConfigureAwait(false);
+                publisher.GetAwaiter().GetResult();
             }
-            else if (string.IsNullOrWhiteSpace(GetRoutingKey()))
+
+            if (_confirmCountdown.IsSet)
             {
-                // send message to the specified exchange without routing key
-                await _channel.BasicPublishAsync(GetExchange(), string.Empty, GetMandatory(), _properties, payload).ConfigureAwait(false);
+                _confirmCountdown.Reset(1);
             }
             else
             {
-                // send message to the specified exchange using provided routing key
-                await _channel.BasicPublishAsync(GetExchange(), GetRoutingKey(), GetMandatory(), _properties, payload).ConfigureAwait(false);
+                _confirmCountdown.AddCount();
             }
+        }
+        private async Task PublishMessageAsync()
+        {
+            ulong deliveryTag = await _channel.GetNextPublishSequenceNumberAsync().ConfigureAwait(false);
+            
+            ConfigureMessageProperties();
 
-            return deliveryTag;
+            ConfigureMessageHeaders(deliveryTag);
+
+            ReadOnlyMemory<byte> payload = EncodeMessageBody(GetMessageBody());
+
+            try
+            {
+                if (!_published.TryAdd(deliveryTag, false))
+                {
+                    throw new InvalidOperationException($"Failed to track the publisher confirmation for sequence number '{deliveryTag}' because it already exists.");
+                }
+
+                if (string.IsNullOrWhiteSpace(GetExchange()))
+                {
+                    // clear CC and BCC headers if present
+                    _ = _properties?.Headers?.Remove(HEADER_CC); // carbon copy
+                    _ = _properties?.Headers?.Remove(HEADER_BCC); // blind carbon copy
+
+                    // send message directly to the specified queue (default exchange)
+                    await _channel.BasicPublishAsync(string.Empty, GetRoutingKey(), GetMandatory(), _properties, payload).ConfigureAwait(false);
+                }
+                else if (string.IsNullOrWhiteSpace(GetRoutingKey()))
+                {
+                    // send message to the specified exchange without routing key
+                    await _channel.BasicPublishAsync(GetExchange(), string.Empty, GetMandatory(), _properties, payload).ConfigureAwait(false);
+                }
+                else
+                {
+                    // send message to the specified exchange using provided routing key
+                    await _channel.BasicPublishAsync(GetExchange(), GetRoutingKey(), GetMandatory(), _properties, payload).ConfigureAwait(false);
+                }
+            }
+            catch
+            {
+                _ = _published.TryRemove(deliveryTag, out _);
+
+                throw;
+            }
         }
         private void ConfigureMessageHeaders(ulong deliveryTag)
         {
             _properties.Headers?.Clear();
+
+            _properties.Headers ??= new Dictionary<string, object>();
+
+            _properties.Headers.Add(RmqConstants.PublishSequenceNumberHeader, (long)deliveryTag);
 
             DataObject headers = GetHeaders();
             string[] BlindCopy = GetBlindCopy();
@@ -571,11 +726,7 @@ namespace DaJet.RabbitMQ
             {
                 return;
             }
-
-            _properties.Headers ??= new Dictionary<string, object>();
-
-            _properties.Headers.Add(RmqConstants.PublishSequenceNumberHeader, (long)deliveryTag);
-
+            
             if (BlindCopy is not null)
             {
                 _ = _properties.Headers.TryAdd(HEADER_BCC, BlindCopy);
@@ -635,10 +786,49 @@ namespace DaJet.RabbitMQ
         }
         #endregion
 
-        #region "MESSAGE DELIVERY HANDLERS"
+        #region "MESSAGE DELIVERY TRACKING"
         private Task BasicAcksHandler(object sender, BasicAckEventArgs args)
         {
-            return HandlePublisherConfirm(args.DeliveryTag, args.Multiple);
+            bool multiple = args.Multiple;
+            ulong deliveryTag = args.DeliveryTag;
+
+            lock (_confirmLock) // !?
+            {
+                if (multiple)
+                {
+                    int count = 0;
+
+                    foreach (KeyValuePair<ulong, bool> pending in _published.ToArray())
+                    {
+                        if (pending.Key <= deliveryTag)
+                        {
+                            if (_published.TryRemove(pending.Key, out _))
+                            {
+                                count++;
+                            }
+                            else
+                            {
+                                FileLogger.Default.Write(string.Format(ERROR_FAILED_TO_ACK, deliveryTag, "multiple"));
+                            }
+                        }
+                    }
+
+                    _ = _confirmCountdown.Signal(count);
+                }
+                else
+                {
+                    if (_published.TryRemove(deliveryTag, out _))
+                    {
+                        _ = _confirmCountdown.Signal();
+                    }
+                    else
+                    {
+                        FileLogger.Default.Write(string.Format(ERROR_FAILED_TO_ACK, deliveryTag, "single"));
+                    }
+                }
+            }
+
+            return Task.CompletedTask;
         }
         private Task BasicNacksHandler(object sender, BasicNackEventArgs args)
         {
@@ -662,59 +852,6 @@ namespace DaJet.RabbitMQ
             FileLogger.Default.Write(message);
 
             return Task.CompletedTask;
-
-            //ulong deliveryTag = 0;
-
-            //IDictionary<string, object> headers = args.BasicProperties?.Headers;
-
-            //if (headers is not null)
-            //{
-            //    object value = headers[RmqConstants.PublishSequenceNumberHeader];
-
-            //    if (value is long int64)
-            //    {
-            //        deliveryTag = (ulong)int64;
-            //    }
-            //}
-
-            //return HandlePublisherConfirm(deliveryTag, false);
-        }
-        private Task HandlePublisherConfirm(ulong deliveryTag, bool multiple)
-        {
-            if (_trackingTag == deliveryTag && multiple)
-            {
-                _ = _state?.TrySetResult();
-
-                return Task.CompletedTask;
-            }
-
-            if (multiple)
-            {
-                foreach (KeyValuePair<ulong, bool> pending in _published.ToArray())
-                {
-                    if (pending.Key <= deliveryTag)
-                    {
-                        if (!_published.TryRemove(pending.Key, out _))
-                        {
-                            FileLogger.Default.Write(string.Format(ERROR_FAILED_TO_ACK, deliveryTag, "multiple"));
-                        }
-                    }
-                }
-            }
-            else
-            {
-                if (!_published.TryRemove(deliveryTag, out _))
-                {
-                    FileLogger.Default.Write(string.Format(ERROR_FAILED_TO_ACK, deliveryTag, "single"));
-                }
-            }
-
-            if (_trackingTag == deliveryTag && _published.IsEmpty)
-            {
-                _ = _state?.TrySetResult();
-            }
-
-            return Task.CompletedTask;
         }
         private void WaitForPublisherConfirms()
         {
@@ -730,11 +867,17 @@ namespace DaJet.RabbitMQ
                 return;
             }
 
-            _trackingTag = _deliveryTag; // the last delivery tag awaiting confirmation from server
+            TimeSpan timeout = PublisherConfirmsTimeout;
 
-            bool timedout = state.Task.Wait(PublisherConfirmsTimeout, _context.Cancellation);
+            //bool timedout = state.Task.Wait(timeout, _context.Cancellation);
 
-            if (timedout)
+            bool success = _confirmCountdown.Wait(timeout, _context.Cancellation);
+
+            if (success)
+            {
+                _ = state.TrySetResult();
+            }
+            else
             {
                 throw new OperationCanceledException(ERROR_WAIT_FOR_CONFIRMS);
             }
@@ -777,53 +920,6 @@ namespace DaJet.RabbitMQ
         {
             ResetState();
         }
-        private void ResetState()
-        {
-            if (_state is null)
-            {
-                return;
-            }
-
-            _state = null;
-            _deliveryTag = 0UL;
-            _trackingTag = 0UL;
-            _published.Clear();
-            _properties = null;
-
-            IChannel channel = _channel;
-
-            if (channel is not null)
-            {
-                channel.BasicAcksAsync -= BasicAcksHandler;
-                channel.BasicNacksAsync -= BasicNacksHandler;
-                channel.BasicReturnAsync -= BasicReturnHandler;
-                channel.ChannelShutdownAsync -= ChannelShutdownHandler;
-
-                try { channel.Dispose(); }
-                catch { /* do nothing */ }
-                finally { _channel = null; }
-            }
-
-            IConnection connection = _connection;
-
-            if (connection is not null)
-            {
-                connection.ConnectionBlockedAsync -= HandleConnectionBlocked;
-                connection.ConnectionUnblockedAsync -= HandleConnectionUnblocked;
-                connection.ConnectionShutdownAsync -= ConnectionShutdownHandler;
-
-                try { connection.Dispose(); }
-                catch { /* do nothing */ }
-                finally { _connection = null; }
-            }
-
-            if (_buffer is not null)
-            {
-                ArrayPool<byte>.Shared.Return(_buffer, true);
-
-                _buffer = null;
-            }
-        }
         public override void Dispose()
         {
             if (_disposed)
@@ -831,220 +927,16 @@ namespace DaJet.RabbitMQ
                 return;
             }
 
-            DataSourceScope scope = _scope;
+            //DataSourceScope scope = _scope;
 
-            if (scope is not null)
-            {
-                scope.OnCommit -= SynchronizeCommit;
-                scope.OnCancel -= SynchronizeCancel;
-                scope.OnDispose -= SynchronizeDispose;
-            }
+            //if (scope is not null)
+            //{
+            //    scope.OnCommit -= SynchronizeCommit;
+            //    scope.OnCancel -= SynchronizeCancel;
+            //    scope.OnDispose -= SynchronizeDispose;
+            //}
 
             _disposed = true;
-        }
-
-
-
-        private bool _onlyAcksReceived = true;
-        private readonly object _confirmLock = new object();
-        private readonly LinkedList<ulong> _pendingDeliveryTags = new();
-        private readonly CountdownEvent _deliveryTagsCountdown = new(0);
-        public ShutdownEventArgs CloseReason { get; private set; }
-        public bool IsOpen
-        {
-            get { return CloseReason == null; }
-        }
-        public ulong NextPublishSeqNo { get; private set; }
-        public void ConfirmSelect()
-        {
-            if (NextPublishSeqNo == 0UL)
-            {
-                NextPublishSeqNo = 1;
-            }
-
-            //_Private_ConfirmSelect(false);
-        }
-        public void BasicPublish(string exchange, string routingKey, bool mandatory, IBasicProperties basicProperties, ReadOnlyMemory<byte> body)
-        {
-            if (routingKey == null)
-            {
-                throw new ArgumentNullException(nameof(routingKey));
-            }
-
-            if (basicProperties == null)
-            {
-                //basicProperties = _emptyBasicProperties;
-            }
-
-            if (NextPublishSeqNo > 0)
-            {
-                lock (_confirmLock)
-                {
-                    if (_deliveryTagsCountdown.IsSet)
-                    {
-                        _deliveryTagsCountdown.Reset(1);
-                    }
-                    else
-                    {
-                        _deliveryTagsCountdown.AddCount();
-                    }
-
-                    _pendingDeliveryTags.AddLast(NextPublishSeqNo++);
-                }
-            }
-
-            try
-            {
-                //_Private_BasicPublish(exchange,
-                //    routingKey,
-                //    mandatory,
-                //    basicProperties,
-                //    body);
-            }
-            catch
-            {
-                if (NextPublishSeqNo > 0)
-                {
-                    lock (_confirmLock)
-                    {
-                        NextPublishSeqNo--;
-
-                        _pendingDeliveryTags.RemoveLast();
-
-                        _deliveryTagsCountdown.Reset(_pendingDeliveryTags.Count);
-                    }
-                }
-
-                throw;
-            }
-        }
-        private void OnModelShutdown(ShutdownEventArgs reason)
-        {
-            //_continuationQueue.HandleModelShutdown(reason);
-            //EventHandler<ShutdownEventArgs> handler;
-            //lock (_shutdownLock)
-            //{
-            //    handler = _modelShutdown;
-            //    _modelShutdown = null;
-            //}
-            //if (handler != null)
-            //{
-            //    foreach (EventHandler<ShutdownEventArgs> h in handler.GetInvocationList())
-            //    {
-            //        try
-            //        {
-            //            h(this, reason);
-            //        }
-            //        catch (Exception e)
-            //        {
-            //            OnCallbackException(CallbackExceptionEventArgs.Build(e, "OnModelShutdown"));
-            //        }
-            //    }
-            //}
-
-            _deliveryTagsCountdown.Reset(0);
-            //_flowControlBlock.Set();
-        }
-        private void OnBasicReturn(BasicReturnEventArgs args)
-        {
-            //foreach (EventHandler<BasicReturnEventArgs> h in BasicReturn?.GetInvocationList() ?? Array.Empty<Delegate>())
-            //{
-            //    try
-            //    {
-            //        h(this, args);
-            //    }
-            //    catch (Exception e)
-            //    {
-            //        OnCallbackException(CallbackExceptionEventArgs.Build(e, "OnBasicReturn"));
-            //    }
-            //}
-        }
-        private void HandleAckNack(ulong deliveryTag, bool multiple, bool isNack)
-        {
-            // No need to do this if publisher confirms have never been enabled.
-            if (NextPublishSeqNo > 0)
-            {
-                // let's take a lock so we can assume that deliveryTags are unique, never duplicated and always sorted
-                lock (_confirmLock)
-                {
-                    // No need to do anything if there are no delivery tags in the list
-                    if (_pendingDeliveryTags.Count > 0)
-                    {
-                        if (multiple)
-                        {
-                            int count = 0;
-                            while (_pendingDeliveryTags.First.Value < deliveryTag)
-                            {
-                                _pendingDeliveryTags.RemoveFirst(); count++;
-                            }
-
-                            if (_pendingDeliveryTags.First.Value == deliveryTag)
-                            {
-                                _pendingDeliveryTags.RemoveFirst(); count++;
-                            }
-
-                            if (count > 0)
-                            {
-                                _deliveryTagsCountdown.Signal(count);
-                            }
-                        }
-                        else
-                        {
-                            if (_pendingDeliveryTags.Remove(deliveryTag))
-                            {
-                                _deliveryTagsCountdown.Signal();
-                            }
-                        }
-                    }
-
-                    _onlyAcksReceived = _onlyAcksReceived && !isNack;
-                }
-            }
-        }
-        public bool WaitForConfirms(TimeSpan timeout, out bool timedOut)
-        {
-            if (NextPublishSeqNo == 0UL)
-            {
-                throw new InvalidOperationException("Confirms not selected");
-            }
-            bool isWaitInfinite = timeout.TotalMilliseconds == Timeout.Infinite;
-
-            Stopwatch stopwatch = Stopwatch.StartNew();
-
-            while (true)
-            {
-                if (!IsOpen)
-                {
-                    throw new AlreadyClosedException(CloseReason);
-                }
-
-                if (_deliveryTagsCountdown.IsSet)
-                {
-                    bool aux = _onlyAcksReceived;
-                    
-                    _onlyAcksReceived = true;
-                    
-                    timedOut = false;
-
-                    return aux;
-                }
-
-                if (isWaitInfinite)
-                {
-                    _deliveryTagsCountdown.Wait();
-                }
-                else
-                {
-                    TimeSpan elapsed = stopwatch.Elapsed;
-
-                    if (elapsed > timeout || !_deliveryTagsCountdown.Wait(timeout - elapsed))
-                    {
-                        timedOut = true;
-
-                        return _onlyAcksReceived;
-                    }
-                }
-            }
         }
     }
 }
