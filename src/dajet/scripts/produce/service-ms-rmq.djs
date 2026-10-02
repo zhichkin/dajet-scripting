@@ -12,7 +12,7 @@ WHILE TRUE
 
       USE 'MS_TEST'
 
-         STREAM TOP 10 НомерСообщения
+         STREAM TOP 5 НомерСообщения
               , Отправитель, Получатель
               , ТипСообщения, ТелоСообщения
            INTO @message
@@ -42,9 +42,9 @@ WHILE TRUE
    
    PRINT '[STREAM] ' + NOW()
 
-   IF @Счётчик >= 100 THEN BREAK END
+   IF @Счётчик >= 50 THEN BREAK END
 
-   SLEEP 10
+   SLEEP 5
 
 END -- WHILE
 

@@ -48,7 +48,12 @@ namespace DaJet.Scripting
 
         public override DataSourceScope GetDataSource()
         {
-            return _sources.Peek();
+            if (_sources.TryPeek(out DataSourceScope scope))
+            {
+                return scope;
+            }
+            
+            return null;
         }
         public override object Evaluate(in SyntaxNode expression)
         {
@@ -487,8 +492,11 @@ namespace DaJet.Scripting
         }
         private ExitCode Execute(in SelectStatement statement)
         {
-            DataSourceScope use = GetDataSource();
-            
+            if (GetDataSource() is not DataSourceScope use)
+            {
+                throw new InvalidOperationException("[SELECT] USE scope is missing");
+            }
+
             if (!_processors.TryGetValue(statement, out ProcessorBase processor))
             {
                 if (use.Type == DataSourceType.SqlServer)
@@ -518,7 +526,10 @@ namespace DaJet.Scripting
         }
         private ExitCode Execute(in ConsumeStatement statement)
         {
-            DataSourceScope use = GetDataSource();
+            if (GetDataSource() is not DataSourceScope use)
+            {
+                throw new InvalidOperationException("[CONSUME] USE scope is missing");
+            }
 
             if (!_processors.TryGetValue(statement, out ProcessorBase processor))
             {
@@ -549,7 +560,10 @@ namespace DaJet.Scripting
         }
         private ExitCode Execute(in InsertStatement statement)
         {
-            DataSourceScope use = GetDataSource();
+            if (GetDataSource() is not DataSourceScope use)
+            {
+                throw new InvalidOperationException("[INSERT] USE scope is missing");
+            }
 
             if (!_processors.TryGetValue(statement, out ProcessorBase processor))
             {
@@ -596,7 +610,10 @@ namespace DaJet.Scripting
         private ExitCode Execute(in DeleteStatement statement) { throw new NotImplementedException("Statement is not implemented: DELETE"); }
         private ExitCode Execute(in SqlStatement statement)
         {
-            DataSourceScope use = GetDataSource();
+            if (GetDataSource() is not DataSourceScope use)
+            {
+                throw new InvalidOperationException("[SQL] USE scope is missing");
+            }
 
             if (!_processors.TryGetValue(statement, out ProcessorBase processor))
             {
