@@ -16,18 +16,21 @@ namespace DaJet.RabbitMQ
     public sealed class Producer : ProcessorBase
     {
         #region "CONSTANTS"
-        private const string ERROR_STATE_IS_BROKEN = "Broken state";
         private const string WARNING_FLOW_CONTROL = "Flow control: {0}";
         private const string ERROR_CHANNEL_SHUTDOWN = "Channel shutdown: [{0}] {1}";
         private const string ERROR_CONNECTION_SHUTDOWN = "Connection shutdown: [{0}] {1}";
         private const string ERROR_CONNECTION_IS_BLOCKED = "Connection blocked: {0}";
         private const string ERROR_FAILED_TO_ACK = "Failed to confirm delivery tag: {0} ({1})";
-        private const string ERROR_WAIT_FOR_CONFIRMS = "Wait for confirms timed out";
-        private const string ERROR_PUBLISHER_CONFIRMS = "Publisher confirms nacked";
+        private const string ERROR_WAIT_FOR_CONFIRMS = "Wait for confirms failed";
+        private const string ERROR_MESSAGE_NACKED = "Delivery tag nacked {0} ({1})";
         private const string HEADER_CC = "CC";
         private const string HEADER_BCC = "BCC";
         #endregion
 
+        private int _state = STATE_IDLE;
+        private const int STATE_IDLE = 0;
+        private const int STATE_ACTIVATING = 1;
+        private const int STATE_ACTIVE = 2;
         private readonly ScriptContext _context;
         private readonly ProduceStatement _statement;
         private readonly Dictionary<string, SyntaxNode> _select = new();
@@ -36,9 +39,9 @@ namespace DaJet.RabbitMQ
         private IChannel _channel;
         private IConnection _connection;
         private BasicProperties _properties;
-        private TaskCompletionSource _state;
+        private InvalidOperationException _broken;
         private readonly Lock _confirmLock = new();
-        private readonly CountdownEvent _confirmCountdown = new(0);
+        private readonly CountdownEvent _confirmTracker = new(0);
         private readonly ConcurrentDictionary<ulong, bool> _published = new(2, 1000);
         public Producer(in ScriptContext context, in ProduceStatement statement)
         {
@@ -80,14 +83,14 @@ namespace DaJet.RabbitMQ
         }
         private void ResetState()
         {
-            if (_state is null)
+            if (_state == STATE_IDLE)
             {
                 return;
             }
-
-            _state = null;
+            
+            _broken = null;
             _published.Clear();
-            _confirmCountdown.Reset(0);
+            _confirmTracker.Reset(0);
 
             byte[] buffer = _buffer;
 
@@ -126,6 +129,8 @@ namespace DaJet.RabbitMQ
                 catch { /* do nothing */ }
                 finally { _connection = null; }
             }
+
+            _ = Interlocked.Exchange(ref _state, STATE_IDLE);
         }
 
         #region "CONFIGURATION OPTIONS"
@@ -516,22 +521,15 @@ namespace DaJet.RabbitMQ
         #region "CONNECTION AND CHANNEL MANAGEMENT"
         private void ThrowIfStateIsBroken()
         {
-            if (_state is null)
+            if (_broken is not null)
             {
-                return; // initial state of processor
-            }
-
-            if (_state.Task.IsFaulted)
-            {
-                throw new InvalidOperationException(ERROR_STATE_IS_BROKEN);
+                throw _broken;
             }
         }
         private void EnsureProcessorIsActive()
         {
-            if (_state is null) // initial state of processor
+            if (_state == STATE_IDLE) // initial state of processor
             {
-                _state = new TaskCompletionSource();
-
                 if (_context.GetDataSource() is DataSourceScope scope)
                 {
                     scope.OnCommit += SynchronizeCommit;
@@ -543,8 +541,10 @@ namespace DaJet.RabbitMQ
 
             if (channel is not null && channel.IsOpen)
             {
-                return;
+                return; // STATE_ACTIVE
             }
+
+            _ = Interlocked.Exchange(ref _state, STATE_ACTIVATING);
 
             Task activator = ActivateProcessorAsync();
 
@@ -552,6 +552,8 @@ namespace DaJet.RabbitMQ
             {
                 activator.GetAwaiter().GetResult();
             }
+
+            _ = Interlocked.Exchange(ref _state, STATE_ACTIVE);
         }
         private async Task ActivateProcessorAsync()
         {
@@ -585,7 +587,7 @@ namespace DaJet.RabbitMQ
         {
             string message = string.Format(ERROR_CONNECTION_IS_BLOCKED, args.Reason);
 
-            _ = _state?.TrySetException(new Exception(message));
+            _broken ??= new InvalidOperationException(message);
 
             FileLogger.Default.Write(message);
 
@@ -601,7 +603,7 @@ namespace DaJet.RabbitMQ
         {
             string message = string.Format(ERROR_CONNECTION_SHUTDOWN, args.ReplyCode.ToString(), args.ReplyText);
 
-            _ = _state?.TrySetException(new Exception(message));
+            _broken ??= new InvalidOperationException(message);
 
             FileLogger.Default.Write(message);
 
@@ -640,7 +642,7 @@ namespace DaJet.RabbitMQ
         {
             string message = string.Format(ERROR_CHANNEL_SHUTDOWN, args.ReplyCode.ToString(), args.ReplyText);
 
-            _ = _state?.TrySetException(new Exception(message));
+            _broken ??= new InvalidOperationException(message);
 
             FileLogger.Default.Write(message);
 
@@ -662,13 +664,13 @@ namespace DaJet.RabbitMQ
 
             // Increment delivery tag counter in case the acknowledgment (ack) will be received synchronously.
 
-            if(_confirmCountdown.IsSet)
+            if(_confirmTracker.IsSet)
             {
-                _confirmCountdown.Reset(1);
+                _confirmTracker.Reset(1);
             }
             else
             {
-                _confirmCountdown.AddCount();
+                _confirmTracker.AddCount();
             }
             
             try
@@ -684,7 +686,7 @@ namespace DaJet.RabbitMQ
             {
                 // Decrement delivery tag counter: rollback previous operation.
 
-                if (_confirmCountdown.Signal())
+                if (_confirmTracker.Signal())
                 {
                     _published.Clear();
                 }
@@ -827,13 +829,13 @@ namespace DaJet.RabbitMQ
                         }
                     }
 
-                    _ = _confirmCountdown.Signal(count);
+                    _ = _confirmTracker.Signal(count);
                 }
                 else
                 {
                     if (_published.TryRemove(deliveryTag, out _))
                     {
-                        _ = _confirmCountdown.Signal();
+                        _ = _confirmTracker.Signal();
                     }
                     else
                     {
@@ -846,7 +848,9 @@ namespace DaJet.RabbitMQ
         }
         private Task BasicNacksHandler(object sender, BasicNackEventArgs args)
         {
-            _ = _state?.TrySetException(new Exception(ERROR_PUBLISHER_CONFIRMS));
+            string message = string.Format(ERROR_MESSAGE_NACKED, args.DeliveryTag, args.Multiple ? "multiple" : "single");
+
+            _broken ??= new InvalidOperationException(message);
 
             return Task.CompletedTask;
         }
@@ -876,40 +880,21 @@ namespace DaJet.RabbitMQ
         {
             string message = GetReturnReason(in args);
 
-            _ = _state?.TrySetException(new Exception(message));
-            
+            _broken ??= new InvalidOperationException(message);
+
             return Task.CompletedTask;
         }
         private void WaitForPublisherConfirms()
         {
-            if (_state is null)
-            {
-                throw new OperationCanceledException(ERROR_STATE_IS_BROKEN);
-            }
-
-            if (_state.Task.IsCompletedSuccessfully)
-            {
-                return;
-            }
+            ThrowIfStateIsBroken();
 
             TimeSpan timeout = PublisherConfirmsTimeout;
 
-            //bool timedout = _state.Task.Wait(timeout, _context.Cancellation);
+            bool success = _confirmTracker.Wait(timeout, _context.Cancellation);
 
-            bool success = _confirmCountdown.Wait(timeout, _context.Cancellation);
-
-            if (success)
+            if (!success)
             {
-                _ = _state.TrySetResult();
-            }
-            else
-            {
-                throw new OperationCanceledException(ERROR_WAIT_FOR_CONFIRMS);
-            }
-
-            if (!_state.Task.IsCompletedSuccessfully)
-            {
-                throw new OperationCanceledException(ERROR_PUBLISHER_CONFIRMS);
+                throw new InvalidOperationException(ERROR_WAIT_FOR_CONFIRMS);
             }
         }
         #endregion
@@ -943,16 +928,18 @@ namespace DaJet.RabbitMQ
         }
         private void SynchronizeCancel(object sender, EventArgs args)
         {
-            ResetState();
-
             if (sender is DataSourceScope scope)
             {
                 scope.OnCommit -= SynchronizeCommit;
                 scope.OnCancel -= SynchronizeCancel;
             }
+
+            ResetState();
         }
         public override void Dispose()
         {
+            //TODO: think about processor's lifecycle
+
             // Commit and Cancel methods will never be called
             // if processor is not bound to a data source (scoped)
 
