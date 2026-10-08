@@ -1,5 +1,6 @@
 ﻿using DaJet.Scripting.Model;
 using DaJet.TypeSystem;
+using System.Net.Mime;
 
 namespace DaJet.Scripting
 {
@@ -3467,16 +3468,12 @@ namespace DaJet.Scripting
 
             Skip(Token.Comment);
 
-            if (Match(Token.String)) //NOTE: stream processor URI
+            if (Match(Token.String)) // stream processor (RabbitMQ or Apache Kafka)
             {
-                //TODO: return consume_stream_statement(in consume);
-
-                throw new NotImplementedException("[CONSUME] RabbitMQ and Apache Kafka brokers are not supported yet.");
+                return consume_stream_statement(in consume);
             }
-            else
-            {
-                consume.Top = top_clause(); // database queue table consumer
-            }
+            
+            consume.Top = top_clause(); // database queue table consumer
 
             if (consume.Top is null)
             {
@@ -3604,21 +3601,61 @@ namespace DaJet.Scripting
 
             Skip(Token.Comment);
             
-            if (!Match(Token.INTO))
+            if (Match(Token.INTO))
             {
-                throw new FormatException($"CONSUME: INTO keyword expected");
+                consume.Into = into_clause();
+            }
+            
+            if (consume.Into is not IntoClause into)
+            {
+                throw new FormatException($"[CONSUME] INTO keyword expected.");
+            }
+
+            if (into.Value is null)
+            {
+                throw new FormatException($"[CONSUME] INTO clause must reference variable.");
+            }
+
+            DeclareStatement declare = _script.GetVariableByName(into.Value.Identifier);
+
+            if (declare is null)
+            {
+                throw new FormatException($"[CONSUME] INTO clause variable is not declared.");
+            }
+            else if (!(declare.Type.IsArray || declare.Type.IsObject))
+            {
+                throw new FormatException($"[CONSUME] INTO clause variable must be of type object or array.");
+            }
+
+            DefineStatement schema = new() { Identifier = "RabbitMQ.Message" };
+            schema.Properties.Add(new DefineProperty() { Name = "AppId", Type = DataType.String() });
+            schema.Properties.Add(new DefineProperty() { Name = "ReplyTo", Type = DataType.String() });
+            schema.Properties.Add(new DefineProperty() { Name = "MessageId", Type = DataType.String() });
+            schema.Properties.Add(new DefineProperty() { Name = "CorrelationId", Type = DataType.String() });
+            schema.Properties.Add(new DefineProperty() { Name = "Type", Type = DataType.String() });
+            schema.Properties.Add(new DefineProperty() { Name = "Body", Type = DataType.String() });
+            schema.Properties.Add(new DefineProperty() { Name = "ContentType", Type = DataType.String() }); // application/json
+            schema.Properties.Add(new DefineProperty() { Name = "ContentEncoding", Type = DataType.String() }); // UTF-8
+            schema.Properties.Add(new DefineProperty() { Name = "Headers", Type = DataType.Object });
+            
+            declare.Binding = schema;
+
+            if (!declare.Type.IsArray)
+            {
+                consume.IsStream = true; // always is stream ???
             }
 
             Skip(Token.Comment);
 
-            consume.Into = into_clause();
-
-            if (consume.Into is null || consume.Into.Value is null)
+            if (consume.IsStream)
             {
-                throw new FormatException("CONSUME: INTO variable identifier expected");
-            }
+                if (Check(Token.END))
+                {
+                    throw new FormatException("[CONSUME] statement block is empty");
+                }
 
-            Skip(Token.Comment);
+                consume.Statements = statement_block(Token.END);
+            }
 
             return consume;
         }

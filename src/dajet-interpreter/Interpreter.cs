@@ -526,6 +526,17 @@ namespace DaJet.Scripting
         }
         private ExitCode Execute(in ConsumeStatement statement)
         {
+            if (statement.IsDatabaseSource)
+            {
+                return ExecuteDatabaseConsumer(in statement);
+            }
+            else
+            {
+                return ExecuteRabbitMQConsumer(in statement);
+            }
+        }
+        private ExitCode ExecuteDatabaseConsumer(in ConsumeStatement statement)
+        {
             if (GetDataSource() is not DataSourceScope use)
             {
                 throw new InvalidOperationException("[CONSUME] USE scope is missing");
@@ -541,6 +552,28 @@ namespace DaJet.Scripting
                 {
                     processor = new PgConsumeProcessor(this, in statement);
                 }
+
+                _processors.Add(statement, processor);
+            }
+
+            ExitCode code = ExitCode.Success;
+
+            try
+            {
+                code = processor.Process();
+            }
+            finally
+            {
+                processor.Dispose();
+            }
+
+            return code;
+        }
+        private ExitCode ExecuteRabbitMQConsumer(in ConsumeStatement statement)
+        {
+            if (!_processors.TryGetValue(statement, out ProcessorBase processor))
+            {
+                processor = new RabbitMQ.Consumer(this, in statement);
 
                 _processors.Add(statement, processor);
             }

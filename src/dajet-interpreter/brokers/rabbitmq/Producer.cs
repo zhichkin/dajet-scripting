@@ -64,6 +64,15 @@ namespace DaJet.RabbitMQ
                 return ExitCode.Cancel;
             }
 
+            if (_state == STATE_IDLE) // initial state of processor
+            {
+                if (_context.GetDataSource() is DataSourceScope scope)
+                {
+                    scope.OnCommit += SynchronizeCommit;
+                    scope.OnCancel += SynchronizeCancel;
+                }
+            }
+
             ExitCode code = ExitCode.Success;
             
             try
@@ -528,15 +537,6 @@ namespace DaJet.RabbitMQ
         }
         private void EnsureProcessorIsActive()
         {
-            if (_state == STATE_IDLE) // initial state of processor
-            {
-                if (_context.GetDataSource() is DataSourceScope scope)
-                {
-                    scope.OnCommit += SynchronizeCommit;
-                    scope.OnCancel += SynchronizeCancel;
-                }
-            }
-
             IChannel channel = _channel;
 
             if (channel is not null && channel.IsOpen)
@@ -655,7 +655,9 @@ namespace DaJet.RabbitMQ
         {
             ValueTask<ulong> generator = _channel.GetNextPublishSequenceNumberAsync();
             
-            ulong deliveryTag = generator.IsCompleted ? generator.Result : generator.GetAwaiter().GetResult();
+            ulong deliveryTag = generator.IsCompleted
+                ? generator.Result
+                : generator.GetAwaiter().GetResult();
             
             if (!_published.TryAdd(deliveryTag, false))
             {

@@ -13,7 +13,6 @@ namespace DaJet.Scripting
         private readonly EntityDefinition _target;
         private readonly string _bufferName;
         private readonly string _bufferItem;
-        private readonly string _insertTvpTable;
         private readonly string _createTempTable;
         private readonly string _insertTempTable;
         private readonly MsBulkInsertMapper _mapper;
@@ -139,35 +138,37 @@ namespace DaJet.Scripting
 
             return ExitCode.Success;
         }
-        private ExitCode ProcessTvpInsert(in MsDataSourceScope use, in List<DataObject> buffer)
-        {
-            //NOTE: Необходимо использовать команду: CREATE TYPE РегистрСведений.ВходящаяОчередь
+        
+        //private readonly string _insertTvpTable;
+        //private ExitCode ProcessTvpInsert(in MsDataSourceScope use, in List<DataObject> buffer)
+        //{
+        //    //NOTE: Необходимо использовать команду: CREATE TYPE РегистрСведений.ВходящаяОчередь
 
-            int timeout = _statement.Timeout;
+        //    int timeout = _statement.Timeout;
 
-            using (SqlCommand command = use.CreateCommand())
-            {
-                command.CommandText = _insertTvpTable;
-                command.CommandType = CommandType.Text;
-                command.CommandTimeout = timeout; // seconds
-                SqlParameter tvp = new()
-                {
-                    SqlDbType = SqlDbType.Structured,
-                    TypeName = MsBulkInsertTranspiler.GetTableTypeName(in _target),
-                    ParameterName = MsBulkInsertTranspiler.TableVariableName,
-                    Value = _mapper.Enumerate(in buffer)
-                };
-                command.Parameters.Add(tvp);
+        //    using (SqlCommand command = use.CreateCommand())
+        //    {
+        //        command.CommandText = _insertTvpTable;
+        //        command.CommandType = CommandType.Text;
+        //        command.CommandTimeout = timeout; // seconds
+        //        SqlParameter tvp = new()
+        //        {
+        //            SqlDbType = SqlDbType.Structured,
+        //            TypeName = MsBulkInsertTranspiler.GetTableTypeName(in _target),
+        //            ParameterName = MsBulkInsertTranspiler.TableVariableName,
+        //            Value = _mapper.Enumerate(in buffer)
+        //        };
+        //        command.Parameters.Add(tvp);
 
-                while (_mapper.CanRead())
-                {
-                    command.ExecuteNonQuery();
-                }
-            }
+        //        while (_mapper.CanRead())
+        //        {
+        //            command.ExecuteNonQuery();
+        //        }
+        //    }
 
-            _context.SetValue(in _bufferItem, null);
+        //    _context.SetValue(in _bufferItem, null);
 
-            return ExitCode.Success;
-        }
+        //    return ExitCode.Success;
+        //}
     }
 }

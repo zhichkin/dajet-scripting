@@ -1121,55 +1121,31 @@ namespace DaJet.Scripting
         }
         private void Bind(in ConsumeStatement node)
         {
-            if (!string.IsNullOrEmpty(node.Target))
+            if (node.IsDatabaseSource)
             {
-                BindStreamConsume(in node);
-            }
-            else
-            {
-                BindDatabaseConsume(in node);
+                _scope = _scope.OpenScope(node);
+
+                if (node.From is not null) { Bind(node.From); }
+
+                for (int i = 0; i < node.Columns.Count; i++)
+                {
+                    Bind(node.Columns[i]);
+                }
+
+                if (node.Top is not null) { Bind(node.Top); }
+                if (node.Into is not null) { Bind(node.Into.Value); }
+                if (node.Where is not null) { Bind(node.Where); }
+                if (node.Order is not null) { Bind(node.Order); }
+
+                BindOutputSchema(node, node.Into); //NOTE: defines INTO variable data schema
+
+                _scope = _scope.CloseScope();
             }
             
             if (node.Statements is not null)
             {
                 Bind(node.Statements);
             }
-        }
-        private void BindStreamConsume(in ConsumeStatement node)
-        {
-            _scope = _scope.OpenScope(node);
-
-            for (int i = 0; i < node.Options.Count; i++)
-            {
-                Bind(node.Options[i]);
-            }
-
-            for (int i = 0; i < node.Columns.Count; i++)
-            {
-                Bind(node.Columns[i]);
-            }
-
-            _scope = _scope.CloseScope();
-        }
-        private void BindDatabaseConsume(in ConsumeStatement node)
-        {
-            _scope = _scope.OpenScope(node);
-
-            if (node.From is not null) { Bind(node.From); }
-
-            for (int i = 0; i < node.Columns.Count; i++)
-            {
-                Bind(node.Columns[i]);
-            }
-
-            if (node.Top is not null) { Bind(node.Top); }
-            if (node.Into is not null) { Bind(node.Into.Value); }
-            if (node.Where is not null) { Bind(node.Where); }
-            if (node.Order is not null) { Bind(node.Order); }
-
-            BindOutputSchema(node, node.Into); //NOTE: defines INTO variable data schema
-
-            _scope = _scope.CloseScope();
         }
         
         #region "APPLY AND REVOKE SEQUENCE"
