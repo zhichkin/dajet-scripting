@@ -16,7 +16,7 @@ namespace DaJet.RabbitMQ
         private readonly ConsumeStatement _statement;
         private readonly Dictionary<string, SyntaxNode> _options = new();
 
-        private int _state;
+        private int _state = STATE_IDLE;
         private const int STATE_IDLE = 0;
         private const int STATE_RUNNING = 1;
         private const int STATE_AUTORESET = 2;
@@ -33,6 +33,8 @@ namespace DaJet.RabbitMQ
         private int _consumed = 0;
         private string _consumerTag;
         private readonly string _output;
+        private readonly List<DataObject> _batch;
+        private readonly SemaphoreSlim _batchLock = new(1, 1);
         public Consumer(in ScriptContext context, in ConsumeStatement statement)
         {
             _context = context;
@@ -80,7 +82,14 @@ namespace DaJet.RabbitMQ
 
                 _heartbeat.Start();
 
-                _cancellation.Wait(_context.Cancellation);
+                try
+                {
+                    _cancellation.Wait(_context.Cancellation); // wait for the script to be cancelled
+                }
+                catch (OperationCanceledException)
+                {
+                    FileLogger.Default.Write("[INFO][RabbitMQ.Consumer] Script is cancelled."); throw;
+                }
             }
 
             return ExitCode.Success;
@@ -272,10 +281,13 @@ namespace DaJet.RabbitMQ
 
         private async Task ProcessMessage(object sender, BasicDeliverEventArgs args)
         {
-            if (sender is not AsyncEventingBasicConsumer consumer)
-            {
-                return;
-            }
+            if (sender is not AsyncEventingBasicConsumer consumer) { return; }
+
+            IChannel channel = consumer.Channel;
+
+            if (channel is null) { return; }
+
+            ulong deliveryTag = args.DeliveryTag;
 
             object value = _context.GetValue(_output);
 
@@ -294,27 +306,31 @@ namespace DaJet.RabbitMQ
 
             //NOTE: Все ошибки, возникающие в процессе обработки события Received,
             //NOTE: EventingBasicConsumer перехватывает, "проглатывает" и не падает.
+            
+            ExitCode code;
 
             try
             {
-                ExitCode code = _context.Callback(_statement.Statements);
-
-                if (code == ExitCode.Success)
-                {
-                    await consumer.Channel.BasicAckAsync(args.DeliveryTag, false).ConfigureAwait(false);
-
-                    Interlocked.Increment(ref _consumed);
-                }
-                else
-                {
-                    // ???
-                }
+                code = _context.Callback(_statement.Statements);
             }
             catch (Exception error)
             {
-                FileLogger.Default.Write(ExceptionHelper.GetErrorMessage(error));
+                code = ExitCode.Faulted;
 
-                await NackMessage(consumer, args).ConfigureAwait(false);
+                FileLogger.Default.Write(ExceptionHelper.GetErrorMessage(error));
+            }
+
+            if (code == ExitCode.Success)
+            {
+                bool multiple = false; //TODO: batch consume !?
+
+                await channel.BasicAckAsync(deliveryTag, multiple).ConfigureAwait(false);
+
+                _ = Interlocked.Increment(ref _consumed);
+            }
+            else
+            {
+                await NackMessage(channel, deliveryTag).ConfigureAwait(false);
             }
         }
         private static void ProcessHeaders(in DataObject message, in BasicDeliverEventArgs args)
@@ -371,7 +387,7 @@ namespace DaJet.RabbitMQ
         {
             return Encoding.UTF8.GetString(message.Span);
         }
-        private async Task NackMessage(AsyncEventingBasicConsumer consumer, BasicDeliverEventArgs args)
+        private async Task NackMessage(IChannel channel, ulong deliveryTag)
         {
             ManualResetEventSlim cancellation = _cancellation;
 
@@ -387,8 +403,56 @@ namespace DaJet.RabbitMQ
 
             if (!signaled) // Consumer is still active
             {
-                await consumer.Channel.BasicNackAsync(args.DeliveryTag, false, true).ConfigureAwait(false);
+                await channel.BasicNackAsync(deliveryTag, false, true).ConfigureAwait(false);
             }
+        }
+
+        private async Task ProcessBatchByCount(IChannel channel, uint deliveryTag, DataObject message)
+        {
+            _heartbeat.Stop();
+
+            try
+            {
+                _batchLock.Wait();
+
+                if (_batch.Count == PrefetchCount)
+                {
+                    ExitCode code = _context.Callback(_statement.Statements);
+
+                    if (code == ExitCode.Success)
+                    {
+                        bool multiple = false; //TODO: batch consume !?
+
+                        await channel.BasicAckAsync(deliveryTag, multiple).ConfigureAwait(false);
+
+                        _ = Interlocked.Increment(ref _consumed);
+                    }
+                    else
+                    {
+                        await NackMessage(channel, deliveryTag).ConfigureAwait(false);
+                    }
+                }
+            }
+            finally
+            {
+                _batchLock.Release();
+            }
+            
+            _heartbeat.Start();
+        }
+        private void ProcessBatchByTimeout()
+        {
+            _heartbeat.Stop();
+
+            lock (_batchLock)
+            {
+                if (_batch.Count > 0)
+                {
+                    ExitCode code = _context.Callback(_statement.Statements);
+                }
+            }
+
+            _heartbeat.Start();
         }
 
         public override void Dispose()
@@ -410,12 +474,11 @@ namespace DaJet.RabbitMQ
         }
         private void DisposeConsumer()
         {
-            if (_consumer is not null)
+            try
             {
-                _consumer.ReceivedAsync -= ProcessMessage;
+                _consumer?.ReceivedAsync -= ProcessMessage;
+                _ = _channel?.BasicCancelAsync(_consumerTag);
             }
-
-            try { _channel?.BasicCancelAsync(_consumerTag); }
             catch { /* IGNORE */ }
             finally { _consumer = null; }
 

@@ -1,6 +1,5 @@
 ﻿using DaJet.Scripting.Model;
 using DaJet.TypeSystem;
-using System.Net.Mime;
 
 namespace DaJet.Scripting
 {
@@ -3591,6 +3590,7 @@ namespace DaJet.Scripting
         private SyntaxNode consume_stream_statement(in ConsumeStatement consume)
         {
             consume.Target = Previous().Value;
+            consume.IsStream = true; // always is stream !?
 
             Skip(Token.Comment);
 
@@ -3600,12 +3600,12 @@ namespace DaJet.Scripting
             }
 
             Skip(Token.Comment);
-            
+
             if (Match(Token.INTO))
             {
                 consume.Into = into_clause();
             }
-            
+
             if (consume.Into is not IntoClause into)
             {
                 throw new FormatException($"[CONSUME] INTO keyword expected.");
@@ -3637,24 +3637,21 @@ namespace DaJet.Scripting
             schema.Properties.Add(new DefineProperty() { Name = "ContentType", Type = DataType.String() }); // application/json
             schema.Properties.Add(new DefineProperty() { Name = "ContentEncoding", Type = DataType.String() }); // UTF-8
             schema.Properties.Add(new DefineProperty() { Name = "Headers", Type = DataType.Object });
-            
-            declare.Binding = schema;
 
-            if (!declare.Type.IsArray)
-            {
-                consume.IsStream = true; // always is stream ???
-            }
+            declare.Binding = schema;
 
             Skip(Token.Comment);
 
-            if (consume.IsStream)
+            if (Check(Token.END))
             {
-                if (Check(Token.END))
-                {
-                    throw new FormatException("[CONSUME] statement block is empty");
-                }
+                throw new FormatException("[CONSUME] Statement block is empty.");
+            }
 
-                consume.Statements = statement_block(Token.END);
+            consume.Statements = statement_block(Token.END);
+
+            if (consume.Statements.Count == 0)
+            {
+                throw new FormatException("[CONSUME] Statement block is empty.");
             }
 
             return consume;

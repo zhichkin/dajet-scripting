@@ -68,14 +68,19 @@ namespace DaJet.Host
             //parameters.SetValue("Получатель",  "MS_TEST");
             //_ = host.RunAsync("exchange/stream-pg-ms.djs", in parameters).ContinueWith(ShowAsyncResult);
 
-            //_ = _host.RunAsync("produce/stream-ms-rmq.djs").ContinueWith(ShowAsyncResult);
+            //_ = _host.RunAsync("rabbitmq/producer/stream-while-ms-rmq.djs").ContinueWith(ShowAsyncResult);
 
             Stopwatch watch = new();
             watch.Start();
-            Task<object> task = _host.RunAsync("produce/service-ms-rmq.djs");
+            Task<object> task = _host.RunAsync("rabbitmq/consumer/stream-rmq-ms.djs");
             try
             {
                 task.Wait();
+
+                //using (CancellationTokenSource cts = new(TimeSpan.FromSeconds(15)))
+                //{
+                //    cts.Token.Register(() => _host.Cancel(task.Id)); task.Wait();
+                //}
             }
             catch { }
             watch.Stop();
