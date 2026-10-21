@@ -74,7 +74,12 @@ namespace DaJet.Kafka
 
                 if (value is byte[] binary)
                 {
-                    return binary; // protobuf
+                    if (binary.Length == 0)
+                    {
+                        throw new InvalidOperationException("Empty byte array is not allowed for the \"Key\" property of a record.");
+                    }
+
+                    return binary; //TODO: protobuf
                 }
                 
                 if (value is string text)
@@ -108,7 +113,12 @@ namespace DaJet.Kafka
 
             if (value is byte[] binary)
             {
-                return binary; // protobuf
+                if (binary.Length == 0)
+                {
+                    throw new InvalidOperationException("Empty byte array is not allowed for the \"Value\" property of a record.");
+                }
+
+                return binary; //TODO: protobuf
             }
 
             if (value is string text)
@@ -220,10 +230,10 @@ namespace DaJet.Kafka
         }
         private void ErrorHandler(IProducer<byte[], byte[]> _, Error error)
         {
+            _error = error.Reason; // set processor state to broken
+
             string message = $"[ERROR][DaJet.Kafka.Producer][{_config.ClientId}] {error.Reason}";
-
-            _error = message;
-
+            
             FileLogger.Default.Write(message);
         }
         private void DeliveryHandler(DeliveryReport<byte[], byte[]> report)
@@ -235,16 +245,19 @@ namespace DaJet.Kafka
 
             if (report.Error is not null && report.Error.Code != ErrorCode.NoError)
             {
-                string error = $"[ERROR][DaJet.Kafka.Producer][{_config.ClientId}][{report.Topic}] {{{report.Error.Code}}} {report.Error.Reason}";
+                _error ??= report.Error.Reason; // set processor state to broken
 
-                _error = error;
-
+                string error = $"[ERROR][DaJet.Kafka.Producer][{_config.ClientId}][{report.Topic}] {report.Status} {{{report.Error.Code}}} {report.Error.Reason}";
+                
                 FileLogger.Default.Write(error);
             }
         }
         private void SynchronizeCommit(object sender, EventArgs args)
         {
-            if (_context.IsCancellationRequested) { return; }
+            // Данный метод должен либо завершиться успешно, либо вернуть ошибку!
+            // Исключительным критерием успешности является равенство _produced и _persisted.
+            // Это критически важно с точки зрения обеспечения целостности данных,
+            // выполняемой в данный момент времени транзакции базы данных.
 
             try
             {
@@ -259,18 +272,18 @@ namespace DaJet.Kafka
 
                 if (_produced == _persisted)
                 {
-                    WriteToLogSuccessfulStory();
+                    WriteToLogSuccessfulStory(); return; // The only successful path!
                 }
-                else // Throw an exception to trigger a database transaction rollback.
-                {
-                    ThrowFailedToConfirmDeliveries();
-                }
+                
+                // Throw an exception to trigger a database transaction rollback.
+                
+                ThrowFailedToConfirmDeliveries();
             }
             catch (OperationCanceledException)
             {
                 WriteToLogWarningOnCancellation(); throw;
             }
-            finally
+            finally // Cleanup resources and restore the initial state.
             {
                 if (sender is DataSourceScope scope)
                 {
@@ -286,7 +299,7 @@ namespace DaJet.Kafka
         {
             if (_producer is null)
             {
-                return; // processor is not initialized
+                return; // The processor has already been disposed or it was never initialized.
             }
 
             if (sender is DataSourceScope scope)
@@ -318,9 +331,11 @@ namespace DaJet.Kafka
 
         private void ThrowIfStateIsBroken()
         {
-            if (_error is not null)
+            string reason = _error;
+
+            if (reason is not null)
             {
-                string message = $"[ERROR][DaJet.Kafka.Producer][{_config.ClientId}] Broken state detected: persisted {_persisted} of {_produced} messages.";
+                string message = $"[ERROR][DaJet.Kafka.Producer][{_config.ClientId}] Broken state detected: persisted {_persisted} of {_produced} messages. Reason: {reason}";
 
                 FileLogger.Default.Write(message);
 
@@ -352,6 +367,13 @@ namespace DaJet.Kafka
         private void ThrowFailedToConfirmDeliveries()
         {
             string error = $"[ERROR][DaJet.Kafka.Producer][{_config.ClientId}] Failed to confirm {_produced - _persisted} of {_produced} messages.";
+
+            string reason = _error;
+
+            if (reason is not null)
+            {
+                error += " Reason: " + reason;
+            }
 
             FileLogger.Default.Write(error);
 

@@ -1141,6 +1141,10 @@ namespace DaJet.Scripting
 
                 _scope = _scope.CloseScope();
             }
+            else // RabbitMQ or Apache Kafka
+            {
+                if (node.Into is not null) { Bind(node.Into.Value); }
+            }
             
             if (node.Statements is not null)
             {

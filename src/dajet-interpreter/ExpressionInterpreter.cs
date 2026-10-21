@@ -59,7 +59,9 @@ namespace DaJet.Scripting
             }
             else if (node.Token == Token.Binary)
             {
-                return Convert.FromHexString(node.Literal);
+                string hex = node.Literal.StartsWith("0x", StringComparison.Ordinal) ? node.Literal[2..] : node.Literal;
+
+                return Convert.FromHexString(hex);
             }
             else if (node.Token == Token.Uuid)
             {

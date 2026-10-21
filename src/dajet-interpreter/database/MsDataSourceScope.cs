@@ -45,52 +45,55 @@ namespace DaJet.Data
         {
             ObjectDisposedException.ThrowIf(_disposed, typeof(MsDataSourceScope));
 
-            base.Synchronize(true);
-            
+            base.Synchronize(true); // Invokes OnCommit event
+
+            //NOTE: Here, we expect the event subscriber to either complete successfully or throw an exception!
+
             _transaction?.Commit();
         }
         public override void Cancel()
         {
             ObjectDisposedException.ThrowIf(_disposed, typeof(MsDataSourceScope));
 
+            //THINK: Call Dispose method !?
+
+            try { _transaction?.Rollback(); }
+            catch { /* unrecoverable error */ }
+            finally { _transaction = null; }
+            
             try
             {
-                _transaction?.Rollback();
+                base.Synchronize(false); // Invokes OnCancel event
             }
             catch
             {
-                // do nothing
+                //NOTE: Exceptions must be handled by the event subscriber!
             }
-            finally
-            {
-                _transaction = null;
-            }
-
-            base.Synchronize(false);
         }
         public override void Dispose()
         {
             if (_disposed) { return; }
 
+            // Uncommitted (pending) transaction will be rolled back.
+
+            try { _transaction?.Dispose(); } 
+            catch { /* unrecoverable error */ }
+            finally { _transaction = null; }
+
+            try { _connection?.Dispose(); }
+            catch { /* unrecoverable error */ }
+            finally { _connection = null; }
+
+            _disposed = true;
+
             try
             {
-                _transaction?.Dispose(); //NOTE: rolls back uncommitted transaction
-                
-                _connection?.Dispose();
-                
-                base.Disposed();
+                base.Disposed(); // Invokes OnDispose event
             }
             catch
             {
-                // do nothing
+                //NOTE: Exceptions must be handled by the event subscriber!
             }
-            finally
-            {
-                _connection = null;
-                _transaction = null;
-            }
-
-            _disposed = true;
         }
     }
 }

@@ -153,7 +153,10 @@
     <None Update="scripts\is_type\join_on_union_columns.djs">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <None Update="scripts\kafka\producer\stream-ms-kafka.djs">
+    <None Update="scripts\kafka\consumer\test.djs">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Update="scripts\kafka\producer\test.djs">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
     <None Update="scripts\mapping\complex-object.djs">

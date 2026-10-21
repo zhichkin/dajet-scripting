@@ -1103,11 +1103,6 @@ namespace DaJet.RabbitMQ
 
         private void SynchronizeCommit(object sender, EventArgs args)
         {
-            if (_context.IsCancellationRequested)
-            {
-                return;
-            }
-
             bool success = true;
 
             try

@@ -1,3 +1,6 @@
+-- test comment
+
+# LONG_TASK
 
 PRIVATE @message object
 PRIVATE @counter integer = 1

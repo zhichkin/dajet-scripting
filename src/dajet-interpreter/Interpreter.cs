@@ -205,11 +205,14 @@ namespace DaJet.Scripting
             else if (node is SelectStatement select) { return Execute(in select); }
             else if (node is InsertStatement insert) { return Execute(in insert); }
             else if (node is UpdateStatement update) { return Execute(in update); }
+            else if (node is UpsertStatement upsert) { return Execute(in upsert); }
             else if (node is DeleteStatement delete) { return Execute(in delete); }
             else if (node is ConsumeStatement consume) { return Execute(in consume); }
             else if (node is SqlStatement statement) { return Execute(in statement); }
 
             else if (node is ProduceStatement produce) { return Execute(in produce); }
+
+            else if (node is CommentStatement) { return ExitCode.Success; }
 
             throw new NotImplementedException($"Statement is not implemented: {node.GetType()}");
         }
@@ -462,9 +465,14 @@ namespace DaJet.Scripting
                 throw new InvalidOperationException($"Unsupported data source: {provider.DataSource}");
             }
 
-            _sources.Push(use);
+            _sources.Push(use); // Open a new database connection context.
 
             ExitCode code = ExitCode.Success;
+
+            //TODO: Требуется определиться являются ли методы Cancel и Dispose класса DataSourceScope
+            //TODO: семантически аналогичными ? В текущей реализации это скорее всего именно так ...
+            //TODO: Должны ли подписчики на события OnCancel или OnDispose класса DataSourceScope
+            //TODO: понимать или как-то дифференцированно использовать эту семантичекую разницу ?
 
             try
             {
@@ -472,11 +480,11 @@ namespace DaJet.Scripting
 
                 if (code == ExitCode.Success)
                 {
-                    use.Commit();
+                    use.Commit(); // commit database transaction
                 }
                 else
                 {
-                    use.Cancel();
+                    use.Cancel(); // rollback database transaction
                 }
             }
             catch
@@ -485,7 +493,9 @@ namespace DaJet.Scripting
             }
             finally
             {
-                _ = _sources.Pop(); use.Dispose();
+                use.Dispose(); // This method does not throw any exceptions.
+                
+                _ = _sources.TryPop(out _); // Close the current database connection context.
             }
             
             return code;
@@ -531,12 +541,12 @@ namespace DaJet.Scripting
                 return ExecuteDatabaseConsumer(in statement);
             }
             
-            if (statement.Target.StartsWith("amqp"))
+            if (statement.Target.StartsWith("amqp", StringComparison.OrdinalIgnoreCase))
             {
                 return ExecuteRabbitMQConsumer(in statement);
             }
 
-            if (statement.Target == "kafka")
+            if (statement.Target.StartsWith("kafka", StringComparison.OrdinalIgnoreCase))
             {
                 return ExecuteApacheKafkaConsumer(in statement);
             }
@@ -671,6 +681,7 @@ namespace DaJet.Scripting
             return code;
         }
         private ExitCode Execute(in UpdateStatement statement) { throw new NotImplementedException("Statement is not implemented: UPDATE"); }
+        private ExitCode Execute(in UpsertStatement statement) { throw new NotImplementedException("Statement is not implemented: UPSERT"); }
         private ExitCode Execute(in DeleteStatement statement) { throw new NotImplementedException("Statement is not implemented: DELETE"); }
         private ExitCode Execute(in SqlStatement statement)
         {

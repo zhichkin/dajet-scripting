@@ -68,11 +68,11 @@ namespace DaJet.Host
             //parameters.SetValue("Получатель",  "MS_TEST");
             //_ = host.RunAsync("exchange/stream-pg-ms.djs", in parameters).ContinueWith(ShowAsyncResult);
 
-            //_ = _host.RunAsync("kafka/producer/stream-ms-kafka.djs").ContinueWith(ShowAsyncResult);
+            //_ = _host.RunAsync("kafka/consumer/test.djs").ContinueWith(ShowAsyncResult);
 
             Stopwatch watch = new();
             watch.Start();
-            Task<object> task = _host.RunAsync("kafka/producer/stream-ms-kafka.djs");
+            Task<object> task = _host.RunAsync("kafka/producer/test.djs");
             try
             {
                 task.Wait();

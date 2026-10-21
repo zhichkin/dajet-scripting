@@ -57,6 +57,7 @@ namespace DaJet.Scripting
         {
             if (Match(Token.Comment)) { return comment(); }
             else if (Match(Token.Sharp)) { return directive(); }
+
             else if (Match(Token.DECLARE, Token.PRIVATE)) { return declare_statement(); }
             else if (Match(Token.SET)) { return assignment(); }
             
@@ -80,6 +81,7 @@ namespace DaJet.Scripting
             else if (Check(Token.CONSUME)) { return consume_statement(); }
             else if (Check(Token.INSERT)) { return insert_statement(); }
             //else if (Check(Token.UPDATE)) { return update_statement(); }
+            //else if (Check(Token.UPSERT)) { return upsert_statement(); }
             //else if (Check(Token.DELETE)) { return delete_statement(); }
             
             else if (Match(Token.CREATE)) { return create_statement(); }
@@ -89,16 +91,15 @@ namespace DaJet.Scripting
 
             else if (Check(Token.PRODUCE)) { return produce_statement(); }
 
-            //else if (Check(Token.UPSERT)) { return upsert_statement(); }
             //else if (Match(Token.CASE)) { return case_statement(); }
             //else if (Check(Token.REQUEST)) { return request_statement(); }
             //else if (Match(Token.EXECUTE)) { return execute_statement(); }
             //else if (Match(Token.PROCESS)) { return process_statement(); }
             //else if (Match(Token.WAIT)) { return wait_statement(); }
-            //else if (Match(Token.MODIFY)) { return modify_statement(); }
-
+            
             //else if (Match(Token.DEFINE)) { return define_statement(); }
             //else if (Check(Token.IMPORT)) { return import_statement(); }
+            //else if (Match(Token.MODIFY)) { return modify_statement(); }
 
             else if (Match(Token.EndOfStatement)) { return null; }
 
@@ -764,10 +765,14 @@ namespace DaJet.Scripting
 		#region "ALGORITHMIC STATEMENTS"
         private SyntaxNode comment()
         {
-            return new CommentStatement()
-            {
-                Text = Previous().Value
-            };
+            return null; // do not add to statements collection
+
+            //THINK: add option "PreserveComments" ?
+
+            //return new CommentStatement()
+            //{
+            //    Text = Previous().Value
+            //};
         }
         private SyntaxNode directive()
         {
@@ -1534,32 +1539,33 @@ namespace DaJet.Scripting
                 select.CommonTables = root;
                 return select;
             }
-            else if (Check(Token.INSERT))
-            {
-                InsertStatement insert = insert_statement();
-                insert.CommonTables = root;
-                return insert;
-            }
-            else if (Check(Token.UPDATE))
-            {
-                UpdateStatement update = update_statement();
-                update.CommonTables = root;
-                return update;
-            }
-            else if (Check(Token.DELETE))
-            {
-                DeleteStatement delete = delete_statement();
-                delete.CommonTables = root;
-                return delete;
-            }
-            else if (Check(Token.UPSERT))
-            {
-                UpsertStatement upsert = upsert_statement();
-                upsert.CommonTables = root;
-                return upsert;
-            }
 
-            throw new FormatException("Statement expected.");
+            //else if (Check(Token.INSERT))
+            //{
+            //    InsertStatement insert = insert_statement();
+            //    insert.CommonTables = root;
+            //    return insert;
+            //}
+            //else if (Check(Token.UPDATE))
+            //{
+            //    UpdateStatement update = update_statement();
+            //    update.CommonTables = root;
+            //    return update;
+            //}
+            //else if (Check(Token.UPSERT))
+            //{
+            //    UpsertStatement upsert = upsert_statement();
+            //    upsert.CommonTables = root;
+            //    return upsert;
+            //}
+            //else if (Check(Token.DELETE))
+            //{
+            //    DeleteStatement delete = delete_statement();
+            //    delete.CommonTables = root;
+            //    return delete;
+            //}
+            
+            throw new FormatException("[WITH] SELECT or STREAM statement expected.");
         }
         private CommonTableExpression cte()
         {
@@ -3642,16 +3648,28 @@ namespace DaJet.Scripting
                 consume.IsStream = true; // stream or batch processing mode
             }
 
-            DefineStatement schema = new() { Identifier = "RabbitMQ.Message" };
-            schema.Properties.Add(new DefineProperty() { Name = "AppId", Type = DataType.String() });
-            schema.Properties.Add(new DefineProperty() { Name = "ReplyTo", Type = DataType.String() });
-            schema.Properties.Add(new DefineProperty() { Name = "MessageId", Type = DataType.String() });
-            schema.Properties.Add(new DefineProperty() { Name = "CorrelationId", Type = DataType.String() });
-            schema.Properties.Add(new DefineProperty() { Name = "Type", Type = DataType.String() });
-            schema.Properties.Add(new DefineProperty() { Name = "Body", Type = DataType.String() });
-            schema.Properties.Add(new DefineProperty() { Name = "ContentType", Type = DataType.String() }); // application/json
-            schema.Properties.Add(new DefineProperty() { Name = "ContentEncoding", Type = DataType.String() }); // UTF-8
-            schema.Properties.Add(new DefineProperty() { Name = "Headers", Type = DataType.Object });
+            DefineStatement schema;
+
+            if (consume.Target.StartsWith("kafka", StringComparison.OrdinalIgnoreCase))
+            {
+                schema = new DefineStatement() { Identifier = "Kafka.Message" };
+                schema.Properties.Add(new DefineProperty() { Name = "Key", Type = DataType.String() });
+                schema.Properties.Add(new DefineProperty() { Name = "Value", Type = DataType.String() });
+                schema.Properties.Add(new DefineProperty() { Name = "Topic", Type = DataType.String() });
+            }
+            else
+            {
+                schema = new DefineStatement() { Identifier = "RabbitMQ.Message" };
+                schema.Properties.Add(new DefineProperty() { Name = "AppId", Type = DataType.String() });
+                schema.Properties.Add(new DefineProperty() { Name = "ReplyTo", Type = DataType.String() });
+                schema.Properties.Add(new DefineProperty() { Name = "MessageId", Type = DataType.String() });
+                schema.Properties.Add(new DefineProperty() { Name = "CorrelationId", Type = DataType.String() });
+                schema.Properties.Add(new DefineProperty() { Name = "Type", Type = DataType.String() });
+                schema.Properties.Add(new DefineProperty() { Name = "Body", Type = DataType.String() });
+                schema.Properties.Add(new DefineProperty() { Name = "ContentType", Type = DataType.String() }); // application/json
+                schema.Properties.Add(new DefineProperty() { Name = "ContentEncoding", Type = DataType.String() }); // UTF-8
+                schema.Properties.Add(new DefineProperty() { Name = "Headers", Type = DataType.Object });
+            }
 
             declare.Binding = schema;
 
