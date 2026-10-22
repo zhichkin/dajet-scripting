@@ -11,6 +11,7 @@
 - SELECT (с поддержкой общих табличных выражений)
 - INSERT (вставка одной записи)
 - CONSUME (деструктивное чтение из базы данных)
+- CONSUME + PRODUCE для RabbitMQ и Apache Kafka
 - PRINT (вывод сообщения в консоль приложения)
 - RETURN (возрат значений из скрипта по WEB API)
 - IF, FOR, WHILE, BREAK, CONTINUE (условия и циклы)
@@ -24,7 +25,7 @@
 Для выполнения скриптов необходимо подключить в свой проект NuGet-пакет **DaJet.Interpreter**.
 
 ```
-> dotnet add package DaJet.Interpreter --version 1.0.20
+> dotnet add package DaJet.Interpreter --version 1.0.32
 ```
 
 Рекомендуется подключение NuGet-пакета **DaJet.Host** с поддержкой функций хостинга скриптов:
@@ -38,7 +39,7 @@
 - контроль выполнения единственного экземпляра скрипта (singleton).
 
 ```
-> dotnet add package DaJet.Host --version 1.0.13
+> dotnet add package DaJet.Host --version 1.0.25
 ```
 
 Этот пакет имеет следующие зависимости:
