@@ -44,6 +44,8 @@
 Этот пакет имеет следующие зависимости:
 - DaJet.Host (текущий репозиторий)
   - DaJet.Interpreter (текущий репозиторий)
+    - RabbitMQ.Client
+    - Confluent.Kafka
     - DaJet.Scripting (текущий репозиторий)
       - [DaJet.Metadata](https://github.com/zhichkin/dajet-metadata)
         - DaJet.FileLogger
