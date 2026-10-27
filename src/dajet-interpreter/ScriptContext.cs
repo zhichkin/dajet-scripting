@@ -6,9 +6,10 @@ namespace DaJet.Scripting
 {
     public abstract partial class ScriptContext
     {
-        public CancellationToken Cancellation { get; set; }
-        public bool IsCancellationRequested { get { return Cancellation.IsCancellationRequested; } }
+        public abstract CancellationToken GetCancellationToken();
+
         public abstract DataSourceScope GetDataSource();
+
         public abstract object GetValue(in string name);
         public abstract void SetValue(in string name, in object value);
         public abstract bool CreateVariable(in string name);

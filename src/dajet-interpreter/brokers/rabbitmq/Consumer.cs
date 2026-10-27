@@ -100,7 +100,7 @@ namespace DaJet.RabbitMQ
 
                 try
                 {
-                    _cancellation.Wait(_context.Cancellation); // wait for the script to be cancelled
+                    _cancellation.Wait(_context.GetCancellationToken()); // wait for the script to be cancelled
                 }
                 catch (OperationCanceledException)
                 {
@@ -273,7 +273,7 @@ namespace DaJet.RabbitMQ
             
             _consumer.ReceivedAsync += ProcessMessageAsync;
 
-            _consumerTag = await _channel.BasicConsumeAsync(QueueName, false, _consumer, _context.Cancellation).ConfigureAwait(false);
+            _consumerTag = await _channel.BasicConsumeAsync(QueueName, false, _consumer, _context.GetCancellationToken()).ConfigureAwait(false);
         }
         private bool ConsumerIsHealthy()
         {
@@ -521,7 +521,7 @@ namespace DaJet.RabbitMQ
             //NOTE: Требуется задержка, иначе может возникать зацикливание одного и того же сообщения:
             //NOTE: сервер Send > консюмер Nack > сервер Send > консюмер Nack ... и так далее.
 
-            bool signaled = cancellation.Wait(TimeSpan.FromSeconds(Heartbeat), _context.Cancellation);
+            bool signaled = cancellation.Wait(TimeSpan.FromSeconds(Heartbeat), _context.GetCancellationToken());
 
             if (!signaled) // Consumer is still active
             {
@@ -545,7 +545,7 @@ namespace DaJet.RabbitMQ
             }
             else if (_state == STATE_AUTORESET)
             {
-                Thread.Sleep(1); Dispose(); //FIXME: !?
+                Thread.Sleep(1); Dispose(); //FIXME: wait on event !?
             }
         }
         private void DisposeConsumer()

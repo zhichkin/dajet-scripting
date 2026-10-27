@@ -58,17 +58,12 @@ namespace DaJet.RabbitMQ
         }
         public override ExitCode Process()
         {
-            if (_context.IsCancellationRequested)
-            {
-                return ExitCode.Cancel;
-            }
-
             if (_state == STATE_IDLE) // initial state of processor
             {
                 if (_context.GetDataSource() is DataSourceScope scope)
                 {
                     scope.OnCommit += SynchronizeCommit;
-                    scope.OnCancel += SynchronizeCancel;
+                    scope.OnDispose += SynchronizeDispose;
                 }
             }
 
@@ -1088,11 +1083,9 @@ namespace DaJet.RabbitMQ
         }
         private void WaitForPublisherConfirms()
         {
-            ThrowIfStateIsBroken();
-
             TimeSpan timeout = PublisherConfirmsTimeout;
 
-            bool success = _confirmTracker.Wait(timeout, _context.Cancellation);
+            bool success = _confirmTracker.Wait(timeout, _context.GetCancellationToken());
 
             if (!success)
             {
@@ -1119,16 +1112,16 @@ namespace DaJet.RabbitMQ
             {
                 if (success) // Successful commit: Cancel won't be called
                 {
-                    SynchronizeCancel(sender, args);
+                    SynchronizeDispose(sender, args);
                 }
             }
         }
-        private void SynchronizeCancel(object sender, EventArgs args)
+        private void SynchronizeDispose(object sender, EventArgs args)
         {
             if (sender is DataSourceScope scope)
             {
                 scope.OnCommit -= SynchronizeCommit;
-                scope.OnCancel -= SynchronizeCancel;
+                scope.OnDispose -= SynchronizeDispose;
             }
 
             ResetState();

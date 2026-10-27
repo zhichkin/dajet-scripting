@@ -430,7 +430,7 @@ namespace DaJet.Host
         #endregion
         
         private readonly ConcurrentDictionary<string, int> _singletons = new(StringComparer.Ordinal);
-        private readonly ConcurrentDictionary<int, AsyncExecutor> _runningTasks = new();
+        private readonly ConcurrentDictionary<int, ScriptRunner> _runningTasks = new();
         private void ThrowOnReadOnlyModeViolation(in Script script)
         {
             if (ReadOnlyMode && !script.IsReadOnly)
@@ -507,44 +507,44 @@ namespace DaJet.Host
         }
         private Task<object> RunTask(in Script script, in DataObject parameters = null)
         {
-            AsyncExecutor executor = new(in script);
+            ScriptRunner runner = new(in script);
 
             Task<object> task;
 
             if (parameters is null)
             {
-                task = executor.ExecuteAsync();
+                task = runner.RunAsync();
             }
             else
             {
-                task = executor.ExecuteAsync(in parameters);
+                task = runner.RunAsync(in parameters);
             }
 
-            if (_runningTasks.TryAdd(task.Id, executor))
+            if (_runningTasks.TryAdd(task.Id, runner))
             {
-                _ = task.ContinueWith(DisposeExecutor);
+                _ = task.ContinueWith(DisposeRunner);
             }
             
             return task;
         }
         private Task<object> RunLongTask(in Script script, in DataObject parameters = null)
         {
-            AsyncExecutor executor = new(in script);
+            ScriptRunner runner = new(in script);
 
             Task<object> task;
 
             if (parameters is null)
             {
-                task = executor.ExecuteAsync(TaskCreationOptions.LongRunning);
+                task = runner.RunAsync(TaskCreationOptions.LongRunning);
             }
             else
             {
-                task = executor.ExecuteAsync(in parameters, TaskCreationOptions.LongRunning);
+                task = runner.RunAsync(TaskCreationOptions.LongRunning, in parameters);
             }
 
-            if (_runningTasks.TryAdd(task.Id, executor))
+            if (_runningTasks.TryAdd(task.Id, runner))
             {
-                _ = task.ContinueWith(DisposeExecutor);
+                _ = task.ContinueWith(DisposeRunner);
             }
             
             return task;
@@ -575,11 +575,11 @@ namespace DaJet.Host
 
             return task;
         }
-        private void DisposeExecutor(Task<object> task)
+        private void DisposeRunner(Task<object> task)
         {
-            if (_runningTasks.TryRemove(task.Id, out AsyncExecutor executor))
+            if (_runningTasks.TryRemove(task.Id, out ScriptRunner runner))
             {
-                executor.Dispose();
+                runner.Dispose();
             }
         }
         private void RemoveSingleton(Task<object> task, object state)
@@ -591,39 +591,39 @@ namespace DaJet.Host
         }
         public void Cancel(int taskId)
         {
-            if (_runningTasks.TryRemove(taskId, out AsyncExecutor executor))
+            if (_runningTasks.TryRemove(taskId, out ScriptRunner runner))
             {
-                executor.Cancel();
+                runner.Cancel();
             }
         }
         public void Cancel(in string path)
         {
-            List<AsyncExecutor> executors = new();
+            List<ScriptRunner> runners = new();
 
-            AsyncExecutor executor;
+            ScriptRunner runner;
 
             foreach (var item in _runningTasks)
             {
-                executor = item.Value;
+                runner = item.Value;
 
-                if (executor.Script.Path == path)
+                if (runner.Script.Path == path)
                 {
-                    executors.Add(executor);
+                    runners.Add(runner);
                 }
             }
 
-            for (int i = 0; i < executors.Count; i++)
+            for (int i = 0; i < runners.Count; i++)
             {
-                executor = executors[i];
+                runner = runners[i];
 
-                executor.Cancel();
+                runner.Cancel();
             }
         }
         public RunningTaskStatus GetRunningTask(int taskId)
         {
-            if (_runningTasks.TryGetValue(taskId, out AsyncExecutor executor))
+            if (_runningTasks.TryGetValue(taskId, out ScriptRunner runner))
             {
-                return executor.Descriptor;
+                return runner.Descriptor;
             }
 
             return RunningTaskStatus.Default; // Not found
@@ -632,13 +632,13 @@ namespace DaJet.Host
         {
             List<RunningTaskStatus> list = new(_runningTasks.Count);
 
-            AsyncExecutor executor;
+            ScriptRunner runner;
 
             foreach (var item in _runningTasks)
             {
-                executor = item.Value;
+                runner = item.Value;
 
-                list.Add(executor.Descriptor);
+                list.Add(runner.Descriptor);
             }
 
             return list;
@@ -647,15 +647,15 @@ namespace DaJet.Host
         {
             List<RunningTaskStatus> list = new(_runningTasks.Count);
 
-            AsyncExecutor executor;
+            ScriptRunner runner;
 
             foreach (var item in _runningTasks)
             {
-                executor = item.Value;
+                runner = item.Value;
 
-                if (executor.Script.Path == path)
+                if (runner.Script.Path == path)
                 {
-                    list.Add(executor.Descriptor);
+                    list.Add(runner.Descriptor);
                 }
             }
 

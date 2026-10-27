@@ -6,6 +6,7 @@ namespace DaJet.Data
     public sealed class MsDataSourceScope : DataSourceScope<SqlCommand>
     {
         private bool _disposed;
+        private bool _committed;
         private SqlConnection _connection;
         private SqlTransaction _transaction;
         public MsDataSourceScope(string connectionString, bool transactional = false)
@@ -45,36 +46,25 @@ namespace DaJet.Data
         {
             ObjectDisposedException.ThrowIf(_disposed, typeof(MsDataSourceScope));
 
-            base.Synchronize(true); // Invokes OnCommit event
+            base.Synchronize(); // Invokes OnCommit event
 
             //NOTE: Here, we expect the event subscriber to either complete successfully or throw an exception!
 
             _transaction?.Commit();
-        }
-        public override void Cancel()
-        {
-            ObjectDisposedException.ThrowIf(_disposed, typeof(MsDataSourceScope));
 
-            //THINK: Call Dispose method !?
-
-            try { _transaction?.Rollback(); }
-            catch { /* unrecoverable error */ }
-            finally { _transaction = null; }
-            
-            try
-            {
-                base.Synchronize(false); // Invokes OnCancel event
-            }
-            catch
-            {
-                //NOTE: Exceptions must be handled by the event subscriber!
-            }
+            _committed = true;
         }
         public override void Dispose()
         {
             if (_disposed) { return; }
 
-            // Uncommitted (pending) transaction will be rolled back.
+            // Uncommitted (pending) transactions must be rolled back.
+
+            if (!_committed)
+            {
+                try { _transaction?.Rollback(); }
+                catch { /* unrecoverable error */ }
+            }
 
             try { _transaction?.Dispose(); } 
             catch { /* unrecoverable error */ }
@@ -94,6 +84,8 @@ namespace DaJet.Data
             {
                 //NOTE: Exceptions must be handled by the event subscriber!
             }
+
+            _committed = false;
         }
     }
 }

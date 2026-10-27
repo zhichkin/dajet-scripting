@@ -67,7 +67,7 @@ namespace DaJet.Scripting
         }
         public override void Dispose()
         {
-            _mapper.Dispose();
+            // do nothing
         }
         public override ExitCode Process()
         {
@@ -86,11 +86,20 @@ namespace DaJet.Scripting
                 return ExitCode.Success;
             }
 
-            return ProcessTmpInsert(in use, in buffer);
+            try
+            {
+                ProcessTmpInsert(in use, in buffer);
 
-            //return ProcessTvpInsert(in use, in buffer);
+                //ProcessTvpInsert(in use, in buffer);
+            }
+            finally
+            {
+                _mapper.Dispose();
+            }
+            
+            return ExitCode.Success;
         }
-        private ExitCode ProcessTmpInsert(in MsDataSourceScope use, in List<DataObject> buffer)
+        private void ProcessTmpInsert(in MsDataSourceScope use, in List<DataObject> buffer)
         {
             int timeout = _statement.Timeout;
 
@@ -135,8 +144,6 @@ namespace DaJet.Scripting
             }
 
             _context.SetValue(in _bufferItem, null);
-
-            return ExitCode.Success;
         }
         
         //private readonly string _insertTvpTable;

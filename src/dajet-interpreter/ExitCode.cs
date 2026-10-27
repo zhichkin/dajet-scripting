@@ -2,7 +2,6 @@
 {
     public enum ExitCode : byte
     {
-        None,
         Success,
         Faulted,
         Return,

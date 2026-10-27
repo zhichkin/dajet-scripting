@@ -1,6 +1,7 @@
 ﻿using DaJet.Data;
 using DaJet.Json;
 using DaJet.Metadata;
+using DaJet.TypeSystem;
 using System.Diagnostics;
 using System.Text.Encodings.Web;
 using System.Text.Json;
@@ -68,19 +69,23 @@ namespace DaJet.Host
             //parameters.SetValue("Получатель",  "MS_TEST");
             //_ = host.RunAsync("exchange/stream-pg-ms.djs", in parameters).ContinueWith(ShowAsyncResult);
 
+            //_ = _host.RunAsync("kafka/producer/test.djs").ContinueWith(ShowAsyncResult);
             //_ = _host.RunAsync("kafka/consumer/test.djs").ContinueWith(ShowAsyncResult);
+
+            DataObject parameters = new();
+            parameters.SetValue("input", "test input");
 
             Stopwatch watch = new();
             watch.Start();
-            Task<object> task = _host.RunAsync("kafka/producer/test.djs");
+            Task<object> task = _host.RunAsync("host/cancel.djs", parameters); // host/sleep.djs
             try
             {
-                task.Wait();
+                //task.Wait();
 
-                //using (CancellationTokenSource cts = new(TimeSpan.FromSeconds(15)))
-                //{
-                //    cts.Token.Register(() => _host.Cancel(task.Id)); task.Wait();
-                //}
+                using (CancellationTokenSource cts = new(TimeSpan.FromSeconds(5)))
+                {
+                    cts.Token.Register(() => _host.Cancel(task.Id)); task.Wait();
+                }
             }
             catch { }
             watch.Stop();
@@ -111,7 +116,7 @@ namespace DaJet.Host
             {
                 Console.WriteLine($"Task [{task.Id}] is canceled.");
             }
-            else
+            else // IsFaulted
             {
                 Exception error = task.Exception.Flatten().InnerException;
 

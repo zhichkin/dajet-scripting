@@ -156,11 +156,6 @@ namespace DaJet.Kafka
         }
         public override ExitCode Process()
         {
-            if (_context.IsCancellationRequested)
-            {
-                return ExitCode.Cancel;
-            }
-            
             ExitCode code = ExitCode.Success;
 
             try
@@ -182,7 +177,9 @@ namespace DaJet.Kafka
             }
             catch (ProduceException<byte[], byte[]> error)
             {
-                WriteToLogProducerError(in error); ResetState(); throw;
+                WriteToLogProduceError(in error);
+
+                ResetState(); throw;
             }
             catch
             {
@@ -201,7 +198,7 @@ namespace DaJet.Kafka
                 {
                     // enter database scope if present
                     scope.OnCommit += SynchronizeCommit;
-                    scope.OnCancel += SynchronizeCancel;
+                    scope.OnDispose += SynchronizeDispose;
                 }
 
                 try
@@ -217,7 +214,7 @@ namespace DaJet.Kafka
                     {
                         // exit database scope on failure
                         scope.OnCommit -= SynchronizeCommit;
-                        scope.OnCancel -= SynchronizeCancel;
+                        scope.OnDispose -= SynchronizeDispose;
                     }
 
                     WriteToLogFailedToBuildProducer(in error); throw;
@@ -268,7 +265,7 @@ namespace DaJet.Kafka
                 // which determines the maximum length of time librdkafka attempts to deliver a message
                 // and so also affects the maximum time a call to "Flush" method may block.
 
-                _producer.Flush(_context.Cancellation);
+                _producer.Flush(_context.GetCancellationToken());
 
                 if (_produced == _persisted)
                 {
@@ -289,13 +286,13 @@ namespace DaJet.Kafka
                 {
                     // exit database scope entered earlier
                     scope.OnCommit -= SynchronizeCommit;
-                    scope.OnCancel -= SynchronizeCancel;
+                    scope.OnDispose -= SynchronizeDispose;
                 }
 
                 ResetState();
             }
         }
-        private void SynchronizeCancel(object sender, EventArgs args)
+        private void SynchronizeDispose(object sender, EventArgs args)
         {
             if (_producer is null)
             {
@@ -306,7 +303,7 @@ namespace DaJet.Kafka
             {
                 // exit database scope entered earlier
                 scope.OnCommit -= SynchronizeCommit;
-                scope.OnCancel -= SynchronizeCancel;
+                scope.OnDispose -= SynchronizeDispose;
             }
             
             ResetState();
@@ -323,7 +320,9 @@ namespace DaJet.Kafka
         }
         public override void Dispose()
         {
-            //TODO: think about processor's lifecycle
+            // This method is called by the interpreter
+            // either when script execution is cancelled
+            // or upon its successful completion.
 
             // Commit and Cancel methods will never be called
             // if processor is not bound to a data source (scoped)
@@ -352,7 +351,7 @@ namespace DaJet.Kafka
 
             FileLogger.Default.Write(message);
         }
-        private void WriteToLogProducerError(in ProduceException<byte[], byte[]> error)
+        private void WriteToLogProduceError(in ProduceException<byte[], byte[]> error)
         {
             string topic = error.DeliveryResult?.Topic;
 

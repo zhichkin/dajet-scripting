@@ -8,12 +8,15 @@ namespace DaJet.Scripting
 {
     public sealed class Interpreter : ScriptContext
     {
+        private CancellationToken _cancellationToken;
+        private CancellationTokenSource _cancellationSource;
+        private ManualResetEventSlim _cancellationAwaiter;
+
         private readonly Script _script;
         private readonly ExpressionInterpreter _context;
         private readonly Stack<DataSourceScope> _sources = new();
         private readonly Dictionary<string, object> _data = new();
         private readonly Dictionary<SyntaxNode, ProcessorBase> _processors = new();
-
         private object _returnValue = null; // output value
         private Dictionary<string, object> _parameters = new(); // input parameters
         public Interpreter(in Script script)
@@ -25,36 +28,57 @@ namespace DaJet.Scripting
             _data.Add("@@ERROR_MESSAGE", string.Empty);
 
             _context = new ExpressionInterpreter(in _data);
+
+            _cancellationSource = new CancellationTokenSource();
+            _cancellationToken = _cancellationSource.Token;
         }
-        public void Cancel() { Dispose(); }
-        private void Dispose()
+        public void Cancel()
         {
-            foreach (DataSourceScope source in _sources)
+            if (_cancellationSource is null)
             {
-                source.Dispose();
-            }
-
-            foreach (ProcessorBase processor in _processors.Values)
-            {
-                processor.Dispose();
-            }
-
-            _data.Clear();
-            _sources.Clear();
-            _parameters.Clear();
-            _processors.Clear();
-            _returnValue = null;
-        }
-
-        public override DataSourceScope GetDataSource()
-        {
-            if (_sources.TryPeek(out DataSourceScope scope))
-            {
-                return scope;
+                return;
             }
             
-            return null;
+            _cancellationAwaiter = new ManualResetEventSlim(false);
+            
+            try
+            {
+                _cancellationSource.Cancel();
+
+                _ = _cancellationAwaiter.Wait(TimeSpan.FromSeconds(300)); //TODO: timeout setting
+            }
+            catch
+            {
+                /* ignore errors */
+            }
+            finally
+            {
+                _cancellationAwaiter.Dispose();
+                _cancellationAwaiter = null;
+            }
         }
+        public override CancellationToken GetCancellationToken() { return _cancellationToken; }
+        private void ThrowIfCancellationRequested() { _cancellationToken.ThrowIfCancellationRequested(); }
+        public bool IsCancellationRequested { get { return _cancellationToken.IsCancellationRequested; } }
+        private void Dispose()
+        {
+            _cancellationSource.Dispose();
+            _cancellationSource = null;
+            
+            _ = Parallel.ForEach(_processors.Values, processor =>
+            {
+                processor.Dispose(); // Might be awaiting the completion of processing.
+            });
+            
+            _data.Clear();
+            _sources.Clear();
+            _processors.Clear();
+            _parameters.Clear();
+            _returnValue = null;
+            
+            _cancellationAwaiter?.Set();
+        }
+
         public override object Evaluate(in SyntaxNode expression)
         {
             return _context.Evaluate(in expression);
@@ -117,26 +141,18 @@ namespace DaJet.Scripting
                 }
             }
         }
-        public override ExitCode Callback(in StatementBlock statements)
-        {
-            return Execute(in statements);
-        }
 
-        public void Configure(CancellationToken cancellation)
+        private void ThrowIfScriptIsFaulted()
         {
-            Cancellation = cancellation;
-        }
-        public void SetParameters(in DataObject parameters)
-        {
-            ArgumentNullException.ThrowIfNull(parameters, nameof(parameters));
-
-            _parameters = parameters;
-        }
-        public void SetParameters(in Dictionary<string, object> parameters)
-        {
-            ArgumentNullException.ThrowIfNull(parameters, nameof(parameters));
-
-            _parameters = parameters;
+            if (_data.TryGetValue("@@ERROR_MESSAGE", out object error))
+            {
+                if (error is string message && !string.IsNullOrWhiteSpace(message))
+                {
+                    throw new Exception(message);
+                }
+            }
+            
+            throw new Exception();
         }
 
         public object Execute()
@@ -149,16 +165,33 @@ namespace DaJet.Scripting
             {
                 foreach (SyntaxNode node in _script.Statements)
                 {
+                    ThrowIfCancellationRequested();
+
                     code = Execute(in node);
 
+                    if (code == ExitCode.Success)
+                    {
+                        continue;
+                    }
+                    
                     if (code == ExitCode.Return)
                     {
-                        value = _returnValue; break;
+                        value = _returnValue; return value;
                     }
-                    else if (code == ExitCode.Cancel)
+
+                    if (code == ExitCode.Faulted)
                     {
-                        break; //TODO: throw OperationCanceledException ?
+                        ThrowIfScriptIsFaulted();
                     }
+
+                    if (code == ExitCode.Cancel)
+                    {
+                        ThrowIfCancellationRequested();
+
+                        throw new OperationCanceledException("Script is canceled.");
+                    }
+                    
+                    throw new InvalidOperationException($"Unexpected exit code: {code}.");
                 }
             }
             catch (OperationCanceledException)
@@ -176,15 +209,56 @@ namespace DaJet.Scripting
 
             return value;
         }
+        public object Execute(object parameters)
+        {
+            if (parameters is null)
+            {
+                return Execute();
+            }
+
+            if (parameters is DataObject data)
+            {
+                return Execute(in data);
+            }
+
+            if (parameters is Dictionary<string, object> input)
+            {
+                return Execute(in input);
+            }
+
+            throw new ArgumentOutOfRangeException(nameof(parameters));
+        }
         public object Execute(in DataObject parameters)
         {
-            SetParameters(in parameters); return Execute();
+            if (parameters is not null)
+            {
+                _parameters = parameters;
+            }
+            
+            return Execute();
         }
         public object Execute(in Dictionary<string, object> parameters)
         {
-            SetParameters(in parameters); return Execute();
+            if (parameters is not null)
+            {
+                _parameters = parameters;
+            }
+
+            return Execute();
         }
-        
+
+        //TODO: OpenDatabaseScope() !?
+        //TODO: CloseDatabaseScope() !?
+        public override DataSourceScope GetDataSource()
+        {
+            if (_sources.TryPeek(out DataSourceScope scope))
+            {
+                return scope;
+            }
+
+            return null;
+        }
+
         private ExitCode Execute(in SyntaxNode node)
         {
             if (node is DeclareStatement declare) { return Execute(in declare); }
@@ -220,15 +294,24 @@ namespace DaJet.Scripting
         {
             foreach (SyntaxNode node in statements)
             {
+                if (IsCancellationRequested)
+                {
+                    return ExitCode.Cancel;
+                }
+
                 ExitCode code = Execute(in node);
 
                 if (code != ExitCode.Success)
                 {
-                    return code;
+                    return code; // Faulted, Return, Break, Continue, Cancel
                 }
             }
 
-            return ExitCode.Success;
+            return ExitCode.Success; // end of statement block
+        }
+        public override ExitCode Callback(in StatementBlock statements)
+        {
+            return Execute(in statements);
         }
         private ExitCode Execute(in DeclareStatement statement)
         {
@@ -271,7 +354,7 @@ namespace DaJet.Scripting
         {
             TimeSpan delay = TimeSpan.FromSeconds(statement.Timeout);
 
-            Task.Delay(delay, Cancellation).Wait(Cancellation);
+            Task.Delay(delay, _cancellationToken).Wait(_cancellationToken);
 
             return ExitCode.Success;
         }
@@ -376,12 +459,7 @@ namespace DaJet.Scripting
 
             try
             {
-                code = Execute(statement.TRY);
-
-                if (code != ExitCode.Success)
-                {
-                    return code;
-                }
+                return Execute(statement.TRY);
             }
             catch (Exception error)
             {
@@ -482,14 +560,6 @@ namespace DaJet.Scripting
                 {
                     use.Commit(); // commit database transaction
                 }
-                else
-                {
-                    use.Cancel(); // rollback database transaction
-                }
-            }
-            catch
-            {
-                use.Cancel(); throw;
             }
             finally
             {
@@ -521,18 +591,7 @@ namespace DaJet.Scripting
                 _processors.Add(statement, processor);
             }
 
-            ExitCode code = ExitCode.Success;
-
-            try
-            {
-                code = processor.Process();
-            }
-            finally
-            {
-                processor.Dispose();
-            }
-
-            return code;
+            return processor.Process();
         }
         private ExitCode Execute(in ConsumeStatement statement)
         {
@@ -574,18 +633,7 @@ namespace DaJet.Scripting
                 _processors.Add(statement, processor);
             }
 
-            ExitCode code = ExitCode.Success;
-
-            try
-            {
-                code = processor.Process();
-            }
-            finally
-            {
-                processor.Dispose();
-            }
-
-            return code;
+            return processor.Process();
         }
         private ExitCode ExecuteRabbitMQConsumer(in ConsumeStatement statement)
         {
@@ -667,18 +715,7 @@ namespace DaJet.Scripting
                 _processors.Add(statement, processor);
             }
 
-            ExitCode code = ExitCode.Success;
-
-            try
-            {
-                code = processor.Process();
-            }
-            finally
-            {
-                processor.Dispose();
-            }
-
-            return code;
+            return processor.Process();
         }
         private ExitCode Execute(in UpdateStatement statement) { throw new NotImplementedException("Statement is not implemented: UPDATE"); }
         private ExitCode Execute(in UpsertStatement statement) { throw new NotImplementedException("Statement is not implemented: UPSERT"); }
@@ -704,18 +741,7 @@ namespace DaJet.Scripting
                 _processors.Add(statement, processor);
             }
 
-            ExitCode code = ExitCode.Success;
-
-            try
-            {
-                code = processor.Process();
-            }
-            finally
-            {
-                processor.Dispose();
-            }
-
-            return code;
+            return processor.Process();
         }
 
         private ExitCode Execute(in ProduceStatement statement)

@@ -65,7 +65,7 @@ namespace DaJet.Scripting
         }
         public override void Dispose()
         {
-            _mapper.Dispose();
+            // do nothing
         }
         public override ExitCode Process()
         {
@@ -84,9 +84,18 @@ namespace DaJet.Scripting
                 return ExitCode.Success;
             }
 
-            return ProcessBulkInsert(in use, in buffer);
+            try
+            {
+                ProcessBulkInsert(in use, in buffer);
+            }
+            finally
+            {
+                _mapper.Dispose();
+            }
+
+            return ExitCode.Success;
         }
-        private ExitCode ProcessBulkInsert(in PgDataSourceScope use, in List<DataObject> buffer)
+        private void ProcessBulkInsert(in PgDataSourceScope use, in List<DataObject> buffer)
         {
             int timeout = _statement.Timeout;
 
@@ -139,8 +148,6 @@ namespace DaJet.Scripting
             }
 
             _context.SetValue(in _bufferItem, null);
-
-            return ExitCode.Success;
         }
     }
 }
