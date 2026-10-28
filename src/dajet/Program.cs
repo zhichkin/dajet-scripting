@@ -72,27 +72,29 @@ namespace DaJet.Host
             //_ = _host.RunAsync("kafka/producer/test.djs").ContinueWith(ShowAsyncResult);
             //_ = _host.RunAsync("kafka/consumer/test.djs").ContinueWith(ShowAsyncResult);
 
-            DataObject parameters = new();
-            parameters.SetValue("input", "test input");
+            StopRunningHost();
 
-            Stopwatch watch = new();
-            watch.Start();
-            Task<object> task = _host.RunAsync("host/cancel.djs", parameters); // host/sleep.djs
-            try
-            {
-                //task.Wait();
+            //DataObject parameters = new();
+            //parameters.SetValue("input", "test input");
 
-                using (CancellationTokenSource cts = new(TimeSpan.FromSeconds(5)))
-                {
-                    cts.Token.Register(() => _host.Cancel(task.Id)); task.Wait();
-                }
-            }
-            catch { }
-            watch.Stop();
-            ShowAsyncResult(task);
-            Console.WriteLine($"Elapsed {watch.ElapsedMilliseconds} ms");
+            //Stopwatch watch = new();
+            //watch.Start();
+            //Task<object> task = _host.RunAsync("host/cancel.djs", parameters); // host/sleep.djs
+            //try
+            //{
+            //    //task.Wait();
 
-            Console.WriteLine("Press any key to continue ..."); _ = Console.ReadKey(true);
+            //    using (CancellationTokenSource cts = new(TimeSpan.FromSeconds(5)))
+            //    {
+            //        cts.Token.Register(() => _host.Cancel(task.Id)); task.Wait();
+            //    }
+            //}
+            //catch { }
+            //watch.Stop();
+            //ShowAsyncResult(task);
+            //Console.WriteLine($"Elapsed {watch.ElapsedMilliseconds} ms");
+
+            //Console.WriteLine("Press any key to continue ..."); _ = Console.ReadKey(true);
         }
         private static void ShowAsyncResult(Task<object> task)
         {
@@ -145,6 +147,23 @@ namespace DaJet.Host
             foreach (RunningTaskStatus status in _host.GetRunningTasks())
             {
                 Console.WriteLine(status.ToString());
+            }
+        }
+
+        private static void StopRunningHost()
+        {
+            for (int i = 0; i < 3; i++)
+            {
+                DataObject parameters = new();
+                parameters.SetValue("input", $"test {i}");
+                _ = _host.RunAsync("host/sleep.djs", parameters).ContinueWith(ShowAsyncResult);
+            }
+
+            using (CancellationTokenSource cts = new(TimeSpan.FromSeconds(5)))
+            {
+                cts.Token.Register(() => _host.Stop());
+
+                Console.WriteLine("Wait host to stop ..."); _ = Console.ReadKey(true);
             }
         }
     }

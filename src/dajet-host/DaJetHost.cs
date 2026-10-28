@@ -240,6 +240,20 @@ namespace DaJet.Host
                 FileLogger.Default.Write($"[STARTUP][FAULTED][{path}] {error?.Message}");
             }
         }
+        public void Stop()
+        {
+            ParallelOptions options = new()
+            {
+                MaxDegreeOfParallelism = Environment.ProcessorCount
+            };
+
+            _ = Parallel.ForEach(_runningTasks.Values, options, static runner =>
+            {
+                runner.Cancel();
+            });
+
+            _runningTasks.Clear();
+        }
 
         #region "SCRIPT FILE WATCHER"
         private FileSystemWatcher _scriptFileWatcher;

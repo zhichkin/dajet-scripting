@@ -45,7 +45,7 @@ namespace DaJet.Scripting
             {
                 _cancellationSource.Cancel();
 
-                _ = _cancellationAwaiter.Wait(TimeSpan.FromSeconds(300)); //TODO: timeout setting
+                _ = _cancellationAwaiter.Wait(TimeSpan.FromSeconds(30)); //TODO: timeout setting
             }
             catch
             {
@@ -64,8 +64,8 @@ namespace DaJet.Scripting
         {
             _cancellationSource.Dispose();
             _cancellationSource = null;
-            
-            _ = Parallel.ForEach(_processors.Values, processor =>
+
+            _ = Parallel.ForEach(_processors.Values, static processor =>
             {
                 processor.Dispose(); // Might be awaiting the completion of processing.
             });
