@@ -374,15 +374,17 @@ namespace DaJet.RabbitMQ
 
             int consumed = batchMode ? _batch.Count : 1;
 
-            ExitCode code;
+            bool success;
 
             try
             {
-                code = _context.Callback(_statement.Statements);
+                ExitCode code = _context.Callback(_statement.Statements);
+
+                success = (code == ExitCode.Success);
             }
             catch (Exception error)
             {
-                code = ExitCode.Faulted;
+                success = false;
 
                 FileLogger.Default.Write(ExceptionHelper.GetErrorMessage(error));
             }
@@ -394,7 +396,7 @@ namespace DaJet.RabbitMQ
                 }
             }
 
-            if (code == ExitCode.Success)
+            if (success)
             {
                 await channel.BasicAckAsync(deliveryTag, batchMode).ConfigureAwait(false);
 

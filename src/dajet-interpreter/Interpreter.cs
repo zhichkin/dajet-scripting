@@ -142,24 +142,9 @@ namespace DaJet.Scripting
             }
         }
 
-        private void ThrowIfScriptIsFaulted()
-        {
-            if (_data.TryGetValue("@@ERROR_MESSAGE", out object error))
-            {
-                if (error is string message && !string.IsNullOrWhiteSpace(message))
-                {
-                    throw new Exception(message);
-                }
-            }
-            
-            throw new Exception();
-        }
-
         public object Execute()
         {
             object value = null;
-
-            ExitCode code;
 
             try
             {
@@ -167,7 +152,7 @@ namespace DaJet.Scripting
                 {
                     ThrowIfCancellationRequested();
 
-                    code = Execute(in node);
+                    ExitCode code = Execute(in node);
 
                     if (code == ExitCode.Success)
                     {
@@ -178,29 +163,16 @@ namespace DaJet.Scripting
                     {
                         value = _returnValue; return value;
                     }
-
-                    if (code == ExitCode.Faulted)
-                    {
-                        ThrowIfScriptIsFaulted();
-                    }
-
+                    
                     if (code == ExitCode.Cancel)
                     {
-                        ThrowIfCancellationRequested();
+                        ThrowIfCancellationRequested(); // Makes running Task cancelled.
 
-                        throw new OperationCanceledException("Script is canceled.");
+                        throw new OperationCanceledException("Script is canceled."); // Makes running Task faulted.
                     }
                     
-                    throw new InvalidOperationException($"Unexpected exit code: {code}.");
+                    throw new InvalidOperationException($"Unexpected exit code: {code}."); // BREAK or CONTINUE
                 }
-            }
-            catch (OperationCanceledException)
-            {
-                code = ExitCode.Cancel; throw;
-            }
-            catch
-            {
-                code = ExitCode.Faulted; throw;
             }
             finally
             {
@@ -459,24 +431,35 @@ namespace DaJet.Scripting
 
             try
             {
-                return Execute(statement.TRY);
+                code = Execute(statement.TRY);
             }
             catch (Exception error)
             {
                 _data["@@ERROR_MESSAGE"] = ExceptionHelper.GetErrorMessage(error);
 
-                if (statement.CATCH is not null)
+                if (statement.CATCH is not null && statement.CATCH.Count > 0) // Is optional if FINALLY clause is present.
                 {
-                    code = Execute(statement.CATCH);
+                    code = Execute(statement.CATCH); // Override TRY exit code.
+                }
+                else
+                {
+                    throw; // There is no error handler - bubble up exception.
                 }
             }
             finally
             {
+                // RETURN, BREAK, CONTINUE or THROW commands are forbidden in FINALLY clause by parser (binder).
+
                 _data["@@ERROR_MESSAGE"] = string.Empty;
 
-                if (statement.FINALLY is not null)
+                if (statement.FINALLY is not null && statement.FINALLY.Count > 0) // Is optional if CATCH clause is present.
                 {
-                    code = Execute(statement.FINALLY);
+                    ExitCode result = Execute(statement.FINALLY); // The result must be either SUCCESS or CANCEL.
+
+                    if (result == ExitCode.Cancel) // SUCCESS exit code does not affect exit code of neither TRY nor CATCH.
+                    {
+                        code = result; // Override TRY or CATCH exit code - stop the world.
+                    }
                 }
             }
 

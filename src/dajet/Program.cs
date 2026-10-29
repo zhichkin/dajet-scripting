@@ -2,7 +2,6 @@
 using DaJet.Json;
 using DaJet.Metadata;
 using DaJet.TypeSystem;
-using System.Diagnostics;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -72,7 +71,19 @@ namespace DaJet.Host
             //_ = _host.RunAsync("kafka/producer/test.djs").ContinueWith(ShowAsyncResult);
             //_ = _host.RunAsync("kafka/consumer/test.djs").ContinueWith(ShowAsyncResult);
 
-            StopRunningHost();
+            //StopRunningHost();
+
+            _ = _host.RunAsync("flow_control/try-catch-throw.djs").ContinueWith(ShowAsyncResult);
+
+            //Task<object> task = _host.RunAsync("flow_control/try-finally-cancel.djs");
+            //try
+            //{
+            //    using (CancellationTokenSource cts = new(TimeSpan.FromSeconds(5)))
+            //    {
+            //        cts.Token.Register(() => _host.Cancel(task.Id)); task.Wait();
+            //    }
+            //}
+            //catch { } ShowAsyncResult(task);
 
             //DataObject parameters = new();
             //parameters.SetValue("input", "test input");
@@ -94,7 +105,7 @@ namespace DaJet.Host
             //ShowAsyncResult(task);
             //Console.WriteLine($"Elapsed {watch.ElapsedMilliseconds} ms");
 
-            //Console.WriteLine("Press any key to continue ..."); _ = Console.ReadKey(true);
+            Console.WriteLine("Press any key to continue ..."); _ = Console.ReadKey(true);
         }
         private static void ShowAsyncResult(Task<object> task)
         {

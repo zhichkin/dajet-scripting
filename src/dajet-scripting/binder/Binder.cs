@@ -1079,6 +1079,13 @@ namespace DaJet.Scripting
         }
         private void Bind(in ReturnStatement node)
         {
+            Scope scope = _scope.Ancestor<TryStatement>();
+
+            if (scope is not null)
+            {
+                RegisterSyntaxError(node.Token, "Control cannot leave the body of a FINALLY clause");
+            }
+
             Bind(node.Expression);
         }
 
@@ -1231,6 +1238,13 @@ namespace DaJet.Scripting
             {
                 RegisterSyntaxError(node.Token, "FOR or WHILE scope missing");
             }
+
+            scope = _scope.Ancestor<TryStatement>();
+
+            if (scope is not null)
+            {
+                RegisterSyntaxError(node.Token, "Control cannot leave the body of a FINALLY clause");
+            }
         }
         private void Bind(in ContinueStatement node)
         {
@@ -1242,6 +1256,13 @@ namespace DaJet.Scripting
             {
                 RegisterSyntaxError(node.Token, "FOR or WHILE scope missing");
             }
+
+            scope = _scope.Ancestor<TryStatement>();
+
+            if (scope is not null)
+            {
+                RegisterSyntaxError(node.Token, "Control cannot leave the body of a FINALLY clause");
+            }
         }
         private void Bind(in TryStatement node)
         {
@@ -1249,10 +1270,24 @@ namespace DaJet.Scripting
 
             if (node.CATCH is not null) { Bind(node.CATCH); }
 
-            if (node.FINALLY is not null) { Bind(node.FINALLY); }
+            if (node.FINALLY is not null && node.FINALLY.Count > 0)
+            {
+                _scope = _scope.OpenScope(node);
+                
+                Bind(node.FINALLY); // CS0157: cannot leave finally clause 
+
+                _scope = _scope.CloseScope();
+            }
         }
         private void Bind(in ThrowStatement node)
         {
+            Scope scope = _scope.Ancestor<TryStatement>();
+
+            if (scope is not null)
+            {
+                RegisterSyntaxError(node.Token, "Control cannot leave the body of a FINALLY clause");
+            }
+
             Bind(node.Expression);
 
             DataType expression = node.Expression.InferType();

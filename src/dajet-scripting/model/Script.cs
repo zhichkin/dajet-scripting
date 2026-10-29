@@ -47,6 +47,7 @@ namespace DaJet.Scripting.Model
             else if (node is TryStatement _try) { Extract(in _try, in statements); }
             else if (node is UseStatement use) { Extract(in use, in statements); }
             else if (node is SelectStatement select) { Extract(in select, in statements); }
+            else if (node is ConsumeStatement consume) { Extract(in consume, in statements); }
         }
         private static void Extract(in StatementBlock block, in List<UseStatement> statements)
         {
@@ -95,6 +96,13 @@ namespace DaJet.Scripting.Model
             if (select.IsStream)
             {
                 Extract(select.Statements, in statements);
+            }
+        }
+        private static void Extract(in ConsumeStatement consume, in List<UseStatement> statements)
+        {
+            if (consume.Statements is not null)
+            {
+                Extract(consume.Statements, in statements);
             }
         }
 
