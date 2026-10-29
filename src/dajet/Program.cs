@@ -73,7 +73,7 @@ namespace DaJet.Host
 
             //StopRunningHost();
 
-            _ = _host.RunAsync("flow_control/try-catch-throw.djs").ContinueWith(ShowAsyncResult);
+            _ = _host.RunAsync("flow_control/try-finally-error.djs").ContinueWith(ShowAsyncResult);
 
             //Task<object> task = _host.RunAsync("flow_control/try-finally-cancel.djs");
             //try

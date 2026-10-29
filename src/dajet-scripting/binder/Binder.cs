@@ -70,7 +70,7 @@ namespace DaJet.Scripting
         #region "Binding and syntax errors"
         private void RegisterSyntaxError(Token token, string message)
         {
-            _errors.Add($"[{token}] Syntax error: {message}]");
+            _errors.Add($"[{token}] Syntax error: {message}");
         }
         private void RegisterBindingError(Token token, string identifier)
         {
