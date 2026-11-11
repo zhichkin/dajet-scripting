@@ -145,6 +145,25 @@ namespace DaJet.Host
 
             return script is not null;
         }
+        public void Reset()
+        {
+            bool locked = false;
+
+            try
+            {
+                Monitor.Enter(_cache_lock, ref locked);
+
+                _scripts.Clear();
+            }
+            finally
+            {
+                if (locked)
+                {
+                    Monitor.Exit(_cache_lock);
+                }
+            }
+        }
+
         public DaJetHost Run()
         {
             Startup();
@@ -338,70 +357,47 @@ namespace DaJet.Host
             DisposeScriptFileWatcher();
 
             InitializeScriptFileWatcher();
+
+            Reset(); // Clear script cache
+        }
+        private void RemoveScriptFromCache(in string eventName, in string fullPath)
+        {
+            bool locked = false;
+
+            try
+            {
+                Monitor.Enter(_cache_lock, ref locked);
+
+                string path = GetScriptRelativePath(fullPath);
+
+                bool removed = _scripts.TryRemove(path, out _);
+
+                FileLogger.Default.Write($"{eventName}: {path}{(removed ? " (removed from cache)" : string.Empty)}");
+            }
+            catch (Exception error)
+            {
+                FileLogger.Default.Write($"[WATCHER][{eventName}][ERROR] {fullPath}");
+                FileLogger.Default.Write(ExceptionHelper.GetErrorMessage(error));
+            }
+            finally
+            {
+                if (locked)
+                {
+                    Monitor.Exit(_cache_lock);
+                }
+            }
         }
         private void CreateScriptFileEvent(object sender, FileSystemEventArgs args)
         {
-            if (!File.Exists(args.FullPath))
-            {
-                return;
-            }
-
-            try
-            {
-                ScriptBuilder factory = CreateScriptBuilder();
-
-                Script script = factory.FromFile(args.FullPath).Parse();
-
-                if (!script.IsDynamic)
-                {
-                    script = factory.Build();
-                }
-
-                AddOrUpdate(script.Path, in script);
-
-                FileLogger.Default.Write($"Created: {script.Path}");
-            }
-            catch (Exception error)
-            {
-                FileLogger.Default.Write($"[WATCHER][CREATED][ERROR] {args.FullPath}");
-                FileLogger.Default.Write(ExceptionHelper.GetErrorMessage(error));
-            }
+            RemoveScriptFromCache("CREATED", args.FullPath);
         }
         private void ChangeScriptFileEvent(object sender, FileSystemEventArgs args)
         {
-            if (!File.Exists(args.FullPath))
-            {
-                return;
-            }
-
-            try
-            {
-                ScriptBuilder factory = CreateScriptBuilder();
-
-                Script script = factory.FromFile(args.FullPath).Parse();
-
-                if (!script.IsDynamic)
-                {
-                    script = factory.Build();
-                }
-
-                AddOrUpdate(script.Path, in script);
-
-                FileLogger.Default.Write($"Changed: {script.Path}");
-            }
-            catch (Exception error)
-            {
-                FileLogger.Default.Write($"[WATCHER][CHANGED][ERROR] {args.FullPath}");
-                FileLogger.Default.Write(ExceptionHelper.GetErrorMessage(error));
-            }
+            RemoveScriptFromCache("CHANGED", args.FullPath);
         }
         private void DeleteScriptFileEvent(object sender, FileSystemEventArgs args)
         {
-            string pathToDelete = GetScriptRelativePath(args.FullPath);
-
-            _ = _scripts.TryRemove(pathToDelete, out _);
-
-            FileLogger.Default.Write($"Deleted: {pathToDelete}");
+            RemoveScriptFromCache("DELETED", args.FullPath);
         }
         private void RenameScriptFileEvent(object sender, FileSystemEventArgs args)
         {
@@ -409,29 +405,24 @@ namespace DaJet.Host
             {
                 return;
             }
-
-            if (!File.Exists(renamed.FullPath))
-            {
-                return;
-            }
-
-            string pathToCreate = GetScriptRelativePath(renamed.FullPath);
-            string pathToRemove = GetScriptRelativePath(renamed.OldFullPath);
             
+            bool locked = false;
+            bool removed = false;
+
             try
             {
-                ScriptBuilder factory = CreateScriptBuilder();
+                Monitor.Enter(_cache_lock, ref locked);
 
-                Script script = factory.FromFile(args.FullPath).Parse();
+                string pathToCreate = GetScriptRelativePath(renamed.FullPath);
+                string pathToRemove = GetScriptRelativePath(renamed.OldFullPath);
 
-                if (!script.IsDynamic)
-                {
-                    script = factory.Build();
-                }
+                removed = _scripts.TryRemove(pathToRemove, out _);
 
-                _ = _scripts.TryRemove(pathToRemove, out _);
+                FileLogger.Default.Write($"RENAMED_OLD: {pathToRemove}{(removed ? " (removed from cache)" : string.Empty)}");
 
-                AddOrUpdate(in pathToCreate, in script);
+                removed = _scripts.TryRemove(pathToCreate, out _);
+
+                FileLogger.Default.Write($"RENAMED_NEW: {pathToCreate}{(removed ? " (removed from cache)" : string.Empty)}");
 
                 FileLogger.Default.Write($"Renamed: {pathToRemove} > {pathToCreate}");
             }
@@ -439,6 +430,13 @@ namespace DaJet.Host
             {
                 FileLogger.Default.Write($"[WATCHER][RENAMED][ERROR] {renamed.OldFullPath}");
                 FileLogger.Default.Write(ExceptionHelper.GetErrorMessage(error));
+            }
+            finally
+            {
+                if (locked)
+                {
+                    Monitor.Exit(_cache_lock);
+                }
             }
         }
         #endregion
