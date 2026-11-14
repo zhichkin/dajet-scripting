@@ -303,6 +303,16 @@ namespace DaJet.Scripting
                 {
                     value = _context.Evaluate(statement.Initializer); // parameter is not provided
                 }
+                else if (value is not null) // validate data type of provided parameter value
+                {
+                    DataType declared = statement.Type;
+                    DataType provided = DataType.FromType(value.GetType());
+
+                    if (!declared.Equals(provided))
+                    {
+                        throw new InvalidOperationException($"Variable '{name}' of type '{declared}' cannot be assigned parameter value of type '{provided}'.");
+                    }
+                }
             }
 
             value ??= statement.Type.DefaultValue();
@@ -529,11 +539,6 @@ namespace DaJet.Scripting
             _sources.Push(use); // Open a new database connection context.
 
             ExitCode code = ExitCode.Success;
-
-            //TODO: Требуется определиться являются ли методы Cancel и Dispose класса DataSourceScope
-            //TODO: семантически аналогичными ? В текущей реализации это скорее всего именно так ...
-            //TODO: Должны ли подписчики на события OnCancel или OnDispose класса DataSourceScope
-            //TODO: понимать или как-то дифференцированно использовать эту семантичекую разницу ?
 
             try
             {

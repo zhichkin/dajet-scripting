@@ -184,7 +184,7 @@ namespace DaJet.Scripting
             
             if (!Match(Token.Variable))
 			{
-				throw new FormatException("Variable identifier expected.");
+				throw new FormatException("[DECLARE] Variable identifier expected.");
 			}
 			
             declare.Identifier = Previous().Value;
@@ -196,7 +196,7 @@ namespace DaJet.Scripting
 
 			if (!Match(Token.Identifier))
 			{
-				throw new FormatException("Variable data type identifier expected.");
+				throw new FormatException("[DECLARE] Variable data type identifier expected.");
 			}
 			
             declare.Type = datatype(out string schema);
@@ -232,7 +232,37 @@ namespace DaJet.Scripting
 
 			Skip(Token.Comment);
 
-			return declare;
+            if (declare.Initializer is not null)
+            {
+                DataType declared = declare.Type;
+                DataType provided = DataType.Undefined;
+
+                if (declare.Initializer is ValuesExpression array)
+                {
+                    if (array.Values is not null && array.Values.Count > 0)
+                    {
+                        DataType item = array.Values[0].InferType();
+
+                        provided = DataType.Array(item);
+                    }
+                }
+                else
+                {
+                    provided = declare.Initializer.InferType();
+                }
+
+                if (provided.IsUndefined)
+                {
+                    throw new FormatException($"[DECLARE] Variable '{declare.Identifier}': failed to infer data type of initializer expression.");
+                }
+
+                if (!declared.Equals(provided))
+                {
+                    throw new FormatException($"[DECLARE] Variable '{declare.Identifier}' of type '{declared}' cannot be initialized by value of type '{provided}'.");
+                }
+            }
+            
+            return declare;
 		}
         private DataType datatype(out string schema)
         {

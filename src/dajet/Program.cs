@@ -2,6 +2,7 @@
 using DaJet.Json;
 using DaJet.Metadata;
 using DaJet.TypeSystem;
+using System.Text;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -63,6 +64,8 @@ namespace DaJet.Host
             //DaJetHost host = DaJetHost.Create("scripts").Run();
             //DaJetHost host = DaJetHost.Create("scripts").ReadOnly().Run();
 
+            //TestInputParameters();
+
             //DataObject parameters = new();
             //parameters.SetValue("Отправитель", "PG_TEST");
             //parameters.SetValue("Получатель",  "MS_TEST");
@@ -73,7 +76,7 @@ namespace DaJet.Host
 
             //StopRunningHost();
 
-            _ = _host.RunAsync("flow_control/try-finally-error.djs").ContinueWith(ShowAsyncResult);
+            _ = _host.RunAsync("functions/uuid_db.djs").ContinueWith(ShowAsyncResult);
 
             //Task<object> task = _host.RunAsync("flow_control/try-finally-cancel.djs");
             //try
@@ -176,6 +179,31 @@ namespace DaJet.Host
 
                 Console.WriteLine("Wait host to stop ..."); _ = Console.ReadKey(true);
             }
+        }
+
+        private static void TestInputParameters()
+        {
+            DataObject parameters;
+
+            using (StreamReader reader = new(Path.Combine(_host.RootPath, "parameters.json"), Encoding.UTF8))
+            {
+                string json = reader.ReadToEnd();
+
+                parameters = JsonSerializer.Deserialize<DataObject>(json, JsonOptions);
+            }
+            
+            //DataObject parameters = new();
+            //parameters.SetValue("Булево", true);
+            //parameters.SetValue("ЦелоеЧисло", 12345); // 
+            //parameters.SetValue("ДесятичноеЧисло", new decimal(12.34));
+            //parameters.SetValue("ДатаВремя", new DateTime(2026, 8, 1, 12, 34, 56));
+            //parameters.SetValue("Строка", "Это строка");
+            //parameters.SetValue("БинарныеДанные", new byte[] { 1, 2, 3, 4 });
+            //parameters.SetValue("Идентификатор", new Guid("643c6b9d-cacf-4048-11f1-3ce54d7b5bf7"));
+            //parameters.SetValue("Ссылка", new Guid("643c6b9d-cacf-4048-11f1-3ce54d7b5bf7")); // new Entity(333, new Guid("643c6b9d-cacf-4048-11f1-3ce54d7b5bf7"))
+            //parameters.SetValue("МассивЦелыхЧисел", new int[] { 1, 2, 3 });
+
+            _ = _host.RunAsync("test.djs", in parameters).ContinueWith(ShowAsyncResult);
         }
     }
 }

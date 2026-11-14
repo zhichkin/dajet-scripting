@@ -1,6 +1,7 @@
 ﻿using DaJet.Json;
 using DaJet.Scripting.Model;
 using DaJet.TypeSystem;
+using System.Linq.Expressions;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -27,6 +28,8 @@ namespace DaJet.Scripting
             if (node.Name == nameof(JSON)) { return JSON(in context, in node); }
             else if (node.Name == nameof(TYPEOF)) { return TYPEOF(in context, in node); }
             else if (node.Name == nameof(UUIDOF)) { return UUIDOF(in context, in node); }
+            else if (node.Name == nameof(UUID1C)) { return UUID1C(in context, in node); }
+            else if (node.Name == nameof(UUIDDB)) { return UUIDDB(in context, in node); }
             else if (node.Name == nameof(NOW)) { return NOW(in context, in node); }
             else if (node.Name == nameof(UTC)) { return UTC(in context, in node); }
             else if (node.Name == nameof(ERROR_MESSAGE)) { return ERROR_MESSAGE(in context, in node); }
@@ -309,6 +312,61 @@ namespace DaJet.Scripting
             }
 
             throw new InvalidOperationException($"[DATEDIFF] the first parameter is invalid value");
+        }
+
+        private static Guid UUID1C(in ExpressionInterpreter context, in FunctionExpression node)
+        {
+            SyntaxNode parameter = node.Parameters[0];
+
+            object value = context.Evaluate(in parameter);
+
+            if (value is Guid uuid)
+            {
+                return UuidConverter.CONVERT_UUID_DB_TO_1C(uuid);
+            }
+            else if (value is Entity entity)
+            {
+                return UuidConverter.CONVERT_UUID_DB_TO_1C(entity);
+            }
+            else if (value is byte[] binary)
+            {
+                return UuidConverter.CONVERT_UUID_DB_TO_1C(binary);
+            }
+            else if (value is string literal)
+            {
+                return UuidConverter.CONVERT_UUID_DB_TO_1C(literal);
+            }
+            else
+            {
+                throw new InvalidOperationException("[UUID1C] The first parameter must be of type 'uuid', 'entity', 'binary(16)' or string literal.");
+            }
+        }
+        private static Guid UUIDDB(in ExpressionInterpreter context, in FunctionExpression node)
+        {
+            SyntaxNode parameter = node.Parameters[0];
+            
+            object value = context.Evaluate(in parameter);
+
+            if (value is Guid uuid)
+            {
+                return UuidConverter.CONVERT_UUID_1C_TO_DB(uuid);
+            }
+            else if (value is Entity entity)
+            {
+                return UuidConverter.CONVERT_UUID_1C_TO_DB(entity);
+            }
+            else if (value is byte[] binary)
+            {
+                return UuidConverter.CONVERT_UUID_1C_TO_DB(binary);
+            }
+            else if (value is string literal)
+            {
+                return UuidConverter.CONVERT_UUID_1C_TO_DB(literal);
+            }
+            else
+            {
+                throw new InvalidOperationException("[UUIDDB] The first parameter must be of type 'uuid', 'entity', 'binary(16)' or string literal.");
+            }
         }
     }
 }

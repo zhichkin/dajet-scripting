@@ -458,6 +458,11 @@ namespace DaJet.Scripting
 
             int ordinal = _ordinals[column];
 
+            if (reader.IsDBNull(ordinal))
+            {
+                return Guid.Empty;
+            }
+
             _ = reader.GetBytes(ordinal, 0L, _buffer, 0, 16);
 
             return new Guid(_buffer);
@@ -513,12 +518,17 @@ namespace DaJet.Scripting
 
             column = output.GetColumnByPurpose(ColumnPurpose.Identity);
 
-            if (column is null)
+            if (column is null) // union type reference must have at least two columns
             {
-                return Entity.Undefined;
+                return new Entity(typeCode, Guid.Empty); // На всякий случай возвращаем пустую ссылку заданного типа
             }
 
             ordinal = _ordinals[column];
+
+            if (reader.IsDBNull(ordinal)) // Значения NULL в данном случае не должно быть - ошибка записи в БД
+            {
+                return new Entity(typeCode, Guid.Empty); // На всякий случай возвращаем пустую ссылку заданного типа
+            }
 
             _ = reader.GetBytes(ordinal, 0L, _buffer, 0, 16);
 

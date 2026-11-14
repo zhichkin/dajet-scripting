@@ -12,6 +12,8 @@ namespace DaJet.Scripting
                 new KeyValuePair<string, Function>(nameof(JSON), new JSON()),
                 new KeyValuePair<string, Function>(nameof(TYPEOF), new TYPEOF()),
                 new KeyValuePair<string, Function>(nameof(UUIDOF), new UUIDOF()),
+                new KeyValuePair<string, Function>(nameof(UUID1C), new UUID1C()),
+                new KeyValuePair<string, Function>(nameof(UUIDDB), new UUIDDB()),
                 new KeyValuePair<string, Function>(nameof(NOW), new NOW()),
                 new KeyValuePair<string, Function>(nameof(UTC), new UTC()),
                 new KeyValuePair<string, Function>(nameof(ERROR_MESSAGE), new ERROR_MESSAGE()),

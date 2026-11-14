@@ -2,7 +2,7 @@
 {
     internal static class LexerHelper
     {
-        private static Dictionary<string, Token> _keywords = new(StringComparer.Ordinal)
+        private static readonly Dictionary<string, Token> _keywords = new(StringComparer.Ordinal)
         {
             { "WITH", Token.WITH },
             { "SELECT", Token.SELECT },
@@ -123,7 +123,7 @@
             { "SINGLETON", Token.SINGLETON },
             { "BATCH_SIZE", Token.BATCH_SIZE },
         };
-        private static Dictionary<string, Token> _function = new(StringComparer.Ordinal)
+        private static readonly Dictionary<string, Token> _function = new(StringComparer.Ordinal)
         {
             { "SUM", Token.SUM },
             { "MAX", Token.MAX },
