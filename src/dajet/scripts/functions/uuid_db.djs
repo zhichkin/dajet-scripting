@@ -16,10 +16,10 @@ SET @UUID_DB = UUIDDB(@Строка) -- UUIDDB(@Ссылка)
 
 USE 'MS_TEST' -- 'PG_TEST'
 
-  SELECT Ссылка, Наименование
+  SELECT Ссылка, Наименование, Ссылка1С = UUID1C(Ссылка), TEST_UUID = NEWUUID()
     INTO @Запись
     FROM Справочник.Тестовый
-   WHERE Ссылка = @UUID_DB
+   WHERE Ссылка = UUIDDB(@Строка) -- @UUID_DB
 
 END
 

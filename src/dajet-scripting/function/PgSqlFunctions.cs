@@ -30,6 +30,7 @@ namespace DaJet.Scripting
                 new KeyValuePair<Token, Function>(Token.ISNULL, new PG_ISNULL()),
                 new KeyValuePair<Token, Function>(Token.VECTOR, new PG_VECTOR()),
                 new KeyValuePair<Token, Function>(Token.NEWUUID, new PG_NEWUUID()),
+                new KeyValuePair<Token, Function>(Token.UUID1C, new PG_UUID1C()),
                 new KeyValuePair<Token, Function>(Token.DATALENGTH, new PG_DATALENGTH()),
                 new KeyValuePair<Token, Function>(Token.CHARLENGTH, new PG_CHARLENGTH())
             ];

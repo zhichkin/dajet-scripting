@@ -33,6 +33,7 @@ namespace DaJet.Scripting
                 new KeyValuePair<Token, Function>(Token.VECTOR, new VECTOR()),
                 new KeyValuePair<Token, Function>(Token.EXISTS, new EXISTS()),
                 new KeyValuePair<Token, Function>(Token.NEWUUID, new NEWUUID()),
+                new KeyValuePair<Token, Function>(Token.UUID1C, new MS_UUID1C()),
                 new KeyValuePair<Token, Function>(Token.NOW, DATETIME_FUNCTION),
                 new KeyValuePair<Token, Function>(Token.UTC, DATETIME_FUNCTION),
                 new KeyValuePair<Token, Function>(Token.DATESTART, DATETIME_FUNCTION),

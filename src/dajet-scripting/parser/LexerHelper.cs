@@ -154,7 +154,8 @@
             { "DATESTART", Token.DATESTART },
             { "DATEEND", Token.DATEEND },
             { "DATEADD", Token.DATEADD },
-            { "DATEDIFF", Token.DATEDIFF }
+            { "DATEDIFF", Token.DATEDIFF },
+            { "UUID1C", Token.UUID1C }
         };
         
         internal static bool IsKeyword(string identifier, out Token token)
