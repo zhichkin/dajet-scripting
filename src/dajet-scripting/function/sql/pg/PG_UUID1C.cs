@@ -10,6 +10,22 @@ namespace DaJet.Scripting
         {
             return DataType.Uuid();
         }
+        public override PropertyDefinition InferProperty(in FunctionExpression node)
+        {
+            PropertyDefinition property = new()
+            {
+                Type = GetReturnType(in node),
+                Purpose = PropertyPurpose.Property
+            };
+
+            property.Columns.Add(new ColumnDefinition()
+            {
+                Type = DataType.Binary(16),
+                Purpose = ColumnPurpose.Value
+            });
+
+            return property;
+        }
         public override void Transpile(in SqlTranspiler statement, in FunctionExpression node, in StringBuilder script)
         {
             SyntaxNode parameter = node.Parameters[0];

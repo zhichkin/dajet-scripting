@@ -691,16 +691,9 @@ namespace DaJet.Scripting
                 return Guid.Empty;
             }
 
-            if (column.Type.IsUuid) // NEWUUID and UUID1C functions in SELECT clause
+            if (column.Type.IsUuid) // NEWUUID function
             {
-                Type source = reader.GetFieldType(ordinal);
-
-                if (source == typeof(Guid))
-                {
-                    return reader.GetGuid(ordinal); // NEWUUID function 
-                }
-
-                //FIXME: UUID1C function returns binary(16)
+                return reader.GetGuid(ordinal);
             }
 
             _ = reader.GetBytes(ordinal, 0L, _buffer, 0, 16);

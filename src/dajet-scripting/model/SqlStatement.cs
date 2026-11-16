@@ -116,12 +116,23 @@ namespace DaJet.Scripting.Model
                     }
                     else if (column.Expression is ColumnReference field)
                     {
-                        property.Name = field.ColumnName;
+                        property.Name = field.ColumnName; //THINK: expressions must have alias !?
+                    }
+                    
+                    // Константа, значение перечисления, функция, параметр или выражение
+
+                    if (column.Expression is FunctionExpression)
+                    {
+                        source.Name = property.Name;
+                        entity.Properties.Add(source);
+                        continue; //FIXME: needs refactoring
+                    }
+                    else
+                    {
+                        entity.Properties.Add(property);
                     }
 
-                    entity.Properties.Add(property);
-
-                    if (column.Source is null) // Константа, функция, параметр или выражение
+                    if (column.Source is null)
                     {
                         property.Columns.Add(new ColumnDefinition()
                         {

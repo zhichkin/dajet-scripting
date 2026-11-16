@@ -199,10 +199,7 @@ namespace DaJet.Scripting.Model
                 throw new InvalidCastException($"Unknown SQL function name: {node.Name}");
             }
 
-            return new PropertyDefinition()
-            {
-                Type = function.GetReturnType(in node)
-            };
+            return function.InferProperty(in node);
         }
         private static PropertyDefinition Infer(in PropertyDefinition property)
         {

@@ -7,6 +7,27 @@ namespace DaJet.Scripting
     public abstract class Function
     {
         public abstract DataType GetReturnType(in FunctionExpression node);
+
+        ///<summary> Используется для вывода выходной схемы данных команды SELECT или CONSUME.<br/>
+        ///Смотри функцию: <see cref="SqlStatement.InferEntity" />
+        ///</summary>
+        public virtual PropertyDefinition InferProperty(in FunctionExpression node)
+        {
+            PropertyDefinition property = new()
+            {
+                Type = GetReturnType(in node),
+                Purpose = PropertyPurpose.Property
+            };
+
+            property.Columns.Add(new ColumnDefinition()
+            {
+                Type = property.Type,
+                Purpose = ColumnPurpose.Value
+            });
+
+            return property;
+        }
+
         public virtual void Transpile(in SqlTranspiler statement, in FunctionExpression node, in StringBuilder script)
         {
             if (node.Token == Token.UDF)
