@@ -1,4 +1,5 @@
-﻿using System.Collections.Frozen;
+﻿using DaJet.TypeSystem;
+using System.Collections.Frozen;
 
 namespace DaJet.Scripting
 {
@@ -14,6 +15,7 @@ namespace DaJet.Scripting
                 new KeyValuePair<string, Function>(nameof(UUIDOF), new UUIDOF()),
                 new KeyValuePair<string, Function>(nameof(UUID1C), new UUID1C()),
                 new KeyValuePair<string, Function>(nameof(UUIDDB), new UUIDDB()),
+                new KeyValuePair<string, Function>(nameof(ENTITY), new ENTITY()),
                 new KeyValuePair<string, Function>(nameof(NOW), new NOW()),
                 new KeyValuePair<string, Function>(nameof(UTC), new UTC()),
                 new KeyValuePair<string, Function>(nameof(ERROR_MESSAGE), new ERROR_MESSAGE()),

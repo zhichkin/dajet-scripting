@@ -307,6 +307,29 @@ namespace DaJet.Scripting
                 {
                     command.Parameters.AddWithValue(name, entity.Identity.ToByteArray());
                 }
+                else if (value is Union union)
+                {
+                    if (union.Tag == UnionTag.Boolean)
+                    {
+                        command.Parameters.AddWithValue(name, union.GetBoolean() ? Constants.TRUE : Constants.FALSE);
+                    }
+                    else if (union.Tag == UnionTag.Decimal)
+                    {
+                        command.Parameters.AddWithValue(name, union.GetDecimal());
+                    }
+                    else if (union.Tag == UnionTag.DateTime)
+                    {
+                        command.Parameters.AddWithValue(name, union.GetDateTime().AddYears(_yearOffset)).SqlDbType = SqlDbType.DateTime2;
+                    }
+                    else if (union.Tag == UnionTag.String)
+                    {
+                        command.Parameters.AddWithValue(name, union.GetString());
+                    }
+                    else if (union.Tag == UnionTag.Entity)
+                    {
+                        command.Parameters.AddWithValue(name, union.GetEntity().Identity.ToByteArray());
+                    }
+                }
                 else if (value is List<bool> array_boolean)
                 {
                     InputArrayOfBoolean(in command, in name, in array_boolean);
@@ -342,6 +365,10 @@ namespace DaJet.Scripting
                 else if (value is List<Entity> array_entity)
                 {
                     InputArrayOfEntity(in command, in name, in array_entity);
+                }
+                else
+                {
+                    throw new InvalidOperationException($"[MsDataMapper] Unsupported parameter type [{value.GetType()}] = [{value}]");
                 }
             }
         }

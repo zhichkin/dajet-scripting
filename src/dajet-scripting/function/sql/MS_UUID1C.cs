@@ -32,11 +32,13 @@ namespace DaJet.Scripting
 
             if (parameter is not ColumnReference column)
             {
-                throw new InvalidOperationException($"[UUID1C] The first parameter must be a database column reference.");
+                throw new InvalidOperationException("[UUID1C] The function parameter must be a database column reference.");
             }
-
-            ColumnDefinition source = null;
+            
+            ColumnDefinition source;
             ColumnReference identity = null;
+
+            //TODO: identity = column.ToSingleColumnReference(ColumnPurpose.Identity);
 
             if (column.Binding is PropertyDefinition property) // Прямой источник данных
             {
@@ -44,18 +46,16 @@ namespace DaJet.Scripting
 
                 source ??= property.GetColumnByPurpose(ColumnPurpose.Identity);
 
-                if (source is null)
+                if (source is not null)
                 {
-                    // Что-то пошло не так ...
+                    PropertyDefinition binding = new() { Columns = [source] };
+
+                    identity = new ColumnReference()
+                    {
+                        Binding = binding,
+                        Identifier = column.Identifier
+                    };
                 }
-
-                PropertyDefinition binding = new() { Columns = [source] };
-
-                identity = new ColumnReference()
-                {
-                    Binding = binding,
-                    Identifier = column.Identifier
-                };
             }
             else if (column.Binding is ColumnExpression derived) // Наследуемый источник данных
             {
@@ -65,21 +65,26 @@ namespace DaJet.Scripting
 
                     source = property.GetColumnByPurpose(ColumnPurpose.Value);
 
-                    identity = CreateSingleColumnReference(in column, in source);
+                    source ??= property.GetColumnByPurpose(ColumnPurpose.Identity);
+
+                    if (source is not null)
+                    {
+                        identity = column.ToSingleColumnReference(in source);
+                    }
                 }
-                else
+                else // Константа, параметр, функция или выражение
                 {
-                    // Константа, параметр, функция или выражение
+                    throw new InvalidOperationException("[UUID1C] The function parameter must be a database column reference.");
                 }
             }
-            else if (column.Binding is Entity)
+            else if (column.Binding is Entity) // enumeration value
             {
-                // enumeration value
+                identity = column; // Will be transpiled to binary(16) constant value.
             }
 
             if (identity is null)
             {
-                throw new InvalidOperationException("[UUID1C] Failed to infer identity column reference.");
+                throw new InvalidOperationException($"[UUID1C] Database column '{column.Identifier}' must be of either 'entity' or 'uuid' data type.");
             }
             
             script.Append("CAST(REVERSE(SUBSTRING(");
@@ -91,31 +96,6 @@ namespace DaJet.Scripting
             statement.Visit(identity, in script); // identity column reference
 
             script.Append(", 1, 8)");
-        }
-        private static ColumnReference CreateSingleColumnReference(in ColumnReference column, in ColumnDefinition source)
-        {
-            string columnName = string.Format("{0}_{1}", column.ColumnName, source.Purpose.GetSuffix());
-
-            string identifier = string.Format("{0}_{1}", column.Identifier, source.Purpose.GetSuffix());
-
-            PropertyDefinition binding = new()
-            {
-                Columns =
-                [
-                    new ColumnDefinition()
-                    {
-                        Name = columnName,
-                        Type = source.Type,
-                        Purpose = source.Purpose
-                    }
-                ]
-            };
-
-            return new ColumnReference()
-            {
-                Binding = binding,
-                Identifier = identifier
-            };
         }
     }
 }

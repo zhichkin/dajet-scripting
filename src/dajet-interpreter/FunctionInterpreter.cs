@@ -29,6 +29,7 @@ namespace DaJet.Scripting
             else if (node.Name == nameof(UUIDOF)) { return UUIDOF(in context, in node); }
             else if (node.Name == nameof(UUID1C)) { return UUID1C(in context, in node); }
             else if (node.Name == nameof(UUIDDB)) { return UUIDDB(in context, in node); }
+            else if (node.Name == nameof(ENTITY)) { return ENTITY(in context, in node); }
             else if (node.Name == nameof(NOW)) { return NOW(in context, in node); }
             else if (node.Name == nameof(UTC)) { return UTC(in context, in node); }
             else if (node.Name == nameof(ERROR_MESSAGE)) { return ERROR_MESSAGE(in context, in node); }
@@ -64,7 +65,11 @@ namespace DaJet.Scripting
             {
                 return entity.TypeCode;
             }
-            
+            else if (value is Union union && union.Tag == UnionTag.Entity)
+            {
+                return union.GetEntity().TypeCode;
+            }
+
             return 0;
         }
         private static Guid UUIDOF(in ExpressionInterpreter context, in FunctionExpression node)
@@ -76,6 +81,10 @@ namespace DaJet.Scripting
             if (value is Entity entity)
             {
                 return entity.Identity;
+            }
+            else if (value is Union union && union.Tag == UnionTag.Entity)
+            {
+                return union.GetEntity().Identity;
             }
 
             return Guid.Empty;
@@ -366,6 +375,35 @@ namespace DaJet.Scripting
             {
                 throw new InvalidOperationException("[UUIDDB] The first parameter must be of type 'uuid', 'entity', 'binary(16)' or string literal.");
             }
+        }
+        private static Entity ENTITY(in ExpressionInterpreter context, in FunctionExpression node)
+        {
+            List<SyntaxNode> parameters = node.Parameters;
+
+            if (parameters is null || parameters.Count != 2)
+            {
+                throw new InvalidOperationException("[ENTITY] Function must have two parameters.");
+            }
+
+            SyntaxNode parameter = parameters[0];
+
+            object value = context.Evaluate(in parameter);
+
+            if (value is not int code)
+            {
+                throw new InvalidOperationException("[ENTITY] The first parameter must be of type 'integer'.");
+            }
+            
+            parameter = parameters[1];
+
+            value = context.Evaluate(in parameter);
+
+            if (value is not Guid uuid)
+            {
+                throw new InvalidOperationException("[ENTITY] The second parameter must be of type 'uuid'.");
+            }
+
+            return new Entity(code, uuid);
         }
     }
 }

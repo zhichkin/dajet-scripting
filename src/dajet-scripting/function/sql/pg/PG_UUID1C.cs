@@ -32,21 +32,68 @@ namespace DaJet.Scripting
 
             if (parameter is not ColumnReference column)
             {
-                throw new InvalidOperationException($"[UUID1C] The first parameter must be a column reference.");
+                throw new InvalidOperationException("[UUID1C] The function parameter must be a database column reference.");
             }
 
-            if (column.Binding is not PropertyDefinition property)
+            ColumnDefinition source;
+            ColumnReference identity = null;
+
+            //TODO: identity = column.ToSingleColumnReference(ColumnPurpose.Identity);
+
+            if (column.Binding is PropertyDefinition property) // Прямой источник данных
             {
-                //TODO: process union type columns
+                source = property.GetColumnByPurpose(ColumnPurpose.Value);
+
+                source ??= property.GetColumnByPurpose(ColumnPurpose.Identity);
+
+                if (source is not null)
+                {
+                    PropertyDefinition binding = new() { Columns = [source] };
+
+                    identity = new ColumnReference()
+                    {
+                        Binding = binding,
+                        Identifier = column.Identifier
+                    };
+                }
+            }
+            else if (column.Binding is ColumnExpression derived) // Наследуемый источник данных
+            {
+                if (derived.Source is not null)
+                {
+                    property = derived.Source;
+
+                    source = property.GetColumnByPurpose(ColumnPurpose.Value);
+
+                    source ??= property.GetColumnByPurpose(ColumnPurpose.Identity);
+
+                    if (source is not null)
+                    {
+                        identity = column.ToSingleColumnReference(in source);
+                    }
+                }
+                else // Константа, параметр, функция или выражение
+                {
+                    throw new InvalidOperationException("[UUID1C] The function parameter must be a database column reference.");
+                }
+            }
+            else if (column.Binding is Entity) // enumeration value
+            {
+                identity = column; // Will be transpiled to binary(16) constant value.
+            }
+
+            if (identity is null)
+            {
+                throw new InvalidOperationException($"[UUID1C] Database column '{column.Identifier}' must be of either 'entity' or 'uuid' data type.");
             }
 
             script.Append("REVERSE(SUBSTRING(");
 
-            statement.Visit(in parameter, in script); // column reference
+            statement.Visit(identity, in script); // column reference
 
             script.Append(", 9, 8)) || SUBSTRING(");
 
-            statement.Visit(in parameter, in script); // column reference
+            statement.Visit(identity, in script); // column reference
 
             script.Append(", 1, 8)");
         }

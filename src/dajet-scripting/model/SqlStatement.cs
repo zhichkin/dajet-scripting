@@ -118,27 +118,33 @@ namespace DaJet.Scripting.Model
                     {
                         property.Name = field.ColumnName; //THINK: expressions must have alias !?
                     }
-                    
-                    // Константа, значение перечисления, функция, параметр или выражение
 
-                    if (column.Expression is FunctionExpression)
-                    {
-                        source.Name = property.Name;
-                        entity.Properties.Add(source);
-                        continue; //FIXME: needs refactoring
-                    }
-                    else
-                    {
-                        entity.Properties.Add(property);
-                    }
+                    entity.Properties.Add(property);
+
+                    // Константа, значение перечисления, функция, параметр или выражение
 
                     if (column.Source is null)
                     {
-                        property.Columns.Add(new ColumnDefinition()
+                        if (source.Columns is not null && source.Columns.Count > 0)
                         {
-                            Type = property.Type,
-                            Purpose = ColumnPurpose.Value
-                        });
+                            foreach (ColumnDefinition copyme in source.Columns)
+                            {
+                                property.Columns.Add(new ColumnDefinition()
+                                {
+                                    Name = copyme.Name,
+                                    Type = copyme.Type,
+                                    Purpose = copyme.Purpose
+                                });
+                            }
+                        }
+                        else
+                        {
+                            property.Columns.Add(new ColumnDefinition()
+                            {
+                                Type = property.Type,
+                                Purpose = ColumnPurpose.Value
+                            });
+                        }
                     }
 
                     continue; //FIXME: refactor this ugly if ... continue

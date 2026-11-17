@@ -163,6 +163,49 @@ namespace DaJet.Scripting
                         NpgsqlDbType = NpgsqlDbType.Bytea
                     });
                 }
+                else if (value is Union union)
+                {
+                    if (union.Tag == UnionTag.Boolean)
+                    {
+                        command.Parameters.Add(new NpgsqlParameter<bool>()
+                        {
+                            TypedValue = union.GetBoolean(),
+                            NpgsqlDbType = NpgsqlDbType.Boolean
+                        });
+                    }
+                    else if (union.Tag == UnionTag.Decimal)
+                    {
+                        command.Parameters.Add(new NpgsqlParameter<decimal>()
+                        {
+                            TypedValue = union.GetDecimal(),
+                            NpgsqlDbType = NpgsqlDbType.Numeric
+                        });
+                    }
+                    else if (union.Tag == UnionTag.DateTime)
+                    {
+                        command.Parameters.Add(new NpgsqlParameter<DateTime>()
+                        {
+                            TypedValue = union.GetDateTime().AddYears(_yearOffset),
+                            NpgsqlDbType = NpgsqlDbType.Timestamp
+                        });
+                    }
+                    else if (union.Tag == UnionTag.String)
+                    {
+                        command.Parameters.Add(new NpgsqlParameter<string>()
+                        {
+                            TypedValue = union.GetString(),
+                            NpgsqlDbType = NpgsqlDbType.Varchar
+                        });
+                    }
+                    else if (union.Tag == UnionTag.Entity)
+                    {
+                        command.Parameters.Add(new NpgsqlParameter<byte[]>()
+                        {
+                            TypedValue = union.GetEntity().Identity.ToByteArray(),
+                            NpgsqlDbType = NpgsqlDbType.Bytea
+                        });
+                    }
+                }
                 else if (value is List<bool> array_boolean)
                 {
                     command.Parameters.Add(new NpgsqlParameter<List<bool>>()
@@ -259,7 +302,7 @@ namespace DaJet.Scripting
                 }
                 else
                 {
-                    throw new InvalidOperationException($"Unsupported parameter type [{value.GetType()}] = [{value}]");
+                    throw new InvalidOperationException($"[PgDataMapper] Unsupported parameter type [{value.GetType()}] = [{value}]");
                 }
             }
         }

@@ -11,29 +11,6 @@ using System.Timers;
 
 namespace DaJet.Host
 {
-    internal class Runner
-    {
-        private bool cancel;
-        internal string Name { get; set; } = string.Empty;
-        internal string Status { get; set; } = string.Empty;
-        internal void Execute()
-        {
-            while (!cancel)
-            {
-                Console.WriteLine($"[{Environment.CurrentManagedThreadId}] running ...");
-
-                Task.Delay(TimeSpan.FromSeconds(1)).Wait();
-            }
-
-            Console.WriteLine($"[{Environment.CurrentManagedThreadId}] canceled.");
-
-            Status = "Canceled";
-        }
-        internal void Cancel()
-        {
-            cancel = true;
-        }
-    }
     internal class Program
     {
         private static readonly string MS_UNF = "Data Source=Z-NOTEBOOK;Initial Catalog=unf;Integrated Security=True;Encrypt=False;";
@@ -76,7 +53,7 @@ namespace DaJet.Host
 
             //StopRunningHost();
 
-            _ = _host.RunAsync("functions/uuid_db.djs").ContinueWith(ShowAsyncResult);
+            _ = _host.RunAsync("functions/entity.djs").ContinueWith(ShowAsyncResult);
 
             //Task<object> task = _host.RunAsync("flow_control/try-finally-cancel.djs");
             //try
