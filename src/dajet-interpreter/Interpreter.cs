@@ -308,6 +308,26 @@ namespace DaJet.Scripting
                     DataType declared = statement.Type;
                     DataType provided = DataType.FromType(value.GetType());
 
+                    if (declared.IsDecimal && value is int integer)
+                    {
+                        value = new decimal(integer); provided = declared; // convert integer to decimal
+                    }
+                    else if (declared.IsString)
+                    {
+                        //TODO: convert datetime|uuid|entity to string
+                    }
+                    else if (value is List<object>) //NOTE: DataObjectJsonConverter's empty array value
+                    {
+                        if (declared.IsArray)
+                        {
+                            provided = declared; value = null; // assign default value
+                        }
+                        else
+                        {
+                            throw new InvalidOperationException($"Variable '{name}' of type '{declared}' cannot be assigned parameter value of empty array.");
+                        }
+                    }
+                    
                     if (!declared.Equals(provided))
                     {
                         throw new InvalidOperationException($"Variable '{name}' of type '{declared}' cannot be assigned parameter value of type '{provided}'.");
@@ -495,7 +515,7 @@ namespace DaJet.Scripting
         private ExitCode Execute(in AssignmentOperator statement)
         {
             object value = _context.Evaluate(statement.Initializer);
-
+            
             if (statement.Target is VariableReference variable)
             {
                 SetValue(variable.Identifier, in value);

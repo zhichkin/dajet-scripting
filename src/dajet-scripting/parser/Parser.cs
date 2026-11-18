@@ -211,11 +211,22 @@ namespace DaJet.Scripting
                 }
                 else if (Match(Token.OpenSquareBracket))
                 {
-                    declare.Initializer = new ValuesExpression() { Values = array_of_values() };
+                    ValuesExpression array = new();
 
-                    if (!Match(Token.CloseSquareBracket))
+                    if (Match(Token.CloseSquareBracket))
                     {
-                        throw new FormatException("Close square bracket expected.");
+                        declare.Initializer = array; // empty array
+                    }
+                    else
+                    {
+                        array.Values = array_of_values();
+
+                        if (!Match(Token.CloseSquareBracket))
+                        {
+                            throw new FormatException("[DECLARE] Close square bracket expected.");
+                        }
+
+                        declare.Initializer = array;
                     }
                 }
                 else if (Check(Token.SELECT))
@@ -224,7 +235,7 @@ namespace DaJet.Scripting
                 }
                 else
                 {
-                    throw new FormatException("Variable initializer expression is invalid.");
+                    throw new FormatException("[DECLARE] Variable initializer expression is invalid.");
                 }
 			}
 
@@ -239,11 +250,20 @@ namespace DaJet.Scripting
 
                 if (declare.Initializer is ValuesExpression array)
                 {
-                    if (array.Values is not null && array.Values.Count > 0)
-                    {
-                        DataType item = array.Values[0].InferType();
+                    List<SyntaxNode> values = array.Values;
 
-                        provided = DataType.Array(item);
+                    if (values is not null)
+                    {
+                        if (values.Count == 0)
+                        {
+                            provided = declared; // empty array of declared type
+                        }
+                        else
+                        {
+                            DataType item = array.Values[0].InferType();
+
+                            provided = DataType.Array(item);
+                        }
                     }
                 }
                 else
@@ -2641,7 +2661,7 @@ namespace DaJet.Scripting
             {
                 return new ColumnReference() { Identifier = Previous().Value };
             }
-
+            
             Ignore();
 
             throw new FormatException($"Unknown expression: {Previous()}");

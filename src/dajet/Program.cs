@@ -8,6 +8,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.Unicode;
 using System.Timers;
+using static System.Runtime.InteropServices.JavaScript.JSType;
 
 namespace DaJet.Host
 {
@@ -41,7 +42,7 @@ namespace DaJet.Host
             //DaJetHost host = DaJetHost.Create("scripts").Run();
             //DaJetHost host = DaJetHost.Create("scripts").ReadOnly().Run();
 
-            //TestInputParameters();
+            TestInputParameters();
 
             //DataObject parameters = new();
             //parameters.SetValue("Отправитель", "PG_TEST");
@@ -53,7 +54,9 @@ namespace DaJet.Host
 
             //StopRunningHost();
 
-            _ = _host.RunAsync("functions/entity.djs").ContinueWith(ShowAsyncResult);
+            //_ = _host.RunAsync("declare/array.djs").ContinueWith(ShowAsyncResult);
+            //_ = _host.RunAsync("declare/number.djs").ContinueWith(ShowAsyncResult);
+            //_ = _host.RunAsync("declare/string.djs").ContinueWith(ShowAsyncResult);
 
             //Task<object> task = _host.RunAsync("flow_control/try-finally-cancel.djs");
             //try
@@ -168,8 +171,11 @@ namespace DaJet.Host
 
                 parameters = JsonSerializer.Deserialize<DataObject>(json, JsonOptions);
             }
-            
-            //DataObject parameters = new();
+
+            //parameters = new DataObject();
+            //parameters.SetValue("dec_from_int", 333);
+            //parameters.SetValue("int_from_dec", new decimal(12.34));
+            //parameters.SetValue("МассивПустой", new List<DataObject>());
             //parameters.SetValue("Булево", true);
             //parameters.SetValue("ЦелоеЧисло", 12345); // 
             //parameters.SetValue("ДесятичноеЧисло", new decimal(12.34));
@@ -180,7 +186,10 @@ namespace DaJet.Host
             //parameters.SetValue("Ссылка", new Guid("643c6b9d-cacf-4048-11f1-3ce54d7b5bf7")); // new Entity(333, new Guid("643c6b9d-cacf-4048-11f1-3ce54d7b5bf7"))
             //parameters.SetValue("МассивЦелыхЧисел", new int[] { 1, 2, 3 });
 
-            _ = _host.RunAsync("test.djs", in parameters).ContinueWith(ShowAsyncResult);
+            //_ = _host.RunAsync("test.djs", in parameters).ContinueWith(ShowAsyncResult);
+            //_ = _host.RunAsync("declare/array.djs", in parameters).ContinueWith(ShowAsyncResult);
+            //_ = _host.RunAsync("declare/number.djs", in parameters).ContinueWith(ShowAsyncResult);
+            _ = _host.RunAsync("declare/string.djs", in parameters).ContinueWith(ShowAsyncResult);
         }
     }
 }

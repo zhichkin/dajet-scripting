@@ -95,8 +95,8 @@ namespace DaJet.Scripting.Model
         {
             throw new NotImplementedException();
 
-            ColumnDefinition source;
-            ColumnReference identity = null;
+            //ColumnDefinition source;
+            //ColumnReference identity = null;
 
             //if (column.Binding is PropertyDefinition property) // Прямой источник данных
             //{
@@ -140,12 +140,12 @@ namespace DaJet.Scripting.Model
             //    //TODO: create scalar value !?
             //}
 
-            if (identity is null)
-            {
-                throw new InvalidOperationException($"Database column '{this.Identifier}' must be of either 'entity' or 'uuid' data type.");
-            }
+            //if (identity is null)
+            //{
+            //    throw new InvalidOperationException($"Database column '{this.Identifier}' must be of either 'entity' or 'uuid' data type.");
+            //}
 
-            return identity;
+            //return identity;
         }
     }
 }

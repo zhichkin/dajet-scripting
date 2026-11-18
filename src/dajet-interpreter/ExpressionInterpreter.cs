@@ -115,7 +115,7 @@ namespace DaJet.Scripting
 
             if (values.Count == 0)
             {
-                return new List<object>(); // empty array
+                return null; // empty array
             }
             
             SyntaxNode item = values[0];
@@ -135,7 +135,7 @@ namespace DaJet.Scripting
                 array.Add(value);
             }
 
-            return array is not null ? array : new List<object>(); // empty array
+            return array;
         }
 
         private object Evaluate(in GroupOperator node)
