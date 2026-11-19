@@ -213,11 +213,9 @@ namespace DaJet.Scripting
                 {
                     ValuesExpression array = new();
 
-                    if (Match(Token.CloseSquareBracket))
-                    {
-                        declare.Initializer = array; // empty array
-                    }
-                    else
+                    declare.Initializer = array; // empty array by default
+
+                    if (!Match(Token.CloseSquareBracket))
                     {
                         array.Values = array_of_values();
 
@@ -225,8 +223,6 @@ namespace DaJet.Scripting
                         {
                             throw new FormatException("[DECLARE] Close square bracket expected.");
                         }
-
-                        declare.Initializer = array;
                     }
                 }
                 else if (Check(Token.SELECT))
@@ -278,7 +274,28 @@ namespace DaJet.Scripting
 
                 if (!declared.Equals(provided))
                 {
-                    throw new FormatException($"[DECLARE] Variable '{declare.Identifier}' of type '{declared}' cannot be initialized by value of type '{provided}'.");
+                    bool converted = false; // implicit conversion
+
+                    if (declare.Initializer is ScalarExpression scalar)
+                    {
+                        if (declared.IsDecimal && provided.IsInteger)
+                        {
+                            scalar.Token = Token.Decimal; converted = true;
+                        }
+                        else if (declared.IsString && provided.IsDateTime)
+                        {
+                            scalar.Token = Token.String; converted = true;
+                        }
+                        else if (declared.IsString && provided.IsUuid)
+                        {
+                            scalar.Token = Token.String; converted = true;
+                        }
+                    }
+
+                    if (!converted)
+                    {
+                        throw new FormatException($"[DECLARE] Variable '{declare.Identifier}' of type '{declared}' cannot be initialized by value of type '{provided}'.");
+                    }
                 }
             }
             

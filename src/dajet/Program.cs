@@ -2,13 +2,11 @@
 using DaJet.Json;
 using DaJet.Metadata;
 using DaJet.TypeSystem;
-using System.Text;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.Unicode;
 using System.Timers;
-using static System.Runtime.InteropServices.JavaScript.JSType;
 
 namespace DaJet.Host
 {
@@ -136,14 +134,6 @@ namespace DaJet.Host
 
             _heartbeat.Start();
         }
-        private static void ShowRunningTasks(object sender, ElapsedEventArgs args)
-        {
-            foreach (RunningTaskStatus status in _host.GetRunningTasks())
-            {
-                Console.WriteLine(status.ToString());
-            }
-        }
-
         private static void StopRunningHost()
         {
             for (int i = 0; i < 3; i++)
@@ -160,36 +150,47 @@ namespace DaJet.Host
                 Console.WriteLine("Wait host to stop ..."); _ = Console.ReadKey(true);
             }
         }
+        private static void ShowRunningTasks(object sender, ElapsedEventArgs args)
+        {
+            foreach (RunningTaskStatus status in _host.GetRunningTasks())
+            {
+                Console.WriteLine(status.ToString());
+            }
+        }
 
         private static void TestInputParameters()
         {
             DataObject parameters;
 
-            using (StreamReader reader = new(Path.Combine(_host.RootPath, "parameters.json"), Encoding.UTF8))
-            {
-                string json = reader.ReadToEnd();
+            //using (StreamReader reader = new(Path.Combine(_host.RootPath, "parameters.json"), Encoding.UTF8))
+            //{
+            //    string json = reader.ReadToEnd();
 
-                parameters = JsonSerializer.Deserialize<DataObject>(json, JsonOptions);
-            }
+            //    parameters = JsonSerializer.Deserialize<DataObject>(json, JsonOptions);
+            //}
 
-            //parameters = new DataObject();
-            //parameters.SetValue("dec_from_int", 333);
-            //parameters.SetValue("int_from_dec", new decimal(12.34));
-            //parameters.SetValue("МассивПустой", new List<DataObject>());
-            //parameters.SetValue("Булево", true);
-            //parameters.SetValue("ЦелоеЧисло", 12345); // 
-            //parameters.SetValue("ДесятичноеЧисло", new decimal(12.34));
-            //parameters.SetValue("ДатаВремя", new DateTime(2026, 8, 1, 12, 34, 56));
-            //parameters.SetValue("Строка", "Это строка");
-            //parameters.SetValue("БинарныеДанные", new byte[] { 1, 2, 3, 4 });
-            //parameters.SetValue("Идентификатор", new Guid("643c6b9d-cacf-4048-11f1-3ce54d7b5bf7"));
-            //parameters.SetValue("Ссылка", new Guid("643c6b9d-cacf-4048-11f1-3ce54d7b5bf7")); // new Entity(333, new Guid("643c6b9d-cacf-4048-11f1-3ce54d7b5bf7"))
-            //parameters.SetValue("МассивЦелыхЧисел", new int[] { 1, 2, 3 });
+            parameters = new DataObject();
+            parameters.SetValue("boolean", true);
+            parameters.SetValue("integer", 100);
+            parameters.SetValue("big_int", 333L);
+            parameters.SetValue("int32_to_int64", 333); // int -> long
+            parameters.SetValue("decimal", new decimal(123.00));
+            parameters.SetValue("int32_to_dec", 321);
+            parameters.SetValue("int64_to_dec", 9876543210L);
+            parameters.SetValue("datetime", new DateTime(2026, 8, 1, 12, 34, 56));
+            parameters.SetValue("string", "Это строка");
+            parameters.SetValue("str_date", "2027-01-01 12:34:56");
+            parameters.SetValue("str_uuid", "11111111-2222-3333-4444-555555555555");
+            parameters.SetValue("str_entity", "{111:11111111-2222-3333-4444-555555555555}");
+            parameters.SetValue("binary", Convert.FromHexString("DEADBEEF"));
+            parameters.SetValue("uuid", new Guid("11111111-2222-3333-4444-555555555555"));
+            parameters.SetValue("entity", new Entity(111, new Guid("11111111-2222-3333-4444-555555555555")));
+            parameters.SetValue("array_empty", new List<DataObject>(0));
+            parameters.SetValue("array_string", new List<string>() { "aaa", "bbb", "ccc" });
+            
+            _ = _host.RunAsync("declare/parameters.djs", in parameters).ContinueWith(ShowAsyncResult);
 
-            //_ = _host.RunAsync("test.djs", in parameters).ContinueWith(ShowAsyncResult);
-            //_ = _host.RunAsync("declare/array.djs", in parameters).ContinueWith(ShowAsyncResult);
-            //_ = _host.RunAsync("declare/number.djs", in parameters).ContinueWith(ShowAsyncResult);
-            _ = _host.RunAsync("declare/string.djs", in parameters).ContinueWith(ShowAsyncResult);
+            //_ = _host.RunAsync("declare/parameters.djs").ContinueWith(ShowAsyncResult);
         }
     }
 }

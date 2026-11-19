@@ -111,6 +111,13 @@ namespace DaJet.Scripting
         }
         private object Evaluate(in ValuesExpression node)
         {
+            // Функция используется командами DECLARE и SET для инициализации массивов.
+            // Примеры:
+            // DECLARE @variable array = [] -- пустой массив
+            // DECLARE @variable array = ['a','b','c']
+            // SET @variable = [] -- пустой массив
+            // SET @variable = ['a','b','c']
+
             List<SyntaxNode> values = node.Values;
 
             if (values.Count == 0)

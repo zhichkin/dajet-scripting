@@ -287,6 +287,10 @@ namespace DaJet.Scripting
         }
         private ExitCode Execute(in DeclareStatement statement)
         {
+            //TODO: JSON не поддерживает int64
+            // DECLARE @str_bin binary = '0xDEADBEEF' -- или BASE64
+            // DECLARE @str_int64 integer(8) = '9876543210'
+
             string name = statement.Identifier;
 
             object value;
@@ -303,34 +307,56 @@ namespace DaJet.Scripting
                 {
                     value = _context.Evaluate(statement.Initializer); // parameter is not provided
                 }
-                else if (value is not null) // validate data type of provided parameter value
-                {
-                    DataType declared = statement.Type;
-                    DataType provided = DataType.FromType(value.GetType());
+            }
 
-                    if (declared.IsDecimal && value is int integer)
+            // Validate data type of the value,
+            // provided by initializer or input parameter,
+            // against data type of the declared variable.
+
+            if (value is not null)
+            {
+                DataType declared = statement.Type;
+                DataType provided = DataType.FromType(value.GetType());
+
+                if (!declared.Equals(provided)) // basic data types comparison, ignoring qualifiers
+                {
+                    bool converted = false; // implicit conversion
+
+                    if (!declared.IsArray) //TODO: arrays must be evaluated item by item
                     {
-                        value = new decimal(integer); provided = declared; // convert integer to decimal
-                    }
-                    else if (declared.IsString)
-                    {
-                        //TODO: convert datetime|uuid|entity to string
-                    }
-                    else if (value is List<object>) //NOTE: DataObjectJsonConverter's empty array value
-                    {
-                        if (declared.IsArray)
+                        if (value is int integer) // int -> long -> decimal
                         {
-                            provided = declared; value = null; // assign default value
+                            if (declared.IsDecimal)
+                            {
+                                value = new decimal(integer); converted = true;
+                            }
+                            else if (declared.IsInteger && declared.Size == 8)
+                            {
+                                value = (long)integer; converted = true;
+                            }
                         }
-                        else
+                        else if (value is long int64) // long -> decimal
                         {
-                            throw new InvalidOperationException($"Variable '{name}' of type '{declared}' cannot be assigned parameter value of empty array.");
+                            if (declared.IsDecimal)
+                            {
+                                value = new decimal(int64); converted = true;
+                            }
                         }
                     }
-                    
-                    if (!declared.Equals(provided))
+
+                    if (!converted)
                     {
                         throw new InvalidOperationException($"Variable '{name}' of type '{declared}' cannot be assigned parameter value of type '{provided}'.");
+                    }
+                }
+                else if (declared.Size != provided.Size) // base types are equal, check size qualifier
+                {
+                    if (!declared.IsArray) //TODO: arrays must be evaluated item by item
+                    {
+                        if (declared.IsInteger && declared.Size == 8 && value is int integer) // int -> long
+                        {
+                            value = (long)integer; // DECLARE @value integer(8) = 123
+                        }
                     }
                 }
             }
