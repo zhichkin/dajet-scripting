@@ -324,6 +324,18 @@ namespace DaJet.Scripting
 
         private static Guid UUID1C(in ExpressionInterpreter context, in FunctionExpression node)
         {
+            List<SyntaxNode> parameters = node.Parameters;
+
+            if (parameters is null || parameters.Count == 0)
+            {
+                throw new InvalidOperationException("[UUID1C] Parameter is missing.");
+            }
+
+            if (parameters.Count > 1)
+            {
+                throw new InvalidOperationException("[UUID1C] Too many parameters.");
+            }
+
             SyntaxNode parameter = node.Parameters[0];
 
             object value = context.Evaluate(in parameter);
@@ -342,15 +354,34 @@ namespace DaJet.Scripting
             }
             else if (value is string literal)
             {
-                return UuidConverter.CONVERT_UUID_DB_TO_1C(literal);
+                if (Guid.TryParse(literal, out _))
+                {
+                    return UuidConverter.CONVERT_UUID_DB_TO_1C(literal);
+                }
+                else
+                {
+                    throw new InvalidOperationException($"[UUID1C] Parameter value '{literal}' is not 'uuid'.");
+                }
             }
             else
             {
-                throw new InvalidOperationException("[UUID1C] The first parameter must be of type 'uuid', 'entity', 'binary(16)' or string literal.");
+                throw new InvalidOperationException("[UUID1C] Parameter must be of type 'uuid', 'entity', 'binary(16)' or string literal.");
             }
         }
         private static Guid UUIDDB(in ExpressionInterpreter context, in FunctionExpression node)
         {
+            List<SyntaxNode> parameters = node.Parameters;
+
+            if (parameters is null || parameters.Count == 0)
+            {
+                throw new InvalidOperationException("[UUIDDB] Parameter is missing.");
+            }
+
+            if (parameters.Count > 1)
+            {
+                throw new InvalidOperationException("[UUIDDB] Too many parameters.");
+            }
+
             SyntaxNode parameter = node.Parameters[0];
             
             object value = context.Evaluate(in parameter);
@@ -369,11 +400,18 @@ namespace DaJet.Scripting
             }
             else if (value is string literal)
             {
-                return UuidConverter.CONVERT_UUID_1C_TO_DB(literal);
+                if (Guid.TryParse(literal, out _))
+                {
+                    return UuidConverter.CONVERT_UUID_1C_TO_DB(literal);
+                }
+                else
+                {
+                    throw new InvalidOperationException($"[UUIDDB] Parameter value '{literal}' is not 'uuid'.");
+                }
             }
             else
             {
-                throw new InvalidOperationException("[UUIDDB] The first parameter must be of type 'uuid', 'entity', 'binary(16)' or string literal.");
+                throw new InvalidOperationException("[UUIDDB] Parameter value must be of type 'uuid', 'entity', 'binary(16)' or string literal.");
             }
         }
         private static Entity ENTITY(in ExpressionInterpreter context, in FunctionExpression node)

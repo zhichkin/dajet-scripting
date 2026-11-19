@@ -40,7 +40,7 @@ namespace DaJet.Host
             //DaJetHost host = DaJetHost.Create("scripts").Run();
             //DaJetHost host = DaJetHost.Create("scripts").ReadOnly().Run();
 
-            TestInputParameters();
+            //TestInputParameters();
 
             //DataObject parameters = new();
             //parameters.SetValue("Отправитель", "PG_TEST");
@@ -52,9 +52,7 @@ namespace DaJet.Host
 
             //StopRunningHost();
 
-            //_ = _host.RunAsync("declare/array.djs").ContinueWith(ShowAsyncResult);
-            //_ = _host.RunAsync("declare/number.djs").ContinueWith(ShowAsyncResult);
-            //_ = _host.RunAsync("declare/string.djs").ContinueWith(ShowAsyncResult);
+            _ = _host.RunAsync("functions/uuid_1c.djs").ContinueWith(ShowAsyncResult);
 
             //Task<object> task = _host.RunAsync("flow_control/try-finally-cancel.djs");
             //try

@@ -28,11 +28,23 @@ namespace DaJet.Scripting
         }
         public override void Transpile(in SqlTranspiler statement, in FunctionExpression node, in StringBuilder script)
         {
+            List<SyntaxNode> parameters = node.Parameters;
+
+            if (parameters is null || parameters.Count == 0)
+            {
+                throw new InvalidOperationException("[MS_UUID1C] Parameter is missing.");
+            }
+
+            if (parameters.Count > 1)
+            {
+                throw new InvalidOperationException("[MS_UUID1C] Too many parameters.");
+            }
+
             SyntaxNode parameter = node.Parameters[0];
 
             if (parameter is not ColumnReference column)
             {
-                throw new InvalidOperationException("[UUID1C] The function parameter must be a database column reference.");
+                throw new InvalidOperationException("[MS_UUID1C] The function parameter must be a database column reference.");
             }
             
             ColumnDefinition source;
@@ -74,7 +86,7 @@ namespace DaJet.Scripting
                 }
                 else // Константа, параметр, функция или выражение
                 {
-                    throw new InvalidOperationException("[UUID1C] The function parameter must be a database column reference.");
+                    throw new InvalidOperationException("[MS_UUID1C] The function parameter must be a database column reference.");
                 }
             }
             else if (column.Binding is Entity) // enumeration value
@@ -84,7 +96,7 @@ namespace DaJet.Scripting
 
             if (identity is null)
             {
-                throw new InvalidOperationException($"[UUID1C] Database column '{column.Identifier}' must be of either 'entity' or 'uuid' data type.");
+                throw new InvalidOperationException($"[MS_UUID1C] Database column '{column.Identifier}' must be of either 'entity' or 'uuid' data type.");
             }
             
             script.Append("CAST(REVERSE(SUBSTRING(");

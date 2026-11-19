@@ -16,7 +16,7 @@ USE 'MS_TEST' -- 'PG_TEST'
        , UUID_NEW = NEWUUID()
     INTO @Таблица
     FROM Справочник.Тестовый
-   WHERE Ссылка = UUIDDB(@Ссылка)
+   WHERE Ссылка = UUIDDB(@Ссылка) -- UUIDDB('1ad9dc94-a0a4-11f1-99f7-88b1112c8f1b') UUIDDB('not-uuid', 'd')
 
 END
 
