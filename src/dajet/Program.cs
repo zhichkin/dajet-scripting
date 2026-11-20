@@ -172,6 +172,7 @@ namespace DaJet.Host
             parameters.SetValue("integer", 100);
             parameters.SetValue("big_int", 333L);
             parameters.SetValue("int32_to_int64", 333); // int -> long
+            parameters.SetValue("int64_to_int32", 9876543210L); // long -> int
             parameters.SetValue("decimal", new decimal(123.00));
             parameters.SetValue("int32_to_dec", 321);
             parameters.SetValue("int64_to_dec", 9876543210L);

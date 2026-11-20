@@ -673,5 +673,19 @@ namespace DaJet.Host
 
             return list;
         }
+
+        public DefineStatement GetInputSchema(in string path)
+        {
+            Script script;
+
+            if (!_scripts.TryGetValue(path, out script))
+            {
+                ScriptBuilder factory = CreateScriptBuilder();
+
+                script = factory.FromPath(in path).Parse();
+            }
+
+            return script.GetInputSchema();
+        }
     }
 }

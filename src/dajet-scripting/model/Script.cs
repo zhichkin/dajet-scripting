@@ -316,10 +316,7 @@ namespace DaJet.Scripting.Model
 
             foreach (SyntaxNode node in Statements)
             {
-                if (node is DeclareStatement declare
-                    && !declare.IsPrivate
-                    && !declare.Type.IsArray
-                    && !declare.Type.IsObject)
+                if (node is DeclareStatement declare && !declare.IsPrivate)
                 {
                     string name = declare.Identifier.TrimStart('@');
 

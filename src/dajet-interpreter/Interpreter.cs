@@ -353,9 +353,16 @@ namespace DaJet.Scripting
                 {
                     if (!declared.IsArray) //TODO: arrays must be evaluated item by item
                     {
-                        if (declared.IsInteger && declared.Size == 8 && value is int integer) // int -> long
+                        if (declared.IsInteger)
                         {
-                            value = (long)integer; // DECLARE @value integer(8) = 123
+                            if (declared.Size == 8 && value is int integer) // int -> long
+                            {
+                                value = (long)integer; // DECLARE @value integer(8) = 123
+                            }
+                            else if (declared.Size == 4 && value is long) // long -> int DECLARE @value integer = 9876543210
+                            {
+                                throw new InvalidOperationException($"Variable '{name}' of type '{declared}' cannot be assigned parameter value of type '{provided}'.");
+                            }
                         }
                     }
                 }

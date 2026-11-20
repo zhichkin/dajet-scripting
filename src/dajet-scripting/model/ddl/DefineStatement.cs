@@ -26,6 +26,25 @@
 
             return null;
         }
+        public bool TryGet(in string name, out DefineProperty property)
+        {
+            property = null;
+
+            if (Properties is null || Properties.Count == 0)
+            {
+                return false;
+            }
+
+            foreach (DefineProperty item in Properties)
+            {
+                if (item.Name.Equals(name, StringComparison.Ordinal))
+                {
+                    property = item; return true;
+                }
+            }
+
+            return false;
+        }
     }
 }
 

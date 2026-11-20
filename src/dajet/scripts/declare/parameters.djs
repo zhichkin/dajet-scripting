@@ -17,6 +17,8 @@ DECLARE @entity       entity = {111:11111111-2222-3333-4444-555555555555}
 DECLARE @array_empty  array  = []
 DECLARE @array_string array(string) = ['aaa','bbb','ccc']
 
+--DECLARE @int64_to_int32 integer = 9876543210 -- error: long -> int
+
 -- TODO: JSON не поддерживает int64
 -- DECLARE @str_bin   binary = '0xDEADBEEF'
 -- DECLARE @str_int64 integer(8) = '9876543210'
