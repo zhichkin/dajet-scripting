@@ -1660,12 +1660,45 @@ namespace DaJet.Scripting
                 throw new FormatException("Open round bracket expected.");
             }
 
-            if (Check(Token.INSERT)) { cte.Expression = insert_statement(); }
-            else if (Check(Token.UPDATE)) { cte.Expression = update_statement(); }
-            else if (Check(Token.DELETE)) { cte.Expression = delete_statement(); }
+            //if (Check(Token.INSERT)) { cte.Expression = insert_statement(); }
+            //else if (Check(Token.UPDATE)) { cte.Expression = update_statement(); }
+            //else if (Check(Token.DELETE)) { cte.Expression = delete_statement(); }
+            //else
+            //{
+            //    cte.Expression = union(); // SELECT
+            //}
+
+            if (Check(Token.SELECT))
+            {
+                cte.Expression = union();
+            }
             else
             {
-                cte.Expression = union(); // SELECT
+                throw new FormatException("[WITH] SELECT expression expected.");
+            }
+
+            if (cte.Expression is null)
+            {
+                throw new FormatException("[WITH] CTE body is empty.");
+            }
+            
+            IntoClause into = null;
+
+            if (cte.Expression is SelectExpression select)
+            {
+                into = select.Into;
+            }
+            else if (cte.Expression is TableUnionOperator union)
+            {
+                if (union.Expression1 is SelectExpression first)
+                {
+                    into = first.Into;
+                }
+            }
+            
+            if (into is not null)
+            {
+                throw new FormatException("[WITH] INTO clause is not allowed.");
             }
 
             Skip(Token.Comment);

@@ -52,7 +52,7 @@ namespace DaJet.Host
 
             //StopRunningHost();
 
-            _ = _host.RunAsync("functions/uuid_1c.djs").ContinueWith(ShowAsyncResult);
+            _ = _host.RunAsync("select/cte/test.djs").ContinueWith(ShowAsyncResult);
 
             //Task<object> task = _host.RunAsync("flow_control/try-finally-cancel.djs");
             //try
@@ -186,7 +186,9 @@ namespace DaJet.Host
             parameters.SetValue("entity", new Entity(111, new Guid("11111111-2222-3333-4444-555555555555")));
             parameters.SetValue("array_empty", new List<DataObject>(0));
             parameters.SetValue("array_string", new List<string>() { "aaa", "bbb", "ccc" });
-            
+            //parameters.SetValue("string_to_array", "abc");
+            //parameters.SetValue("array_to_string", new List<string>() { "abc" });
+
             _ = _host.RunAsync("declare/parameters.djs", in parameters).ContinueWith(ShowAsyncResult);
 
             //_ = _host.RunAsync("declare/parameters.djs").ContinueWith(ShowAsyncResult);

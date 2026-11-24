@@ -16,6 +16,8 @@ DECLARE @uuid         uuid   = '11111111-2222-3333-4444-555555555555'
 DECLARE @entity       entity = {111:11111111-2222-3333-4444-555555555555}
 DECLARE @array_empty  array  = []
 DECLARE @array_string array(string) = ['aaa','bbb','ccc']
+--DECLARE @string_to_array array(string)
+--DECLARE @array_to_string string
 
 --DECLARE @int64_to_int32 integer = 9876543210 -- error: long -> int
 

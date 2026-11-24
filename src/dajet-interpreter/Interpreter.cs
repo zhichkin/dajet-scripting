@@ -287,10 +287,6 @@ namespace DaJet.Scripting
         }
         private ExitCode Execute(in DeclareStatement statement)
         {
-            //TODO: JSON не поддерживает int64
-            // DECLARE @str_bin binary = '0xDEADBEEF' -- или BASE64
-            // DECLARE @str_int64 integer(8) = '9876543210'
-
             string name = statement.Identifier;
 
             object value;

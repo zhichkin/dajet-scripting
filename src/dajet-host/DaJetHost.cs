@@ -447,7 +447,7 @@ namespace DaJet.Host
         {
             if (ReadOnlyMode && !script.IsReadOnly)
             {
-                string name = string.IsNullOrEmpty(script.Path) ? "anonymous" : script.Path;
+                //string name = string.IsNullOrEmpty(script.Path) ? "anonymous" : script.Path;
 
                 throw new HostReadOnlyModeException($"Read-only mode violation of the host [{RootName}]");
             }
@@ -676,14 +676,14 @@ namespace DaJet.Host
 
         public DefineStatement GetInputSchema(in string path)
         {
-            Script script;
-
-            if (!_scripts.TryGetValue(path, out script))
+            if (!_scripts.TryGetValue(path, out Script script))
             {
                 ScriptBuilder factory = CreateScriptBuilder();
 
                 script = factory.FromPath(in path).Parse();
             }
+
+            ThrowOnReadOnlyModeViolation(in script);
 
             return script.GetInputSchema();
         }

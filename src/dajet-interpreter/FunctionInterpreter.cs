@@ -360,7 +360,7 @@ namespace DaJet.Scripting
                 }
                 else
                 {
-                    throw new InvalidOperationException($"[UUID1C] Parameter value '{literal}' is not 'uuid'.");
+                    throw new InvalidOperationException("[UUID1C] Parameter of type 'string' has invalid 'uuid' format.");
                 }
             }
             else
@@ -406,7 +406,7 @@ namespace DaJet.Scripting
                 }
                 else
                 {
-                    throw new InvalidOperationException($"[UUIDDB] Parameter value '{literal}' is not 'uuid'.");
+                    throw new InvalidOperationException("[UUIDDB] Parameter of type 'string' has invalid 'uuid' format.");
                 }
             }
             else
