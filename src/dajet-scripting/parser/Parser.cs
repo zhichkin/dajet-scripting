@@ -1594,11 +1594,20 @@ namespace DaJet.Scripting
 
             if (Check(Token.SELECT))
             {
-                return new SelectStatement()
+                SelectStatement select = new()
                 {
                     Expression = union(),
                     CommonTables = root
                 };
+
+                IntoClause into = select.GetIntoClause();
+
+                if (into is not null && into.Table is not null)
+                {
+                    _script.IsReadOnly = false;
+                }
+
+                return select;
             }
             else if (Check(Token.STREAM))
             {
