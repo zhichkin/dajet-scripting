@@ -52,7 +52,7 @@ namespace DaJet.Host
 
             //StopRunningHost();
 
-            _ = _host.RunAsync("select/cte/test.djs").ContinueWith(ShowAsyncResult);
+            _ = _host.RunAsync("declare/union.djs").ContinueWith(ShowAsyncResult);
 
             //Task<object> task = _host.RunAsync("flow_control/try-finally-cancel.djs");
             //try

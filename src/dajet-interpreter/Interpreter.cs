@@ -320,7 +320,22 @@ namespace DaJet.Scripting
 
                     if (!declared.IsArray) //TODO: arrays must be evaluated item by item
                     {
-                        if (value is int integer) // int -> long -> decimal
+                        if (declared.IsUnion)
+                        {
+                            if (value is bool boolean) { value = new Union.CaseBoolean(boolean); }
+                            else if (value is decimal numeric) { value = new Union.CaseDecimal(numeric); }
+                            else if (value is int integer) { value = new Union.CaseDecimal(new decimal(integer)); }
+                            else if (value is DateTime datetime) { value = new Union.CaseDateTime(datetime); }
+                            else if (value is string text) { value = new Union.CaseString(text); }
+                            else if (value is Entity entity) { value = new Union.CaseEntity(entity); }
+                            else
+                            {
+                                throw new InvalidOperationException($"Variable '{name}' of type 'union' cannot be assigned parameter value of type '{provided}'.");
+                            }
+
+                            converted = true; // simple value -> union
+                        }
+                        else if (value is int integer) // int -> long -> decimal
                         {
                             if (declared.IsDecimal)
                             {

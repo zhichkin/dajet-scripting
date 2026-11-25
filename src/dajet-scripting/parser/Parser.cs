@@ -246,6 +246,11 @@ namespace DaJet.Scripting
 
                 if (declare.Initializer is ValuesExpression array)
                 {
+                    if (declared.IsUnion) // union или array(union)
+                    {
+                        throw new FormatException($"[DECLARE] Variable '{declare.Identifier}' of type 'union' cannot be initialized by value of type 'array'.");
+                    }
+
                     List<SyntaxNode> values = array.Values;
 
                     if (values is not null)
@@ -275,10 +280,30 @@ namespace DaJet.Scripting
                 if (!declared.Equals(provided))
                 {
                     bool converted = false; // implicit conversion
-
+                    
                     if (declare.Initializer is ScalarExpression scalar)
                     {
-                        if (declared.IsDecimal && provided.IsInteger)
+                        if (declared.IsUnion)
+                        {
+                            if (provided.IsArray)
+                            {
+                                throw new FormatException($"[DECLARE] Variable '{declare.Identifier}' of type 'union' cannot be initialized by value of type '{provided}'.");
+                            }
+                            
+                            if (provided.IsBoolean || provided.IsDecimal || provided.IsDateTime || provided.IsString || provided.IsEntity)
+                            {
+                                converted = true; // valid union data types
+                            }
+                            else if (provided.IsInteger)
+                            {
+                                scalar.Token = Token.Decimal; converted = true; // implicit conversion
+                            }
+                            else
+                            {
+                                throw new FormatException($"[DECLARE] Variable '{declare.Identifier}' of type 'union' cannot be initialized by value of type '{provided}'.");
+                            }
+                        }
+                        else if (declared.IsDecimal && provided.IsInteger)
                         {
                             scalar.Token = Token.Decimal; converted = true;
                         }
@@ -320,16 +345,24 @@ namespace DaJet.Scripting
                 return DataType.Object;
             }
 
-            if (type.IsDecimal) { return ParseDecimal(); }
-            else if (type.IsInteger) { return ParseInteger(); }
-            else if (type.IsString) { return ParseString(); }
-            else if (type.IsBinary) { return ParseBinary(); }
-            else if (type.IsEntity) { return DataType.Entity(); }
-            else if (type.IsUnion) { return ParseUnion(); }
-            else if (type.IsArray) { return ParseArray(out schema); }
-            else if (type.IsObject) { return ParseObject(out schema); }
+            if (type.IsArray)
+            {
+                return ParseArray(out schema);
+            }
+            
+            if (type.IsUnion)
+            {
+                return type.IsEntityUnion ? DataType.Entity(): ParseUnion();
+            }
 
-            return type; // boolean, datetime, uuid
+            if (type.IsDecimal) { return ParseDecimal(); }
+            if (type.IsInteger) { return ParseInteger(); }
+            if (type.IsString) { return ParseString(); }
+            if (type.IsBinary) { return ParseBinary(); }
+            if (type.IsEntity) { return DataType.Entity(); }
+            if (type.IsObject) { return ParseObject(out schema); }
+
+            return type; // boolean, datetime, uuid - have no qualifiers
         }
         private DataType array_type(in string identifier)
         {
